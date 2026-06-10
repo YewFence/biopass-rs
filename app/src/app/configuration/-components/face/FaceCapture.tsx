@@ -167,7 +167,7 @@ export function FaceCapture() {
 
         {capturing && (
           <p className="text-[10px] text-muted-foreground">
-            Native preview via openpnp-capture (works cross-distro).
+            Native preview via the Rust V4L2 capture path.
           </p>
         )}
 

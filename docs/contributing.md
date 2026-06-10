@@ -4,16 +4,16 @@ Welcome to Biopass! We appreciate your interest in contributing. This guide outl
 
 ## 1. How to Run
 
-Biopass consists of a backend C++ authentication module and a frontend Tauri desktop application. You will need to install dependencies for both.
+Biopass consists of a Rust authentication module and a frontend Tauri desktop application. You will need to install dependencies for both.
 
 ### Install Dependencies
 
-**For the C++ Backend:**
+**For the Rust Auth Module:**
 
-You need to install CMake, Make, PAM headers, CLI11 and nasm
+You need to install Rust/Cargo, mise, PAM headers, V4L2 headers and fprintd
 ```bash
 sudo apt update
-sudo apt install cmake make g++ libpam0g-dev libcli11-dev nasm
+sudo apt install libpam0g-dev libv4l-dev fprintd
 ```
 
 **For the Tauri Application:**
@@ -32,21 +32,21 @@ sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev
 
 ### Building the Project
 
-The root directory includes a `Makefile` that orchestrates the entire build process.
+The root directory includes `mise.toml` tasks that orchestrate the entire build process.
 
-To build the C++ backend (`auth` module):
+To build the Rust auth module:
 ```bash
-make build-auth
+mise run build-auth
 ```
 
-To build both the C++ backend and the Tauri frontend:
+To build both the Rust auth module and the Tauri frontend:
 ```bash
-make build
+mise run build
 ```
 
 To package the application into Linux release artifacts (`.deb` and `.rpm`)
 ```bash
-make package
+mise run package
 ```
 
 ### Running the Desktop App in Dev Mode
@@ -63,10 +63,11 @@ bun run tauri dev
 Biopass is built using modern and reliable technologies across both the backend logic and the desktop management application.
 
 ### Backend Authentication Module (`auth/`)
-- **C++17**: High performance system-level execution.
-- **CMake**: Build system.
-- **openpnp-capture**: Camera capture (vendored via CMake FetchContent).
-- **ONNX Runtime**: Running the machine learning models (YOLO for detection, EdgeFace for recognition, MobileNetV3 for anti-spoofing).
+- **Rust**: System-level PAM, helper and authentication orchestration.
+- **Cargo**: Build system for the auth core, helper and PAM module.
+- **V4L2**: Camera capture for RGB and IR frame paths.
+- **fprintd over D-Bus**: Fingerprint device management and verification.
+- **ONNX Runtime via Rust bindings**: Running the machine learning models (YOLO for detection, EdgeFace for recognition, MobileNetV3 for anti-spoofing).
 - **Linux PAM**: Pluggable Authentication Module integration for the OS.
 
 ### Desktop Application (`app/`)
@@ -122,20 +123,17 @@ biopass/
 │   ├── src-tauri/        # Rust backend bridging system calls and the UI
 │   └── tauri.conf.json   # Configuration for the desktop bundle
 │
-├── auth/                 # The C++ Backend Authentication Module
-│   ├── core/             # Shared classes (logging, config parsing)
-│   ├── face/             # Implementation of the face auth module (Yolo, EdgeFace, MobileNetV3)
-│   ├── fingerprint/      # Implementation of the fingerprint auth module
-│   ├── pam/              # PAM module integration logic (`libbiopass_pam.so` and `biopass-helper`)
-│   └── CMakeLists.txt    # Build orchestration for the auth module
+├── auth/                 # Authentication module and model assets
+│   ├── face/models/      # Face detection, recognition and anti-spoofing models
+│   └── rust/             # Rust auth core, helper and PAM module
 │
 ├── docs/                 # Documentation (Contributing, Architecture)
-└── Makefile              # Root build orchestrator (calls CMake and Tauri build commands)
+└── mise.toml             # Root task orchestrator (calls Cargo and Tauri build commands)
 ```
 
 ## 4. Development Warnings and Debugging
 
-When you need to modify the C++ PAM logic, we recommend you enable the `debug` flag in the configuration. You may open the UI app and toggle **Debug Mode** to ON, or manually edit `~/.config/com.ticklab.biopass/config.yaml`. When the debug flag is enabled, detailed logs are printed, and face captures that fail authentication (or get caught spoofing) are saved as `.bmp` images to `~/.local/share/com.ticklab.biopass/debugs/`.
+When you need to modify the Rust PAM logic, we recommend you enable the `debug` flag in the configuration. You may open the UI app and toggle **Debug Mode** to ON, or manually edit `~/.config/com.ticklab.biopass/config.yaml`. When the debug flag is enabled, detailed logs are printed, and face captures that fail authentication (or get caught spoofing) are saved as `.bmp` images to `~/.local/share/com.ticklab.biopass/debugs/`.
 
 ### ⚠️ System Lockout Warnings
 
