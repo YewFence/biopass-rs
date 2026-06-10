@@ -1,24 +1,13 @@
 [vars]
 app_dir = "apps/desktop"
 
-[tasks.default]
-description = "Build auth and app"
-depends = ["build"]
-
 [tasks.build]
 description = "Build auth and app"
 depends = ["build-app"]
 
-[tasks.package]
-description = "Build combined Linux bundles"
-depends = ["package-app"]
-
 [tasks.build-auth]
 description = "Build the Rust auth helper, auth core and PAM module"
 run = '''
-#!/usr/bin/env bash
-set -euo pipefail
-
 if [ "${CARGO_PROFILE:-release}" = "release" ]; then
   cargo_build_flags=(--release)
 else
@@ -33,27 +22,10 @@ cargo build --package biopass-auth --package biopass-pam "${cargo_build_flags[@]
 description = "Install JS dependencies and build the Tauri app"
 depends = ["build-auth"]
 run = '''
-#!/usr/bin/env bash
-set -euo pipefail
-
-echo "==> [app] Installing JS dependencies..."
-bun install --frozen-lockfile
-
 echo "==> [app] Building Tauri application..."
 bun run tauri build
 '''
 dir = "{{config_root}}/{{vars.app_dir}}"
-
-[tasks.package-app]
-description = "Show combined Linux bundle output paths"
-depends = ["build-app"]
-run = '''
-#!/usr/bin/env bash
-set -euo pipefail
-
-echo "==> [app] Tauri packages are in target/release/bundle/"
-ls target/release/bundle/deb/*.deb target/release/bundle/rpm/*.rpm 2>/dev/null || true
-'''
 
 [tasks.clean]
 description = "Remove auth and app build output"
@@ -62,10 +34,6 @@ depends = ["clean-auth", "clean-app"]
 [tasks.clean-auth]
 description = "Remove Rust auth build artifacts"
 run = '''
-#!/usr/bin/env bash
-set -euo pipefail
-
-echo "==> [auth] Cleaning Rust build artifacts..."
 cargo clean --package biopass-auth
 cargo clean --package biopass-pam
 '''
@@ -73,9 +41,6 @@ cargo clean --package biopass-pam
 [tasks.clean-app]
 description = "Remove app build artifacts"
 run = '''
-#!/usr/bin/env bash
-set -euo pipefail
-
 echo "==> [app] Cleaning build artifacts..."
 cargo clean --package biopass 2>/dev/null || true
 rm -rf dist
