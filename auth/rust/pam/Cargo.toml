@@ -1,0 +1,9 @@
+[package]
+name = "biopass-pam"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "biopass_pam"
+crate-type = ["cdylib"]
+path = "src/lib.rs"

@@ -1,11 +1,27 @@
 use serde::Serialize;
 use std::fs;
+use std::path::Path;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct VideoDeviceInfo {
     pub path: String,
     pub name: String,
     pub display_name: String,
+}
+
+pub fn biopass_helper_path() -> String {
+    const CANDIDATES: &[&str] = &[
+        "../../auth/rust/target/release/biopass-helper",
+        "../../auth/rust/target/debug/biopass-helper",
+        "/usr/bin/biopass-helper",
+        "biopass-helper",
+    ];
+
+    CANDIDATES
+        .iter()
+        .find(|path| *path == &"biopass-helper" || Path::new(path).exists())
+        .unwrap_or(&"biopass-helper")
+        .to_string()
 }
 
 #[tauri::command]

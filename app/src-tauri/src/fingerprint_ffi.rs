@@ -1,150 +1,68 @@
-use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
+use tauri::{AppHandle, Emitter};
+use zbus::blocking::{Connection, Proxy};
+use zbus::zvariant::OwnedObjectPath;
 
-// FFI bindings to the C fingerprint authentication library
+const FPRINT_SERVICE: &str = "net.reactivated.Fprint";
+const FPRINT_MANAGER_PATH: &str = "/net/reactivated/Fprint/Manager";
+const FPRINT_MANAGER_INTERFACE: &str = "net.reactivated.Fprint.Manager";
+const FPRINT_DEVICE_INTERFACE: &str = "net.reactivated.Fprint.Device";
 
-#[repr(C)]
-#[derive(Debug, Clone, Copy)]
-pub struct FingerprintAuthConfig {
-    pub retries: i32,
-}
-
-#[link(name = "biopass_fingerprint")]
-extern "C" {
-    fn fingerprint_auth_new() -> *mut std::ffi::c_void;
-    fn fingerprint_auth_free(auth: *mut std::ffi::c_void);
-    fn fingerprint_is_available(auth: *mut std::ffi::c_void) -> bool;
-    fn fingerprint_list_enrolled_fingers(
-        auth: *mut std::ffi::c_void,
-        username: *const c_char,
-        count: *mut i32,
-    ) -> *mut *mut c_char;
-
-    fn fingerprint_free_string_array(array: *mut *mut c_char, count: i32);
-
-    fn fingerprint_enroll(
-        auth: *mut std::ffi::c_void,
-        username: *const c_char,
-        finger_name: *const c_char,
-        callback: Option<
-            unsafe extern "C" fn(
-                done: bool,
-                status: *const c_char,
-                user_data: *mut std::ffi::c_void,
-            ),
-        >,
-        user_data: *mut std::ffi::c_void,
-    ) -> bool;
-
-    fn fingerprint_remove_finger(
-        auth: *mut std::ffi::c_void,
-        username: *const c_char,
-        finger_name: *const c_char,
-    ) -> bool;
-}
-
-/// Safe Rust wrapper for fingerprint authentication
-pub struct FingerprintAuth {
-    inner: *mut std::ffi::c_void,
-}
+/// Rust fprintd client kept behind the old module name so Tauri commands stay compatible.
+pub struct FingerprintAuth;
 
 impl FingerprintAuth {
     pub fn new() -> Self {
-        let inner = unsafe { fingerprint_auth_new() };
-        FingerprintAuth { inner }
+        Self
     }
 
     pub fn is_available(&self) -> bool {
-        unsafe { fingerprint_is_available(self.inner) }
+        default_device().is_ok()
     }
 
     pub fn list_enrolled_fingers(&self, username: &str) -> Result<Vec<String>, String> {
-        let username_c = CString::new(username).map_err(|_| "Invalid username".to_string())?;
-
-        let mut count = 0i32;
-        let array = unsafe {
-            fingerprint_list_enrolled_fingers(self.inner, username_c.as_ptr(), &mut count)
-        };
-
-        if array.is_null() {
-            return Ok(Vec::new());
-        }
-
-        let mut result = Vec::new();
-
-        for i in 0..count {
-            let ptr = unsafe { *array.add(i as usize) };
-            if !ptr.is_null() {
-                let finger_name = unsafe { CStr::from_ptr(ptr) }.to_string_lossy().to_string();
-                result.push(finger_name);
-            }
-        }
-
-        unsafe {
-            fingerprint_free_string_array(array, count);
-        }
-
-        Ok(result)
+        let device = default_device()?;
+        device.call("ListEnrolledFingers", &(username,))
     }
 
     pub fn enroll(
         &self,
         username: &str,
         finger_name: &str,
-        app_handle: &tauri::AppHandle,
+        app_handle: &AppHandle,
     ) -> Result<bool, String> {
-        let username_c = CString::new(username).map_err(|_| "Invalid username".to_string())?;
-        let finger_name_c =
-            CString::new(finger_name).map_err(|_| "Invalid finger name".to_string())?;
+        let device = default_device()?;
+        let mut enroll_status = device
+            .proxy
+            .receive_signal("EnrollStatus")
+            .map_err(|error| format!("Failed to listen for fprintd EnrollStatus: {error}"))?;
+        let _claim = ClaimedDevice::claim(&device, username)?;
 
-        unsafe extern "C" fn enroll_callback(
-            done: bool,
-            status: *const c_char,
-            user_data: *mut std::ffi::c_void,
-        ) {
-            use tauri::Emitter;
-            let app = &*(user_data as *const tauri::AppHandle);
-            let status_str = CStr::from_ptr(status).to_string_lossy().into_owned();
+        device.call_unit("EnrollStart", &(finger_name,))?;
 
-            #[derive(serde::Serialize, Clone)]
-            struct ProgressPayload {
-                done: bool,
-                status: String,
+        let mut completed = false;
+        for message in &mut enroll_status {
+            let (status, done): (String, bool) = message
+                .body()
+                .deserialize()
+                .map_err(|error| format!("Failed to parse enrollment status: {error}"))?;
+
+            emit_enrollment_status(app_handle, done, status.clone());
+
+            if done {
+                completed = status == "enroll-completed";
+                break;
             }
-
-            app.emit(
-                "fingerprint-enroll-status",
-                ProgressPayload {
-                    done,
-                    status: status_str,
-                },
-            )
-            .ok();
         }
 
-        let success = unsafe {
-            fingerprint_enroll(
-                self.inner,
-                username_c.as_ptr(),
-                finger_name_c.as_ptr(),
-                Some(enroll_callback),
-                app_handle as *const tauri::AppHandle as *mut std::ffi::c_void,
-            )
-        };
-
-        Ok(success)
+        device.call_unit("EnrollStop", &()).ok();
+        Ok(completed)
     }
 
     pub fn remove_finger(&self, username: &str, finger_name: &str) -> Result<bool, String> {
-        let username_c = CString::new(username).map_err(|_| "Invalid username".to_string())?;
-        let finger_name_c =
-            CString::new(finger_name).map_err(|_| "Invalid finger name".to_string())?;
-
-        let success = unsafe {
-            fingerprint_remove_finger(self.inner, username_c.as_ptr(), finger_name_c.as_ptr())
-        };
-
-        Ok(success)
+        let device = default_device()?;
+        let _claim = ClaimedDevice::claim(&device, username)?;
+        device.call_unit("DeleteEnrolledFinger", &(username, finger_name))?;
+        Ok(true)
     }
 }
 
@@ -154,22 +72,91 @@ impl Default for FingerprintAuth {
     }
 }
 
-impl Drop for FingerprintAuth {
-    fn drop(&mut self) {
-        unsafe {
-            fingerprint_auth_free(self.inner);
-        }
+struct FprintDevice {
+    proxy: Proxy<'static>,
+}
+
+impl FprintDevice {
+    fn call<B, R>(&self, method_name: &str, body: &B) -> Result<R, String>
+    where
+        B: serde::ser::Serialize + zbus::zvariant::DynamicType,
+        R: for<'de> zbus::zvariant::DynamicDeserialize<'de>,
+    {
+        self.proxy
+            .call(method_name, body)
+            .map_err(|error| format!("fprintd {method_name} failed: {error}"))
     }
+
+    fn call_unit<B>(&self, method_name: &str, body: &B) -> Result<(), String>
+    where
+        B: serde::ser::Serialize + zbus::zvariant::DynamicType,
+    {
+        self.call::<B, ()>(method_name, body)
+    }
+}
+
+struct ClaimedDevice<'a> {
+    device: &'a FprintDevice,
+}
+
+impl<'a> ClaimedDevice<'a> {
+    fn claim(device: &'a FprintDevice, username: &str) -> Result<Self, String> {
+        device.call_unit("Claim", &(username,))?;
+        Ok(Self { device })
+    }
+}
+
+impl Drop for ClaimedDevice<'_> {
+    fn drop(&mut self) {
+        self.device.call_unit("Release", &()).ok();
+    }
+}
+
+fn default_device() -> Result<FprintDevice, String> {
+    let connection = Connection::system()
+        .map_err(|error| format!("Failed to connect to system bus: {error}"))?;
+    let manager = Proxy::new(
+        &connection,
+        FPRINT_SERVICE,
+        FPRINT_MANAGER_PATH,
+        FPRINT_MANAGER_INTERFACE,
+    )
+    .map_err(|error| format!("Failed to create fprintd manager proxy: {error}"))?;
+
+    let device_path: OwnedObjectPath = manager
+        .call("GetDefaultDevice", &())
+        .map_err(|error| format!("No fingerprint device found: {error}"))?;
+
+    let proxy = Proxy::new(
+        &connection,
+        FPRINT_SERVICE,
+        device_path,
+        FPRINT_DEVICE_INTERFACE,
+    )
+    .map_err(|error| format!("Failed to create fprintd device proxy: {error}"))?;
+
+    Ok(FprintDevice { proxy })
+}
+
+fn emit_enrollment_status(app_handle: &AppHandle, done: bool, status: String) {
+    #[derive(serde::Serialize, Clone)]
+    struct ProgressPayload {
+        done: bool,
+        status: String,
+    }
+
+    app_handle
+        .emit(
+            "fingerprint-enroll-status",
+            ProgressPayload { done, status },
+        )
+        .ok();
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
-    fn test_fingerprint_auth_creation() {
-        let auth = FingerprintAuth::new();
-        let available = auth.is_available();
-        println!("Fingerprint available: {}", available);
+    fn auth_client_is_zero_sized() {
+        assert_eq!(std::mem::size_of::<super::FingerprintAuth>(), 0);
     }
 }

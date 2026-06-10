@@ -231,7 +231,6 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "gtk",
- "pkg-config",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -242,6 +241,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "webkit2gtk",
+ "zbus",
 ]
 
 [[package]]
