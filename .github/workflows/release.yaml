@@ -42,7 +42,7 @@ jobs:
         if: contains(matrix.runner, 'ubuntu')
         run: |
           sudo apt update
-          sudo apt install -y librsvg2-dev libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev libpam0g-dev libcli11-dev rpm nasm
+          sudo apt install -y librsvg2-dev libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev libpam0g-dev libv4l-dev fprintd rpm nasm
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
@@ -53,8 +53,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            app/src-tauri/target
-          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('app/src-tauri/Cargo.lock') }}
+            target
+          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-${{ matrix.arch }}-cargo-
 
       - name: Install Bun
@@ -73,14 +73,18 @@ jobs:
       - name: Update Cargo.toml version
         run: |
           echo "Updating Cargo.toml version to ${{ steps.get_version.outputs.version }}"
-          sed -i -e "s/^version = \".*\"/version = \"${{ steps.get_version.outputs.version }}\"/" app/src-tauri/Cargo.toml
-          cat app/src-tauri/Cargo.toml
+          sed -i -e "0,/^version = \".*\"/s//version = \"${{ steps.get_version.outputs.version }}\"/" Cargo.toml
+          cat Cargo.toml
 
       - name: Build & package
         run: |
-          rm -rf app/src-tauri/target/release/bundle/
-          make package BUILD_TYPE=${{ env.BUILD_TYPE }} VERSION=${{ steps.get_version.outputs.version }}
-          ls -R app/src-tauri/target/release/bundle/
+          rm -rf target/release/bundle/
+          cargo build --release --package biopass-auth --package biopass-pam
+          cd apps/desktop
+          bun install --frozen-lockfile
+          bun run tauri build
+          cd ../..
+          ls -R target/release/bundle/
 
       - name: Release
         uses: softprops/action-gh-release@v2
@@ -90,5 +94,5 @@ jobs:
           name: ${{ steps.get_version.outputs.version }}
           prerelease: ${{ contains(steps.get_version.outputs.version, 'rc') || contains(steps.get_version.outputs.version, 'beta') }}
           files: |
-            app/src-tauri/target/release/bundle/deb/*.deb
-            app/src-tauri/target/release/bundle/rpm/*.rpm
+            target/release/bundle/deb/*.deb
+            target/release/bundle/rpm/*.rpm

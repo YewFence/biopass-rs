@@ -1,19 +1,17 @@
 [vars]
-auth_rust_dir = "auth/rust"
-auth_pam_dir = "auth/rust/pam"
-app_dir = "app"
+app_dir = "apps/desktop"
 
 [tasks.default]
 description = "Build auth and app"
-depends = [":build"]
+depends = ["build"]
 
 [tasks.build]
 description = "Build auth and app"
-depends = [":build-app"]
+depends = ["build-app"]
 
 [tasks.package]
 description = "Build combined Linux bundles"
-depends = [":package-app"]
+depends = ["package-app"]
 
 [tasks.build-auth]
 description = "Build the Rust auth helper, auth core and PAM module"
@@ -28,15 +26,12 @@ else
 fi
 
 echo "==> [auth] Building Rust helper and auth core (CARGO_PROFILE=${CARGO_PROFILE:-release})..."
-cargo build --manifest-path "{{vars.auth_rust_dir}}/Cargo.toml" "${cargo_build_flags[@]}"
-
-echo "==> [auth] Building Rust PAM module (CARGO_PROFILE=${CARGO_PROFILE:-release})..."
-cargo build --manifest-path "{{vars.auth_pam_dir}}/Cargo.toml" "${cargo_build_flags[@]}"
+cargo build --package biopass-auth --package biopass-pam "${cargo_build_flags[@]}"
 '''
 
 [tasks.build-app]
 description = "Install JS dependencies and build the Tauri app"
-depends = [":build-auth"]
+depends = ["build-auth"]
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
@@ -51,18 +46,18 @@ dir = "{{config_root}}/{{vars.app_dir}}"
 
 [tasks.package-app]
 description = "Show combined Linux bundle output paths"
-depends = [":build-app"]
+depends = ["build-app"]
 run = '''
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "==> [app] Tauri packages are in app/src-tauri/target/release/bundle/"
-ls app/src-tauri/target/release/bundle/deb/*.deb app/src-tauri/target/release/bundle/rpm/*.rpm 2>/dev/null || true
+echo "==> [app] Tauri packages are in target/release/bundle/"
+ls target/release/bundle/deb/*.deb target/release/bundle/rpm/*.rpm 2>/dev/null || true
 '''
 
 [tasks.clean]
 description = "Remove auth and app build output"
-depends = [":clean-auth", ":clean-app"]
+depends = ["clean-auth", "clean-app"]
 
 [tasks.clean-auth]
 description = "Remove Rust auth build artifacts"
@@ -71,8 +66,8 @@ run = '''
 set -euo pipefail
 
 echo "==> [auth] Cleaning Rust build artifacts..."
-cargo clean --manifest-path "{{vars.auth_rust_dir}}/Cargo.toml"
-cargo clean --manifest-path "{{vars.auth_pam_dir}}/Cargo.toml"
+cargo clean --package biopass-auth
+cargo clean --package biopass-pam
 '''
 
 [tasks.clean-app]
@@ -82,7 +77,7 @@ run = '''
 set -euo pipefail
 
 echo "==> [app] Cleaning build artifacts..."
-cargo clean --manifest-path src-tauri/Cargo.toml 2>/dev/null || true
+cargo clean --package biopass 2>/dev/null || true
 rm -rf dist
 '''
 dir = "{{config_root}}/{{vars.app_dir}}"
@@ -91,3 +86,4 @@ dir = "{{config_root}}/{{vars.app_dir}}"
 node = "latest"
 rust = "latest"
 bun = "latest"
+lefthook = "latest"

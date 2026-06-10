@@ -40,7 +40,7 @@ fn model_paths_from_args(args: Vec<String>) -> TractResult<Vec<PathBuf>> {
 
 fn default_model_paths() -> Vec<PathBuf> {
     let repo_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    model_paths_in_dir(&repo_root.join("auth/face/models"))
+    model_paths_in_dir(&repo_root.join("assets/models/face"))
 }
 
 fn model_paths_in_dir(dir: &Path) -> Vec<PathBuf> {

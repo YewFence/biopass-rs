@@ -1,6 +1,6 @@
 use serde::Serialize;
 use std::fs;
-use std::path::Path;
+use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Clone)]
 pub struct VideoDeviceInfo {
@@ -10,18 +10,18 @@ pub struct VideoDeviceInfo {
 }
 
 pub fn biopass_helper_path() -> String {
-    const CANDIDATES: &[&str] = &[
-        "../../auth/rust/target/release/biopass-helper",
-        "../../auth/rust/target/debug/biopass-helper",
-        "/usr/bin/biopass-helper",
-        "biopass-helper",
+    let workspace_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let candidates = [
+        workspace_root.join("target/release/biopass-helper"),
+        workspace_root.join("target/debug/biopass-helper"),
+        PathBuf::from("/usr/bin/biopass-helper"),
     ];
 
-    CANDIDATES
+    candidates
         .iter()
-        .find(|path| *path == &"biopass-helper" || Path::new(path).exists())
-        .unwrap_or(&"biopass-helper")
-        .to_string()
+        .find(|path| path.exists())
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_else(|| "biopass-helper".to_string())
 }
 
 #[tauri::command]

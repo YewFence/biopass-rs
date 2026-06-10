@@ -1,0 +1,24 @@
+[package]
+name = "biopass-auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+name = "biopass_auth"
+path = "src/lib.rs"
+
+[dependencies]
+anyhow.workspace = true
+jpeg-decoder.workspace = true
+jpeg-encoder.workspace = true
+ort.workspace = true
+serde.workspace = true
+serde_yaml.workspace = true
+tract-onnx.workspace = true
+v4l.workspace = true
+zbus.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true

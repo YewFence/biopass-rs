@@ -4,30 +4,32 @@ Welcome to Biopass! We appreciate your interest in contributing. This guide outl
 
 ## 1. How to Run
 
-Biopass consists of a Rust authentication module and a frontend Tauri desktop application. You will need to install dependencies for both.
+Biopass consists of Rust workspace crates and a frontend Tauri desktop application. You will need to install dependencies for both.
 
 ### Install Dependencies
 
-**For the Rust Auth Module:**
+**For Linux system dependencies:**
 
-You need to install Rust/Cargo, mise, PAM headers, V4L2 headers and fprintd
+Ubuntu/Debian:
 ```bash
 sudo apt update
-sudo apt install libpam0g-dev libv4l-dev fprintd
+sudo apt install libpam0g-dev libv4l-dev fprintd libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 ```
 
-**For the Tauri Application:**
+Fedora:
+```bash
+sudo dnf install -y gtk3-devel gdk-pixbuf2-devel webkit2gtk4.1-devel libv4l-devel pam-devel librsvg2-devel xdotool-devel libayatana-appindicator-gtk3-devel rpm-build nasm
+```
 
-You need to install [Bun](https://bun.sh/), Rust/Cargo, and system UI dependencies.
+**For Rust and frontend tools:**
+
+You need to install [Bun](https://bun.sh/), Rust/Cargo, and mise.
 ```bash
 # Install Bun
 curl -fsSL https://bun.sh/install | bash
 
 # Install Rust
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-
-# Install Tauri prerequisites (Ubuntu/Debian)
-sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
 ```
 
 ### Building the Project
@@ -53,7 +55,7 @@ mise run package
 
 To run the Tauri app locally with hot module replacement (HMR), use the following commands:
 ```bash
-cd app
+cd apps/desktop
 bun install
 bun run tauri dev
 ```
@@ -62,7 +64,7 @@ bun run tauri dev
 
 Biopass is built using modern and reliable technologies across both the backend logic and the desktop management application.
 
-### Backend Authentication Module (`auth/`)
+### Backend Authentication Crates (`crates/`)
 - **Rust**: System-level PAM, helper and authentication orchestration.
 - **Cargo**: Build system for the auth core, helper and PAM module.
 - **V4L2**: Camera capture for RGB and IR frame paths.
@@ -70,7 +72,7 @@ Biopass is built using modern and reliable technologies across both the backend 
 - **ONNX Runtime via Rust bindings**: Running the machine learning models (YOLO for detection, EdgeFace for recognition, MobileNetV3 for anti-spoofing).
 - **Linux PAM**: Pluggable Authentication Module integration for the OS.
 
-### Desktop Application (`app/`)
+### Desktop Application (`apps/desktop/`)
 - **Tauri v2**: Lightweight and secure desktop framework bridging the backend and frontend.
 - **Rust**: Systems programming for the Tauri backend (invoking configurations, paths, etc.).
 - **Vite & React**: Fast frontend UI framework for managing biometric settings.
@@ -110,7 +112,7 @@ sequenceDiagram
     end
 ```
 
-### The PAM Module (`auth/`)
+### The PAM Module (`crates/biopass-pam/`)
 
 ### Directory Structure
 
@@ -118,16 +120,20 @@ The repository is organized by separating the backend systems-level logic from t
 
 ```text
 biopass/
-├── app/                  # The Tauri Desktop Application
-│   ├── src/              # React frontend (Vite + TypeScript + Tailwind)
-│   ├── src-tauri/        # Rust backend bridging system calls and the UI
-│   └── tauri.conf.json   # Configuration for the desktop bundle
+├── apps/
+│   └── desktop/          # The Tauri desktop application
+│       ├── src/          # React frontend (Vite + TypeScript + Tailwind)
+│       └── src-tauri/    # Rust backend bridging system calls and the UI
 │
-├── auth/                 # Authentication module and model assets
-│   ├── face/models/      # Face detection, recognition and anti-spoofing models
-│   └── rust/             # Rust auth core, helper and PAM module
+├── crates/
+│   ├── biopass-auth/     # Rust auth core and helper binary
+│   └── biopass-pam/      # Linux PAM module
+│
+├── assets/
+│   └── models/face/      # Face detection, recognition and anti-spoofing models
 │
 ├── docs/                 # Documentation (Contributing, Architecture)
+├── Cargo.toml            # Cargo workspace definition
 └── mise.toml             # Root task orchestrator (calls Cargo and Tauri build commands)
 ```
 
