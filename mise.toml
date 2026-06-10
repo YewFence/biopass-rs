@@ -27,6 +27,22 @@ bun run tauri build
 '''
 dir = "{{config_root}}/{{vars.app_dir}}"
 
+[tasks.dev-helper-build]
+description = "Build the biopass helper in debug mode"
+run = "cargo build --package biopass-auth --bin biopass-helper"
+
+[tasks.dev-helper]
+description = "Run the biopass helper CLI in debug mode"
+depends = ["dev-helper-build"]
+raw_args = true
+run = "cargo run --package biopass-auth --bin biopass-helper --"
+
+[tasks.dev-app]
+description = "Run the Tauri app in development mode"
+depends = ["dev-helper-build"]
+run = "bun run tauri dev"
+dir = "{{config_root}}/{{vars.app_dir}}"
+
 [tasks.clean]
 description = "Remove auth and app build output"
 depends = ["clean-auth", "clean-app"]
