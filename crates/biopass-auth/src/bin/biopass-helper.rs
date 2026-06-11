@@ -32,7 +32,10 @@ fn run(args: Vec<String>) -> Result<u8, String> {
     match command {
         "auth" => {
             let options = AuthOptions::parse(&args[1..])?;
-            Ok(authenticate(&options.username, options.service.as_deref()))
+            Ok(authenticate(
+                options.username.as_deref(),
+                options.service.as_deref(),
+            ))
         }
         "migrate" => {
             let options = UsernameOptions::parse(&args[1..])?;
@@ -54,16 +57,29 @@ fn run(args: Vec<String>) -> Result<u8, String> {
     }
 }
 
-fn authenticate(username: &str, service: Option<&str>) -> u8 {
-    if !user_exists(username) {
+fn authenticate(_username: Option<&str>, service: Option<&str>) -> u8 {
+    // Resolve the target user. CLI callers can still pass --username to
+    // override; the PAM module and postinst scripts do so explicitly. When
+    // the flag is absent, fall back to the user the helper was invoked as
+    // (SUDO_USER when run via sudo, otherwise USER/USERNAME).
+    let Some(username) = _username
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .or_else(current_username)
+    else {
+        eprintln!("auth: no target user provided and none could be inferred from the environment");
+        return EXIT_USAGE;
+    };
+
+    if !user_exists(&username) {
         return EXIT_IGNORE;
     }
 
-    if !config_exists(username) {
+    if !config_exists(&username) {
         return EXIT_IGNORE;
     }
 
-    let config = read_config(username);
+    let config = read_config(&username);
     if service.is_some_and(|service| config.ignores_service(service)) {
         return EXIT_IGNORE;
     }
@@ -86,7 +102,7 @@ fn authenticate(username: &str, service: Option<&str>) -> u8 {
         }
     }
 
-    match manager.authenticate(username).code {
+    match manager.authenticate(&username).code {
         PamCode::Success => EXIT_SUCCESS,
         PamCode::Ignore => EXIT_IGNORE,
         PamCode::AuthError => EXIT_AUTH_ERR,
@@ -305,8 +321,57 @@ impl UsernameOptions {
 
 #[derive(Debug, PartialEq, Eq)]
 struct AuthOptions {
-    username: String,
+    username: Option<String>,
     service: Option<String>,
+}
+
+impl AuthOptions {
+    fn parse(args: &[String]) -> Result<Self, String> {
+        let mut username = None;
+        let mut service = None;
+        let mut index = 0;
+
+        while index < args.len() {
+            match args[index].as_str() {
+                "--username" | "-u" => {
+                    index += 1;
+                    username = args.get(index).cloned();
+                }
+                "--service" | "-s" => {
+                    index += 1;
+                    service = args.get(index).cloned();
+                }
+                unknown => return Err(format!("Unknown option {unknown}")),
+            }
+            index += 1;
+        }
+
+        let service = service.filter(|service| !service.is_empty());
+        if service.is_none() {
+            return Err("auth: --service is required".to_string());
+        }
+
+        Ok(Self {
+            username: username.filter(|name| !name.is_empty()),
+            service,
+        })
+    }
+}
+
+fn current_username() -> Option<String> {
+    for key in ["SUDO_USER", "USER", "USERNAME", "LOGNAME"] {
+        if let Ok(value) = env::var(key) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty()
+                && trimmed
+                    .chars()
+                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.')
+            {
+                return Some(trimmed.to_owned());
+            }
+        }
+    }
+    None
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -460,36 +525,8 @@ fn parse_quality(value: Option<&String>) -> Result<u8, String> {
     }
 }
 
-impl AuthOptions {
-    fn parse(args: &[String]) -> Result<Self, String> {
-        let mut username = None;
-        let mut service = None;
-        let mut index = 0;
-
-        while index < args.len() {
-            match args[index].as_str() {
-                "--username" | "-u" => {
-                    index += 1;
-                    username = args.get(index).cloned();
-                }
-                "--service" | "-s" => {
-                    index += 1;
-                    service = args.get(index).cloned();
-                }
-                unknown => return Err(format!("Unknown option {unknown}")),
-            }
-            index += 1;
-        }
-
-        Ok(Self {
-            username: username.ok_or_else(help)?,
-            service,
-        })
-    }
-}
-
 fn help() -> String {
-    "Usage: biopass-helper auth --username <name> [--service <service>] | migrate --username <name> | crop-face --input <path> --output <path> --model <path> | capture-face --output <path> --model <path> [--camera <path>] | preview-session --model <path> [--camera <path>]"
+    "Usage: biopass-helper auth --service <service> [--username <name>] | migrate --username <name> | crop-face --input <path> --output <path> --model <path> | capture-face --output <path> --model <path> [--camera <path>] | preview-session --model <path> [--camera <path>]"
         .to_string()
 }
 
@@ -509,10 +546,57 @@ mod tests {
         assert_eq!(
             options,
             AuthOptions {
-                username: "alice".to_string(),
+                username: Some("alice".to_string()),
                 service: Some("sudo".to_string())
             }
         );
+    }
+
+    #[test]
+    fn auth_options_omit_username_when_only_service_provided() {
+        let options = AuthOptions::parse(&args(&["--service", "sudo"])).unwrap();
+
+        assert_eq!(options.username, None);
+        assert_eq!(options.service.as_deref(), Some("sudo"));
+    }
+
+    #[test]
+    fn auth_options_accept_short_flags() {
+        let options = AuthOptions::parse(&args(&["-s", "sudo", "-u", "alice"])).unwrap();
+
+        assert_eq!(
+            options,
+            AuthOptions {
+                username: Some("alice".to_string()),
+                service: Some("sudo".to_string())
+            }
+        );
+    }
+
+    #[test]
+    fn auth_options_reject_missing_service() {
+        let error = AuthOptions::parse(&args(&["--username", "alice"])).unwrap_err();
+        assert_eq!(error, "auth: --service is required");
+    }
+
+    #[test]
+    fn auth_options_reject_empty_service() {
+        let error = AuthOptions::parse(&args(&["--service", ""])).unwrap_err();
+        assert_eq!(error, "auth: --service is required");
+    }
+
+    #[test]
+    fn current_username_prefers_sudo_user() {
+        // SAFETY: tests do not run concurrently in the same process for this
+        // single-threaded helper, so mutating process env is acceptable.
+        unsafe {
+            std::env::set_var("SUDO_USER", "alice");
+            std::env::set_var("USER", "root");
+        }
+        assert_eq!(current_username().as_deref(), Some("alice"));
+        unsafe {
+            std::env::remove_var("SUDO_USER");
+        }
     }
 
     #[test]
@@ -537,7 +621,7 @@ mod tests {
     #[test]
     fn missing_config_is_pam_ignore() {
         assert_eq!(
-            authenticate("__biopass_missing_user_for_test__", None),
+            authenticate(Some("__biopass_missing_user_for_test__"), None),
             EXIT_IGNORE
         );
     }

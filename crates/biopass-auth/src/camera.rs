@@ -83,9 +83,12 @@ impl Default for CameraRequest {
             device_path: None,
             width: DEFAULT_WIDTH,
             height: DEFAULT_HEIGHT,
+            // MJPEG first: it goes through the UVC controller's ISP (3DNR, AE,
+            // AWB, sharpening) and looks dramatically cleaner than raw YUYV.
+            // Falls back to raw formats only when the device cannot produce MJPEG.
             preferred_formats: vec![
-                FrameFormat::Yuyv,
                 FrameFormat::Mjpeg,
+                FrameFormat::Yuyv,
                 FrameFormat::Nv12,
                 FrameFormat::Grey,
             ],
