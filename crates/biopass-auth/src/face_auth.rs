@@ -1,7 +1,7 @@
 use crate::{
-    camera_available, capture_rgb_frame, decode_jpeg_rgb, list_faces, AuthConfig, AuthMethod,
-    AuthResult, CameraRequest, FaceAntiSpoofing, FaceDetector, FaceMethodConfig, FaceRecognizer,
-    FrameFormat, RgbFrame,
+    camera_available, capture_rgb_frame, decode_jpeg_rgb, encode_jpeg, list_faces, user_data_dir,
+    AuthConfig, AuthMethod, AuthResult, CameraRequest, FaceAntiSpoofing, FaceDetector,
+    FaceMethodConfig, FaceRecognizer, FrameFormat, RgbFrame,
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -122,12 +122,15 @@ impl FaceAuth {
         }
 
         log("no enrolled face matched, will retry");
+        if auth_config.debug {
+            save_debug_frame(username, &candidate, "not_similar");
+        }
         Ok(AuthResult::Retry)
     }
 
     fn check_anti_spoofing(
         &self,
-        _username: &str,
+        username: &str,
         auth_config: &AuthConfig,
         face: &RgbFrame,
     ) -> Result<bool, String> {
@@ -157,6 +160,9 @@ impl FaceAuth {
             let model = &self.config.anti_spoofing.ai.model;
             if model.path.is_empty() || !Path::new(&model.path).is_file() {
                 log("ai model not configured or missing on disk, treating as spoof");
+                if auth_config.debug {
+                    save_debug_frame(username, face, "ai_spoof_detected");
+                }
                 return Ok(false);
             }
 
@@ -164,13 +170,16 @@ impl FaceAuth {
             let verdict = anti_spoofing.detect(face)?;
             log(&format!("ai model verdict: spoof={}", verdict.spoof));
             if verdict.spoof {
+                if auth_config.debug {
+                    save_debug_frame(username, face, "ai_spoof_detected");
+                }
                 return Ok(false);
             }
         }
 
         if ir_enabled {
             log("running IR face presence check");
-            let ir_result = self.check_ir_face_presence(auth_config)?;
+            let ir_result = self.check_ir_face_presence(username, auth_config)?;
             log(&format!("IR face presence verdict: {ir_result}"));
             if !ir_result {
                 return Ok(false);
@@ -180,7 +189,11 @@ impl FaceAuth {
         Ok(true)
     }
 
-    fn check_ir_face_presence(&self, auth_config: &AuthConfig) -> Result<bool, String> {
+    fn check_ir_face_presence(
+        &self,
+        username: &str,
+        auth_config: &AuthConfig,
+    ) -> Result<bool, String> {
         let log = |msg: &str| {
             if auth_config.debug {
                 eprintln!("FaceAuth: ir: {msg}");
@@ -227,7 +240,11 @@ impl FaceAuth {
         )?;
         let detections = detector.detect(&frame)?;
         log(&format!("IR detection found {} face(s)", detections.len()));
-        Ok(!detections.is_empty())
+        let has_face = !detections.is_empty();
+        if !has_face && auth_config.debug {
+            save_debug_frame(username, &frame, "ir_no_face");
+        }
+        Ok(has_face)
     }
 }
 
@@ -287,6 +304,22 @@ impl AuthMethod for FaceAuth {
                 AuthResult::Retry
             }
         }
+    }
+}
+
+fn save_debug_frame(username: &str, frame: &RgbFrame, reason: &str) {
+    use std::time::SystemTime;
+
+    let timestamp = SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let filename = format!("{}.{}.jpg", reason, timestamp);
+    let debug_dir = user_data_dir(username).join("debugs");
+    let path = debug_dir.join(filename);
+
+    if let Ok(jpeg) = encode_jpeg(frame, 85) {
+        let _ = std::fs::write(&path, jpeg);
     }
 }
 
