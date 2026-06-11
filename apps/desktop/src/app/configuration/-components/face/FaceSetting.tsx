@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import type { VideoDeviceInfo } from "@/types/config";
 import { useConfigurationStore } from "../../-stores/configuration-store";
 import { ModelSelect } from "../methods/shared/ModelSelect";
@@ -164,6 +165,42 @@ export function FaceSetting() {
               )}
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="mt-3 flex items-start justify-between gap-4">
+          <div className="grid gap-0.5 min-w-0">
+            <Label
+              htmlFor="auto-optimize-camera"
+              className="text-sm font-medium"
+            >
+              Auto-optimize Camera
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              On startup, biopass adjusts auto white balance, exposure,
+              anti-flicker (50Hz), backlight compensation, and dynamic
+              framerate. <strong>Disable</strong> this if you use{" "}
+              <a
+                href="https://flathub.org/apps/hu.irl.cameractrls"
+                target="_blank"
+                rel="noreferrer"
+                className="text-primary hover:underline"
+              >
+                cameractrls
+              </a>{" "}
+              (recommended, supports per-device profiles) to fine-tune settings
+              yourself.
+            </p>
+            <code className="text-xs text-muted-foreground break-all mt-1">
+              flatpak install flathub hu.irl.cameractrls
+            </code>
+          </div>
+          <Switch
+            id="auto-optimize-camera"
+            checked={config.auto_optimize_camera}
+            onCheckedChange={(checked) =>
+              setFaceConfig({ ...config, auto_optimize_camera: checked })
+            }
+          />
         </div>
       </div>
 

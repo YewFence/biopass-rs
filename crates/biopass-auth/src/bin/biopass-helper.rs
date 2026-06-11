@@ -259,9 +259,21 @@ fn capture_camera_frame(camera: Option<&str>) -> Result<RgbFrame, String> {
         device_path: camera
             .filter(|camera| !camera.is_empty())
             .map(PathBuf::from),
+        auto_optimize_camera: helper_auto_optimize_camera(),
         ..CameraRequest::default()
     };
     capture_rgb_frame(&request)
+}
+
+fn helper_auto_optimize_camera() -> bool {
+    let user = env::var("SUDO_USER")
+        .ok()
+        .or_else(|| env::var("USER").ok())
+        .or_else(|| env::var("USERNAME").ok());
+    let Some(user) = user else {
+        return true;
+    };
+    read_config(&user).methods.face.auto_optimize_camera
 }
 
 #[derive(Debug, PartialEq, Eq)]

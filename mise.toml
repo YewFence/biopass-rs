@@ -63,6 +63,23 @@ rm -rf dist
 '''
 dir = "{{config_root}}/{{vars.app_dir}}"
 
+[tasks.lint-js]
+description = "Check JS/TS code with Biome"
+run = "bun run lint"
+dir = "{{config_root}}/{{vars.app_dir}}"
+
+[tasks.lint-rust]
+description = "Check Rust code formatting"
+run = "cargo fmt --all --check"
+
+[tasks.check-rust]
+description = "Check Rust code compilation"
+run = "cargo check --all"
+
+[tasks.check]
+description = "Run all checks"
+depends = ["lint-js", "lint-rust", "check-rust"]
+
 [tools]
 node = "latest"
 rust = "latest"

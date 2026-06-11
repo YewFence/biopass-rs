@@ -74,6 +74,7 @@ pub struct CameraRequest {
     pub warmup_frames: u32,
     pub timeout: Duration,
     pub max_dark_frames: u32,
+    pub auto_optimize_camera: bool,
 }
 
 impl Default for CameraRequest {
@@ -91,6 +92,7 @@ impl Default for CameraRequest {
             warmup_frames: DEFAULT_WARMUP_FRAMES,
             timeout: Duration::from_millis(DEFAULT_TIMEOUT_MS),
             max_dark_frames: DEFAULT_MAX_DARK_FRAMES,
+            auto_optimize_camera: true,
         }
     }
 }
@@ -159,7 +161,9 @@ pub fn capture_rgb_frame(request: &CameraRequest) -> Result<RgbFrame, String> {
         .ok_or_else(|| unsupported_format_message(actual.fourcc))?;
 
     // 在开始流式传输前启用所有自动优化
-    apply_camera_optimizations(&mut device)?;
+    if request.auto_optimize_camera {
+        apply_camera_optimizations(&mut device)?;
+    }
 
     let mut stream = MmapStream::with_buffers(&mut device, Type::VideoCapture, 4)
         .map_err(|error| format!("Failed to create V4L2 mmap stream: {error}"))?;
@@ -280,12 +284,7 @@ fn grey_frame_stats_and_dark(
     (stats, is_dark_ir_frame(stats))
 }
 
-fn calculate_grey_frame_stats(
-    data: &[u8],
-    width: u32,
-    height: u32,
-    stride: u32,
-) -> GreyFrameStats {
+fn calculate_grey_frame_stats(data: &[u8], width: u32, height: u32, stride: u32) -> GreyFrameStats {
     if width == 0 || height == 0 {
         return GreyFrameStats::default();
     }

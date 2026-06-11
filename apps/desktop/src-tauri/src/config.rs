@@ -39,6 +39,7 @@ pub struct FaceMethodConfig {
     pub detection: DetectionConfig,
     pub recognition: RecognitionConfig,
     pub anti_spoofing: AntiSpoofingConfig,
+    pub auto_optimize_camera: bool,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -79,6 +80,8 @@ struct FaceMethodConfigRaw {
     pub anti_spoofing: AntiSpoofingConfigRaw,
     #[serde(default)]
     pub ir_camera: Option<LegacyIRCameraConfig>,
+    #[serde(default = "default_face_auto_optimize_camera")]
+    pub auto_optimize_camera: bool,
 }
 
 impl<'de> Deserialize<'de> for FaceMethodConfig {
@@ -106,6 +109,7 @@ impl<'de> Deserialize<'de> for FaceMethodConfig {
             detection: raw.detection,
             recognition: raw.recognition,
             anti_spoofing,
+            auto_optimize_camera: raw.auto_optimize_camera,
         })
     }
 }
@@ -236,6 +240,9 @@ fn default_face_retries() -> u32 {
 fn default_face_delay() -> u32 {
     200
 }
+fn default_face_auto_optimize_camera() -> bool {
+    true
+}
 fn default_fingerprint_retries() -> u32 {
     1
 }
@@ -283,6 +290,7 @@ fn get_default_config(app: &AppHandle) -> BiopassConfig {
                     },
                     ir_camera: None,
                 },
+                auto_optimize_camera: true,
             },
             fingerprint: FingerprintMethodConfig {
                 enable: false,

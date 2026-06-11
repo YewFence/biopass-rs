@@ -40,7 +40,10 @@ impl FaceAuth {
             return Ok(AuthResult::Failure);
         }
 
-        let frame = capture_rgb_frame(&face_camera_request(self.config.camera.as_deref()))?;
+        let frame = capture_rgb_frame(&face_camera_request(
+            self.config.camera.as_deref(),
+            self.config.auto_optimize_camera,
+        ))?;
         let mut detector = FaceDetector::load_with_threshold(
             &self.config.detection.model,
             self.config.detection.threshold,
@@ -154,11 +157,12 @@ fn ir_camera_request(camera: &str) -> CameraRequest {
     }
 }
 
-fn face_camera_request(camera: Option<&str>) -> CameraRequest {
+fn face_camera_request(camera: Option<&str>, auto_optimize_camera: bool) -> CameraRequest {
     CameraRequest {
         device_path: camera
             .filter(|camera| !camera.is_empty())
             .map(PathBuf::from),
+        auto_optimize_camera,
         ..CameraRequest::default()
     }
 }
@@ -169,7 +173,11 @@ impl AuthMethod for FaceAuth {
     }
 
     fn is_available(&self) -> bool {
-        self.config.enable && camera_available(&face_camera_request(self.config.camera.as_deref()))
+        self.config.enable
+            && camera_available(&face_camera_request(
+                self.config.camera.as_deref(),
+                self.config.auto_optimize_camera,
+            ))
     }
 
     fn retries(&self) -> u32 {
@@ -249,11 +257,19 @@ mod tests {
 
     #[test]
     fn face_camera_request_uses_configured_camera() {
-        let request = face_camera_request(Some("/dev/video4"));
+        let request = face_camera_request(Some("/dev/video4"), true);
 
         assert_eq!(request.device_path, Some(PathBuf::from("/dev/video4")));
         assert!(request.preferred_formats.contains(&FrameFormat::Yuyv));
         assert!(request.preferred_formats.contains(&FrameFormat::Grey));
+        assert!(request.auto_optimize_camera);
+    }
+
+    #[test]
+    fn face_camera_request_disables_auto_optimize() {
+        let request = face_camera_request(None, false);
+
+        assert!(request.auto_optimize_camera == false);
     }
 
     #[test]

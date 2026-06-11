@@ -44,6 +44,7 @@ export interface FaceMethodConfig {
     };
     ir_camera: string | null;
   };
+  auto_optimize_camera: boolean;
 }
 
 export interface FingerprintMethodConfig {

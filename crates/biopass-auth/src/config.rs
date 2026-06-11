@@ -170,6 +170,7 @@ pub struct FaceMethodConfig {
     pub detection: DetectionConfig,
     pub recognition: RecognitionConfig,
     pub anti_spoofing: AntiSpoofingConfig,
+    pub auto_optimize_camera: bool,
 }
 
 impl Default for FaceMethodConfig {
@@ -182,6 +183,7 @@ impl Default for FaceMethodConfig {
             detection: DetectionConfig::default(),
             recognition: RecognitionConfig::default(),
             anti_spoofing: AntiSpoofingConfig::default(),
+            auto_optimize_camera: true,
         }
     }
 }
@@ -217,6 +219,8 @@ impl<'de> Deserialize<'de> for FaceMethodConfig {
             anti_spoofing: AntiSpoofingConfig,
             #[serde(default)]
             ir_camera: Option<LegacyIrCamera>,
+            #[serde(default = "default_true")]
+            auto_optimize_camera: bool,
         }
 
         let raw = Raw::deserialize(deserializer)?;
@@ -237,6 +241,7 @@ impl<'de> Deserialize<'de> for FaceMethodConfig {
             detection: raw.detection,
             recognition: raw.recognition,
             anti_spoofing,
+            auto_optimize_camera: raw.auto_optimize_camera,
         })
     }
 }

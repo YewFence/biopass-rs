@@ -1,12 +1,5 @@
 pre-commit:
-  parallel: true
-  jobs:
-    - name: Biome check
-      root: apps/desktop/
-      glob: "*.{js,ts,jsx,tsx,json}"
-      run: bun run lint {staged_files}
-
-    - name: Rust Format
-      root: .
-      glob: "*.rs"
-      run: cargo fmt --all --check
+  commands:
+    check:
+      glob: "*.{js,ts,jsx,tsx,json,rs}"
+      run: mise run check
