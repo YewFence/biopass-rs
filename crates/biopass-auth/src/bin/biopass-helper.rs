@@ -79,7 +79,13 @@ fn authenticate(_username: Option<&str>, service: Option<&str>) -> u8 {
         return EXIT_IGNORE;
     }
 
-    let config = read_config(&username);
+    let config = match read_config(&username) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("auth: {error}");
+            return EXIT_USAGE;
+        }
+    };
     if service.is_some_and(|service| config.ignores_service(service)) {
         return EXIT_IGNORE;
     }
@@ -293,7 +299,9 @@ fn helper_auto_optimize_camera() -> bool {
     let Some(user) = user else {
         return true;
     };
-    read_config(&user).methods.face.auto_optimize_camera
+    read_config(&user)
+        .map(|config| config.methods.face.auto_optimize_camera)
+        .unwrap_or(true)
 }
 
 #[derive(Debug, PartialEq, Eq)]

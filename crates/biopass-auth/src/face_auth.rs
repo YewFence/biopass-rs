@@ -142,13 +142,8 @@ impl FaceAuth {
             return Ok(true);
         }
 
-        let ai_enabled = self.config.anti_spoofing.enable;
-        let ir_enabled = self
-            .config
-            .anti_spoofing
-            .ir_camera
-            .as_ref()
-            .is_some_and(|camera| !camera.is_empty());
+        let ai_enabled = self.config.anti_spoofing.ai.enable;
+        let ir_enabled = self.config.anti_spoofing.ir.enable;
         if !ai_enabled && !ir_enabled {
             log("skipped (no ai or ir sub-check enabled)");
             return Ok(true);
@@ -159,7 +154,7 @@ impl FaceAuth {
         ));
 
         if ai_enabled {
-            let model = &self.config.anti_spoofing.model;
+            let model = &self.config.anti_spoofing.ai.model;
             if model.path.is_empty() || !Path::new(&model.path).is_file() {
                 log("ai model not configured or missing on disk, treating as spoof");
                 return Ok(false);
@@ -195,7 +190,8 @@ impl FaceAuth {
         let Some(camera) = self
             .config
             .anti_spoofing
-            .ir_camera
+            .ir
+            .camera
             .as_deref()
             .filter(|camera| !camera.is_empty())
         else {
@@ -208,13 +204,13 @@ impl FaceAuth {
             return Ok(false);
         }
 
-        if self.config.anti_spoofing.ir_warmup_delay_ms > 0 {
+        if self.config.anti_spoofing.ir.warmup_delay_ms > 0 {
             log(&format!(
                 "sleeping {}ms for IR warmup",
-                self.config.anti_spoofing.ir_warmup_delay_ms
+                self.config.anti_spoofing.ir.warmup_delay_ms
             ));
             std::thread::sleep(Duration::from_millis(
-                self.config.anti_spoofing.ir_warmup_delay_ms as u64,
+                self.config.anti_spoofing.ir.warmup_delay_ms as u64,
             ));
         }
 

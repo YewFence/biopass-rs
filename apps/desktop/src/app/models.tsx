@@ -112,10 +112,10 @@ function ModelsRouteComponent() {
         inUsePaths.add(config.methods.face.recognition.model);
       }
       if (
-        config.methods.face.anti_spoofing.enable &&
-        config.methods.face.anti_spoofing.model.path
+        config.methods.face.anti_spoofing.ai.enable &&
+        config.methods.face.anti_spoofing.ai.model.path
       ) {
-        inUsePaths.add(config.methods.face.anti_spoofing.model.path);
+        inUsePaths.add(config.methods.face.anti_spoofing.ai.model.path);
       }
       const checks = modelList.map(async (model) => {
         try {

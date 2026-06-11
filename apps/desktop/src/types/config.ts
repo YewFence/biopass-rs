@@ -37,12 +37,18 @@ export interface FaceMethodConfig {
     threshold: number;
   };
   anti_spoofing: {
-    enable: boolean;
-    model: {
-      path: string;
-      threshold: number;
+    ai: {
+      enable: boolean;
+      model: {
+        path: string;
+        threshold: number;
+      };
     };
-    ir_camera: string | null;
+    ir: {
+      enable: boolean;
+      camera: string | null;
+      warmup_delay_ms: number;
+    };
   };
   auto_optimize_camera: boolean;
 }

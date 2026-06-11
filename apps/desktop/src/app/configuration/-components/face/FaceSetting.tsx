@@ -42,7 +42,7 @@ export function FaceSetting() {
 
   const selectedIrCamera = useMemo(() => {
     if (!config) return null;
-    const irCameraPath = config.anti_spoofing.ir_camera;
+    const irCameraPath = config.anti_spoofing.ir.camera;
     if (!irCameraPath) return null;
     return videoDevices.find((device) => device.path === irCameraPath) ?? null;
   }, [config, videoDevices]);
@@ -57,18 +57,18 @@ export function FaceSetting() {
   const unavailableAiModelOption = "__unavailable_ai_model__";
   const unavailableIrDeviceOption = "__unavailable_ir_device__";
   const selectedAiModelExists = antiSpoofModels.some(
-    (model) => model.path === config.anti_spoofing.model.path,
+    (model) => model.path === config.anti_spoofing.ai.model.path,
   );
   const unavailableCameraDeviceOption = "__unavailable_camera_device__";
   const cameraValue = config.camera
     ? (selectedCamera?.path ?? unavailableCameraDeviceOption)
     : disabledOption;
-  const irCameraValue = config.anti_spoofing.ir_camera
+  const irCameraValue = config.anti_spoofing.ir.camera
     ? (selectedIrCamera?.path ?? unavailableIrDeviceOption)
     : disabledOption;
-  const aiModelValue = config.anti_spoofing.enable
+  const aiModelValue = config.anti_spoofing.ai.enable
     ? selectedAiModelExists
-      ? config.anti_spoofing.model.path
+      ? config.anti_spoofing.ai.model.path
       : unavailableAiModelOption
     : disabledOption;
 
@@ -282,7 +282,10 @@ export function FaceSetting() {
               if (value === disabledOption) {
                 setFaceConfig({
                   ...config,
-                  anti_spoofing: { ...config.anti_spoofing, enable: false },
+                  anti_spoofing: {
+                    ...config.anti_spoofing,
+                    ai: { ...config.anti_spoofing.ai, enable: false },
+                  },
                 });
                 return;
               }
@@ -291,8 +294,11 @@ export function FaceSetting() {
                 ...config,
                 anti_spoofing: {
                   ...config.anti_spoofing,
-                  enable: true,
-                  model: { ...config.anti_spoofing.model, path: value },
+                  ai: {
+                    ...config.anti_spoofing.ai,
+                    enable: true,
+                    model: { ...config.anti_spoofing.ai.model, path: value },
+                  },
                 },
               });
             }}
@@ -322,17 +328,20 @@ export function FaceSetting() {
           </Select>
         </div>
 
-        {config.anti_spoofing.enable && (
+        {config.anti_spoofing.ai.enable && (
           <div className="w-48">
             <Threshold
               label="Threshold"
-              value={config.anti_spoofing.model.threshold}
+              value={config.anti_spoofing.ai.model.threshold}
               onChange={(threshold) =>
                 setFaceConfig({
                   ...config,
                   anti_spoofing: {
                     ...config.anti_spoofing,
-                    model: { ...config.anti_spoofing.model, threshold },
+                    ai: {
+                      ...config.anti_spoofing.ai,
+                      model: { ...config.anti_spoofing.ai.model, threshold },
+                    },
                   },
                 })
               }
@@ -350,14 +359,28 @@ export function FaceSetting() {
               if (value === disabledOption) {
                 setFaceConfig({
                   ...config,
-                  anti_spoofing: { ...config.anti_spoofing, ir_camera: null },
+                  anti_spoofing: {
+                    ...config.anti_spoofing,
+                    ir: {
+                      ...config.anti_spoofing.ir,
+                      camera: null,
+                      enable: false,
+                    },
+                  },
                 });
                 return;
               }
 
               setFaceConfig({
                 ...config,
-                anti_spoofing: { ...config.anti_spoofing, ir_camera: value },
+                anti_spoofing: {
+                  ...config.anti_spoofing,
+                  ir: {
+                    ...config.anti_spoofing.ir,
+                    camera: value,
+                    enable: true,
+                  },
+                },
               });
             }}
           >

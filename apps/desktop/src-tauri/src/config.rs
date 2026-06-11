@@ -51,15 +51,42 @@ struct LegacyIRCameraConfig {
 }
 
 #[derive(Debug, Deserialize, Default)]
-struct AntiSpoofingConfigRaw {
+struct AiAntiSpoofingConfigRaw {
     #[serde(default)]
     pub enable: bool,
     #[serde(default)]
     pub model: Option<YamlValue>,
     #[serde(default)]
     pub threshold: Option<f32>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct IrAntiSpoofingConfigRaw {
+    #[serde(default)]
+    pub enable: bool,
+    #[serde(default)]
+    pub camera: Option<String>,
+    #[serde(default = "default_ir_warmup_delay")]
+    pub warmup_delay_ms: i32,
+}
+
+#[derive(Debug, Deserialize, Default)]
+struct AntiSpoofingConfigRaw {
+    #[serde(default)]
+    pub ai: Option<AiAntiSpoofingConfigRaw>,
+    #[serde(default)]
+    pub ir: Option<IrAntiSpoofingConfigRaw>,
+    // Legacy fields — if any of these appear, surface a clear migration error.
+    #[serde(default)]
+    pub enable: Option<bool>,
+    #[serde(default)]
+    pub model: Option<YamlValue>,
+    #[serde(default)]
+    pub threshold: Option<f32>,
     #[serde(default)]
     pub ir_camera: Option<String>,
+    #[serde(default)]
+    pub ir_warmup_delay_ms: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -92,11 +119,14 @@ impl<'de> Deserialize<'de> for FaceMethodConfig {
         let raw = FaceMethodConfigRaw::deserialize(deserializer)?;
 
         let mut anti_spoofing = AntiSpoofingConfig::from_raw(raw.anti_spoofing);
-        if anti_spoofing.ir_camera.is_none() {
+        // Legacy `ir_camera: { enable, device_id }` shape (face-level) was
+        // renamed to anti_spoofing.ir.{enable, camera}.
+        if anti_spoofing.ir.camera.is_none() {
             if let Some(legacy_ir_camera) = raw.ir_camera {
                 if legacy_ir_camera.enable {
-                    anti_spoofing.ir_camera =
+                    anti_spoofing.ir.camera =
                         Some(format!("/dev/video{}", legacy_ir_camera.device_id));
+                    anti_spoofing.ir.enable = true;
                 }
             }
         }
@@ -160,17 +190,54 @@ impl Default for AntiSpoofingModelConfig {
 }
 
 #[derive(Debug, Serialize, Clone)]
-pub struct AntiSpoofingConfig {
+pub struct AiAntiSpoofingConfig {
     pub enable: bool,
     pub model: AntiSpoofingModelConfig,
-    pub ir_camera: Option<String>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct IrAntiSpoofingConfig {
+    pub enable: bool,
+    pub camera: Option<String>,
+    pub warmup_delay_ms: i32,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct AntiSpoofingConfig {
+    pub ai: AiAntiSpoofingConfig,
+    pub ir: IrAntiSpoofingConfig,
 }
 
 impl AntiSpoofingConfig {
     fn from_raw(raw: AntiSpoofingConfigRaw) -> Self {
+        // Reject the legacy schema explicitly so users get a clear migration
+        // error instead of silently losing anti-spoofing config.
+        if raw.enable.is_some()
+            || raw.model.is_some()
+            || raw.threshold.is_some()
+            || raw.ir_camera.is_some()
+            || raw.ir_warmup_delay_ms.is_some()
+        {
+            panic!(
+                "the `anti_spoofing` schema changed: it no longer has a top-level \
+                 `enable` / `model` / `ir_camera` / `ir_warmup_delay_ms`. \
+                 Update your config to:\n\
+                 \n\
+                 anti_spoofing:\n  \
+                   ai:\n    \
+                     enable: <bool>\n    \
+                     model: {{ path: <path>, threshold: <0..1> }}\n  \
+                   ir:\n    \
+                     enable: <bool>\n    \
+                     camera: <path, e.g. /dev/video2>\n    \
+                     warmup_delay_ms: 300"
+            );
+        }
+
+        let ai_raw = raw.ai.unwrap_or_default();
         let mut model = AntiSpoofingModelConfig::default();
 
-        if let Some(model_value) = raw.model {
+        if let Some(model_value) = ai_raw.model {
             match model_value {
                 YamlValue::Mapping(map) => {
                     if let Some(path_value) = map.get(&YamlValue::String("path".to_string())) {
@@ -187,26 +254,35 @@ impl AntiSpoofingConfig {
                     }
                 }
                 YamlValue::String(path) => {
-                    // Backward compatibility with old schema:
-                    // anti_spoofing.model: "<path>"
+                    // Backward compatibility: ai.model: "<path>"
                     model.path = path;
                 }
                 _ => {}
             }
         }
 
-        // Backward compatibility with old schema:
-        // anti_spoofing.threshold: <float>
-        if let Some(threshold) = raw.threshold {
+        if let Some(threshold) = ai_raw.threshold {
             model.threshold = threshold;
         }
 
+        let ir_raw = raw.ir.unwrap_or_default();
+
         Self {
-            enable: raw.enable,
-            model,
-            ir_camera: raw.ir_camera,
+            ai: AiAntiSpoofingConfig {
+                enable: ai_raw.enable,
+                model,
+            },
+            ir: IrAntiSpoofingConfig {
+                enable: ir_raw.enable,
+                camera: ir_raw.camera,
+                warmup_delay_ms: ir_raw.warmup_delay_ms,
+            },
         }
     }
+}
+
+fn default_ir_warmup_delay() -> i32 {
+    300
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -283,12 +359,18 @@ fn get_default_config(app: &AppHandle) -> BiopassConfig {
                     threshold: 0.8,
                 },
                 anti_spoofing: AntiSpoofingConfig {
-                    enable: true,
-                    model: AntiSpoofingModelConfig {
-                        path: model_path("mobilenetv3_antispoof.onnx"),
-                        threshold: 0.8,
+                    ai: AiAntiSpoofingConfig {
+                        enable: true,
+                        model: AntiSpoofingModelConfig {
+                            path: model_path("mobilenetv3_antispoof.onnx"),
+                            threshold: 0.8,
+                        },
                     },
-                    ir_camera: None,
+                    ir: IrAntiSpoofingConfig {
+                        enable: false,
+                        camera: None,
+                        warmup_delay_ms: 300,
+                    },
                 },
                 auto_optimize_camera: true,
             },

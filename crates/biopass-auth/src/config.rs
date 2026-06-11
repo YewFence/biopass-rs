@@ -106,25 +106,21 @@ impl Default for AntiSpoofingModelConfig {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct AntiSpoofingConfig {
+pub struct AiAntiSpoofingConfig {
     pub enable: bool,
     pub model: AntiSpoofingModelConfig,
-    pub ir_camera: Option<String>,
-    pub ir_warmup_delay_ms: i32,
 }
 
-impl Default for AntiSpoofingConfig {
+impl Default for AiAntiSpoofingConfig {
     fn default() -> Self {
         Self {
             enable: false,
             model: AntiSpoofingModelConfig::default(),
-            ir_camera: None,
-            ir_warmup_delay_ms: 300,
         }
     }
 }
 
-impl<'de> Deserialize<'de> for AntiSpoofingConfig {
+impl<'de> Deserialize<'de> for AiAntiSpoofingConfig {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -137,10 +133,6 @@ impl<'de> Deserialize<'de> for AntiSpoofingConfig {
             model: Option<Value>,
             #[serde(default)]
             threshold: Option<f32>,
-            #[serde(default)]
-            ir_camera: Option<String>,
-            #[serde(default = "default_ir_warmup_delay")]
-            ir_warmup_delay_ms: i32,
         }
 
         let raw = Raw::deserialize(deserializer)?;
@@ -155,8 +147,118 @@ impl<'de> Deserialize<'de> for AntiSpoofingConfig {
         Ok(Self {
             enable: raw.enable,
             model,
-            ir_camera: raw.ir_camera,
-            ir_warmup_delay_ms: raw.ir_warmup_delay_ms,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct IrAntiSpoofingConfig {
+    pub enable: bool,
+    pub camera: Option<String>,
+    pub warmup_delay_ms: i32,
+}
+
+impl Default for IrAntiSpoofingConfig {
+    fn default() -> Self {
+        Self {
+            enable: false,
+            camera: None,
+            warmup_delay_ms: 300,
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for IrAntiSpoofingConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize, Default)]
+        struct Raw {
+            #[serde(default)]
+            enable: bool,
+            #[serde(default)]
+            camera: Option<String>,
+            #[serde(default = "default_ir_warmup_delay")]
+            warmup_delay_ms: i32,
+        }
+
+        let raw = Raw::deserialize(deserializer)?;
+        Ok(Self {
+            enable: raw.enable,
+            camera: raw.camera,
+            warmup_delay_ms: raw.warmup_delay_ms,
+        })
+    }
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+pub struct AntiSpoofingConfig {
+    pub ai: AiAntiSpoofingConfig,
+    pub ir: IrAntiSpoofingConfig,
+}
+
+impl Default for AntiSpoofingConfig {
+    fn default() -> Self {
+        Self {
+            ai: AiAntiSpoofingConfig::default(),
+            ir: IrAntiSpoofingConfig::default(),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for AntiSpoofingConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Raw {
+            #[serde(default)]
+            ai: Option<AiAntiSpoofingConfig>,
+            #[serde(default)]
+            ir: Option<IrAntiSpoofingConfig>,
+        }
+
+        // Materialize the YAML/JSON into a generic Mapping so we can sniff
+        // for old top-level fields (`enable`, `model`, `threshold`,
+        // `ir_camera`, `ir_warmup_delay_ms`) and emit a clear migration
+        // error rather than silently dropping them via `deny_unknown_fields`.
+        let content: serde_yaml::Mapping = serde_yaml::from_value(
+            Value::deserialize(deserializer)
+                .map_err(|e| serde::de::Error::custom(format!("{e}")))?,
+        )
+        .map_err(|e: serde_yaml::Error| serde::de::Error::custom(format!("{e}")))?;
+
+        let has_legacy_field = content.contains_key("enable")
+            || content.contains_key("model")
+            || content.contains_key("threshold")
+            || content.contains_key("ir_camera")
+            || content.contains_key("ir_warmup_delay_ms");
+
+        if has_legacy_field {
+            return Err(serde::de::Error::custom(
+                "the `anti_spoofing` schema changed: it no longer has a top-level \
+                 `enable` / `model` / `ir_camera` / `ir_warmup_delay_ms`. \
+                 Update your config to:\n\
+                 \n\
+                 anti_spoofing:\n  \
+                   ai:\n    \
+                     enable: <bool>\n    \
+                     model: { path: <path>, threshold: <0..1> }\n  \
+                   ir:\n    \
+                     enable: <bool>\n    \
+                     camera: <path, e.g. /dev/video2>\n    \
+                     warmup_delay_ms: 300",
+            ));
+        }
+
+        let raw = Raw::deserialize(Value::Mapping(content))
+            .map_err(|e| serde::de::Error::custom(format!("{e}")))?;
+        Ok(Self {
+            ai: raw.ai.unwrap_or_default(),
+            ir: raw.ir.unwrap_or_default(),
         })
     }
 }
@@ -225,10 +327,14 @@ impl<'de> Deserialize<'de> for FaceMethodConfig {
 
         let raw = Raw::deserialize(deserializer)?;
         let mut anti_spoofing = raw.anti_spoofing;
-        if anti_spoofing.ir_camera.is_none() {
+        // Legacy `ir_camera: { enable, device_id }` shape lived at the face
+        // method level before the new anti_spoofing.ir sub-object was
+        // introduced. Carry it over to the new ir sub-config.
+        if anti_spoofing.ir.camera.is_none() {
             if let Some(legacy) = raw.ir_camera {
                 if legacy.enable {
-                    anti_spoofing.ir_camera = Some(format!("/dev/video{}", legacy.device_id));
+                    anti_spoofing.ir.camera = Some(format!("/dev/video{}", legacy.device_id));
+                    anti_spoofing.ir.enable = true;
                 }
             }
         }
@@ -326,13 +432,12 @@ pub fn user_exists(username: &str) -> bool {
     home_dir_for_user(username).is_some()
 }
 
-pub fn read_config(username: &str) -> BiopassConfig {
+pub fn read_config(username: &str) -> Result<BiopassConfig, String> {
     let path = config_path(username);
-    let Ok(config_text) = fs::read_to_string(path) else {
-        return BiopassConfig::default();
-    };
-
-    serde_yaml::from_str::<BiopassConfig>(&config_text).unwrap_or_default()
+    let config_text = fs::read_to_string(&path)
+        .map_err(|error| format!("Failed to read config {}: {error}", path.display()))?;
+    serde_yaml::from_str::<BiopassConfig>(&config_text)
+        .map_err(|error| format!("Failed to parse config {}: {error}", path.display()))
 }
 
 pub fn migrate_config_schema(username: &str) -> io::Result<bool> {
@@ -397,14 +502,8 @@ impl BiopassConfig {
     pub fn runtime_auth_config(&self) -> crate::manager::AuthConfig {
         crate::manager::AuthConfig {
             debug: self.strategy.debug,
-            antispoof: self.methods.face.anti_spoofing.enable
-                || self
-                    .methods
-                    .face
-                    .anti_spoofing
-                    .ir_camera
-                    .as_ref()
-                    .is_some_and(|camera| !camera.is_empty()),
+            antispoof: self.methods.face.anti_spoofing.ai.enable
+                || self.methods.face.anti_spoofing.ir.enable,
         }
     }
 
@@ -706,9 +805,14 @@ methods:
       enable: true
       device_id: 3
     anti_spoofing:
-      enable: true
-      model: old.onnx
-      threshold: 0.42
+      ai:
+        enable: true
+        model: old.onnx
+        threshold: 0.42
+      ir:
+        enable: true
+        camera: /dev/video3
+        warmup_delay_ms: 250
   fingerprint:
     enable: true
     retry_delay: 9000
@@ -726,12 +830,48 @@ methods:
         );
         assert_eq!(config.methods.face.retry_delay, 450);
         assert_eq!(
-            config.methods.face.anti_spoofing.ir_camera.as_deref(),
+            config.methods.face.anti_spoofing.ir.camera.as_deref(),
             Some("/dev/video3")
         );
-        assert_eq!(config.methods.face.anti_spoofing.model.path, "old.onnx");
-        assert_eq!(config.methods.face.anti_spoofing.model.threshold, 0.42);
+        assert_eq!(config.methods.face.anti_spoofing.ai.model.path, "old.onnx");
+        assert_eq!(config.methods.face.anti_spoofing.ai.model.threshold, 0.42);
         assert_eq!(config.methods.fingerprint.timeout, 9000);
+    }
+
+    #[test]
+    fn legacy_anti_spoofing_top_level_enable_is_rejected() {
+        let yaml = r#"
+methods:
+  face:
+    anti_spoofing:
+      enable: true
+      ir_camera: /dev/video2
+"#;
+
+        let error = serde_yaml::from_str::<BiopassConfig>(yaml).unwrap_err();
+        let message = error.to_string();
+        assert!(
+            message.contains("anti_spoofing"),
+            "expected migration error mentioning anti_spoofing, got: {message}"
+        );
+    }
+
+    #[test]
+    fn legacy_face_level_ir_camera_still_normalizes_to_ir_subconfig() {
+        let yaml = r#"
+methods:
+  face:
+    ir_camera:
+      enable: true
+      device_id: 2
+"#;
+
+        let config = serde_yaml::from_str::<BiopassConfig>(yaml).unwrap();
+        assert!(config.methods.face.anti_spoofing.ir.enable);
+        assert_eq!(
+            config.methods.face.anti_spoofing.ir.camera.as_deref(),
+            Some("/dev/video2")
+        );
     }
 
     #[test]
