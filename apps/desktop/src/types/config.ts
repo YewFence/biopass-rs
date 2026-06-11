@@ -39,6 +39,8 @@ export interface FaceMethodConfig {
   anti_spoofing: {
     ai: {
       enable: boolean;
+      retries: number;
+      retry_delay_ms: number;
       model: {
         path: string;
         threshold: number;
@@ -46,6 +48,8 @@ export interface FaceMethodConfig {
     };
     ir: {
       enable: boolean;
+      retries: number;
+      retry_delay_ms: number;
       camera: string | null;
       warmup_delay_ms: number;
     };

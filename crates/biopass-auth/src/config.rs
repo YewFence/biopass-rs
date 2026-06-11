@@ -108,6 +108,10 @@ impl Default for AntiSpoofingModelConfig {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct AiAntiSpoofingConfig {
     pub enable: bool,
+    #[serde(default)]
+    pub retries: u32,
+    #[serde(default = "default_antispoofing_retry_delay")]
+    pub retry_delay_ms: u32,
     pub model: AntiSpoofingModelConfig,
 }
 
@@ -115,6 +119,8 @@ impl Default for AiAntiSpoofingConfig {
     fn default() -> Self {
         Self {
             enable: false,
+            retries: 0,
+            retry_delay_ms: default_antispoofing_retry_delay(),
             model: AntiSpoofingModelConfig::default(),
         }
     }
@@ -129,6 +135,10 @@ impl<'de> Deserialize<'de> for AiAntiSpoofingConfig {
         struct Raw {
             #[serde(default)]
             enable: bool,
+            #[serde(default)]
+            retries: u32,
+            #[serde(default = "default_antispoofing_retry_delay")]
+            retry_delay_ms: u32,
             #[serde(default)]
             model: Option<Value>,
             #[serde(default)]
@@ -146,6 +156,8 @@ impl<'de> Deserialize<'de> for AiAntiSpoofingConfig {
 
         Ok(Self {
             enable: raw.enable,
+            retries: raw.retries,
+            retry_delay_ms: raw.retry_delay_ms,
             model,
         })
     }
@@ -154,6 +166,10 @@ impl<'de> Deserialize<'de> for AiAntiSpoofingConfig {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct IrAntiSpoofingConfig {
     pub enable: bool,
+    #[serde(default)]
+    pub retries: u32,
+    #[serde(default = "default_antispoofing_retry_delay")]
+    pub retry_delay_ms: u32,
     pub camera: Option<String>,
     pub warmup_delay_ms: i32,
 }
@@ -162,6 +178,8 @@ impl Default for IrAntiSpoofingConfig {
     fn default() -> Self {
         Self {
             enable: false,
+            retries: 0,
+            retry_delay_ms: default_antispoofing_retry_delay(),
             camera: None,
             warmup_delay_ms: 300,
         }
@@ -178,6 +196,10 @@ impl<'de> Deserialize<'de> for IrAntiSpoofingConfig {
             #[serde(default)]
             enable: bool,
             #[serde(default)]
+            retries: u32,
+            #[serde(default = "default_antispoofing_retry_delay")]
+            retry_delay_ms: u32,
+            #[serde(default)]
             camera: Option<String>,
             #[serde(default = "default_ir_warmup_delay")]
             warmup_delay_ms: i32,
@@ -186,6 +208,8 @@ impl<'de> Deserialize<'de> for IrAntiSpoofingConfig {
         let raw = Raw::deserialize(deserializer)?;
         Ok(Self {
             enable: raw.enable,
+            retries: raw.retries,
+            retry_delay_ms: raw.retry_delay_ms,
             camera: raw.camera,
             warmup_delay_ms: raw.warmup_delay_ms,
         })
@@ -755,6 +779,10 @@ fn default_ir_warmup_delay() -> i32 {
     300
 }
 
+fn default_antispoofing_retry_delay() -> u32 {
+    200
+}
+
 fn default_threshold() -> f32 {
     0.8
 }
@@ -932,6 +960,39 @@ methods:
         );
         assert_eq!(anti["model"]["threshold"], Value::from(0.67_f32));
         assert_eq!(anti["ir_camera"], Value::String("/dev/video2".to_string()));
+    }
+
+    #[test]
+    fn antispoofing_subchecks_have_independent_retry_defaults() {
+        let config = serde_yaml::from_str::<BiopassConfig>("").unwrap();
+        assert_eq!(config.methods.face.anti_spoofing.ai.retries, 0);
+        assert_eq!(config.methods.face.anti_spoofing.ai.retry_delay_ms, 200);
+        assert_eq!(config.methods.face.anti_spoofing.ir.retries, 0);
+        assert_eq!(config.methods.face.anti_spoofing.ir.retry_delay_ms, 200);
+    }
+
+    #[test]
+    fn antispoofing_subchecks_retry_config_is_per_subcheck() {
+        let yaml = r#"
+methods:
+  face:
+    anti_spoofing:
+      ai:
+        enable: true
+        retries: 2
+        retry_delay_ms: 350
+      ir:
+        enable: true
+        retries: 5
+        retry_delay_ms: 750
+"#;
+
+        let config = serde_yaml::from_str::<BiopassConfig>(yaml).unwrap();
+        let anti = &config.methods.face.anti_spoofing;
+        assert_eq!(anti.ai.retries, 2);
+        assert_eq!(anti.ai.retry_delay_ms, 350);
+        assert_eq!(anti.ir.retries, 5);
+        assert_eq!(anti.ir.retry_delay_ms, 750);
     }
 
     #[test]

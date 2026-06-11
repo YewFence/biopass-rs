@@ -80,7 +80,7 @@ impl FaceAuth {
         ));
 
         log("running anti-spoofing check");
-        if !self.check_anti_spoofing(username, auth_config, &candidate)? {
+        if !self.check_anti_spoofing(username, auth_config, cancel_signal, &candidate)? {
             log("anti-spoofing check rejected the candidate");
             return Ok(AuthResult::Failure);
         }
@@ -132,6 +132,7 @@ impl FaceAuth {
         &self,
         username: &str,
         auth_config: &AuthConfig,
+        cancel_signal: Option<&AtomicBool>,
         face: &RgbFrame,
     ) -> Result<bool, String> {
         let log = |msg: &str| {
@@ -157,7 +158,8 @@ impl FaceAuth {
         ));
 
         if ai_enabled {
-            let model = &self.config.anti_spoofing.ai.model;
+            let ai_cfg = &self.config.anti_spoofing.ai;
+            let model = &ai_cfg.model;
             if model.path.is_empty() || !Path::new(&model.path).is_file() {
                 log("ai model not configured or missing on disk, treating as spoof");
                 if auth_config.debug {
@@ -167,8 +169,28 @@ impl FaceAuth {
             }
 
             let mut anti_spoofing = FaceAntiSpoofing::load(&model.path, model.threshold)?;
-            let verdict = anti_spoofing.detect(face)?;
-            log(&format!("ai model verdict: spoof={}", verdict.spoof));
+            let max_attempts = ai_cfg.retries.saturating_add(1);
+            let mut attempt = 0u32;
+            let verdict = loop {
+                attempt += 1;
+                log(&format!("ai attempt {attempt}/{max_attempts}"));
+                let verdict = anti_spoofing.detect(face)?;
+                log(&format!("ai model verdict: spoof={}", verdict.spoof));
+                if !verdict.spoof {
+                    break verdict;
+                }
+                if attempt >= max_attempts {
+                    break verdict;
+                }
+                if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
+                    log("ai check cancelled during retry");
+                    return Ok(false);
+                }
+                if ai_cfg.retry_delay_ms > 0 {
+                    log(&format!("ai retry sleeping {}ms", ai_cfg.retry_delay_ms));
+                    std::thread::sleep(Duration::from_millis(ai_cfg.retry_delay_ms as u64));
+                }
+            };
             if verdict.spoof {
                 if auth_config.debug {
                     save_debug_frame(username, face, "ai_spoof_detected");
@@ -179,14 +201,43 @@ impl FaceAuth {
 
         if ir_enabled {
             log("running IR face presence check");
-            let ir_result = self.check_ir_face_presence(username, auth_config)?;
-            log(&format!("IR face presence verdict: {ir_result}"));
-            if !ir_result {
+            if !self.run_ir_check_with_retries(username, auth_config, cancel_signal)? {
                 return Ok(false);
             }
         }
 
         Ok(true)
+    }
+
+    fn run_ir_check_with_retries(
+        &self,
+        username: &str,
+        auth_config: &AuthConfig,
+        cancel_signal: Option<&AtomicBool>,
+    ) -> Result<bool, String> {
+        let ir_cfg = &self.config.anti_spoofing.ir;
+        let max_attempts = ir_cfg.retries.saturating_add(1);
+        for attempt in 1..=max_attempts {
+            if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
+                return Ok(false);
+            }
+            if attempt > 1 {
+                eprintln!("FaceAuth: ir: attempt {attempt}/{max_attempts}");
+            }
+            if self.check_ir_face_presence(username, auth_config)? {
+                return Ok(true);
+            }
+            if attempt < max_attempts {
+                if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
+                    return Ok(false);
+                }
+                if ir_cfg.retry_delay_ms > 0 {
+                    eprintln!("FaceAuth: ir: retry sleeping {}ms", ir_cfg.retry_delay_ms);
+                    std::thread::sleep(Duration::from_millis(ir_cfg.retry_delay_ms as u64));
+                }
+            }
+        }
+        Ok(false)
     }
 
     fn check_ir_face_presence(

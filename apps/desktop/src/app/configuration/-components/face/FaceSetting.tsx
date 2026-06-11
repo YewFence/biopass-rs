@@ -329,24 +329,49 @@ export function FaceSetting() {
         </div>
 
         {config.anti_spoofing.ai.enable && (
-          <div className="w-48">
-            <Threshold
-              label="Threshold"
-              value={config.anti_spoofing.ai.model.threshold}
-              onChange={(threshold) =>
+          <>
+            <div className="w-48">
+              <Threshold
+                label="Threshold"
+                value={config.anti_spoofing.ai.model.threshold}
+                onChange={(threshold) =>
+                  setFaceConfig({
+                    ...config,
+                    anti_spoofing: {
+                      ...config.anti_spoofing,
+                      ai: {
+                        ...config.anti_spoofing.ai,
+                        model: { ...config.anti_spoofing.ai.model, threshold },
+                      },
+                    },
+                  })
+                }
+              />
+            </div>
+            <SubcheckRetries
+              idPrefix="ai-anti-spoofing"
+              retries={config.anti_spoofing.ai.retries}
+              retryDelayMs={config.anti_spoofing.ai.retry_delay_ms}
+              onRetriesChange={(retries) =>
                 setFaceConfig({
                   ...config,
                   anti_spoofing: {
                     ...config.anti_spoofing,
-                    ai: {
-                      ...config.anti_spoofing.ai,
-                      model: { ...config.anti_spoofing.ai.model, threshold },
-                    },
+                    ai: { ...config.anti_spoofing.ai, retries },
+                  },
+                })
+              }
+              onRetryDelayChange={(retry_delay_ms) =>
+                setFaceConfig({
+                  ...config,
+                  anti_spoofing: {
+                    ...config.anti_spoofing,
+                    ai: { ...config.anti_spoofing.ai, retry_delay_ms },
                   },
                 })
               }
             />
-          </div>
+          </>
         )}
 
         <div className="grid gap-2">
@@ -408,6 +433,90 @@ export function FaceSetting() {
             </SelectContent>
           </Select>
         </div>
+
+        {config.anti_spoofing.ir.enable && (
+          <SubcheckRetries
+            idPrefix="ir-anti-spoofing"
+            retries={config.anti_spoofing.ir.retries}
+            retryDelayMs={config.anti_spoofing.ir.retry_delay_ms}
+            onRetriesChange={(retries) =>
+              setFaceConfig({
+                ...config,
+                anti_spoofing: {
+                  ...config.anti_spoofing,
+                  ir: { ...config.anti_spoofing.ir, retries },
+                },
+              })
+            }
+            onRetryDelayChange={(retry_delay_ms) =>
+              setFaceConfig({
+                ...config,
+                anti_spoofing: {
+                  ...config.anti_spoofing,
+                  ir: { ...config.anti_spoofing.ir, retry_delay_ms },
+                },
+              })
+            }
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface SubcheckRetriesProps {
+  idPrefix: string;
+  retries: number;
+  retryDelayMs: number;
+  onRetriesChange: (retries: number) => void;
+  onRetryDelayChange: (retryDelayMs: number) => void;
+}
+
+function SubcheckRetries({
+  idPrefix,
+  retries,
+  retryDelayMs,
+  onRetriesChange,
+  onRetryDelayChange,
+}: SubcheckRetriesProps) {
+  return (
+    <div className="grid grid-cols-2 gap-6 pt-1">
+      <div className="grid gap-2">
+        <Label
+          htmlFor={`${idPrefix}-retries`}
+          className="text-xs text-muted-foreground"
+        >
+          Sub-check Retries
+        </Label>
+        <Input
+          id={`${idPrefix}-retries`}
+          type="number"
+          min="0"
+          max="10"
+          value={retries}
+          onChange={(e) => onRetriesChange(parseInt(e.target.value, 10) || 0)}
+          className="h-10"
+        />
+      </div>
+      <div className="grid gap-2">
+        <Label
+          htmlFor={`${idPrefix}-retry-delay`}
+          className="text-xs text-muted-foreground"
+        >
+          Sub-check Retry Delay (ms)
+        </Label>
+        <Input
+          id={`${idPrefix}-retry-delay`}
+          type="number"
+          min="0"
+          max="5000"
+          step="100"
+          value={retryDelayMs}
+          onChange={(e) =>
+            onRetryDelayChange(parseInt(e.target.value, 10) || 0)
+          }
+          className="h-10"
+        />
       </div>
     </div>
   );
