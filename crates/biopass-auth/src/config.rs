@@ -464,9 +464,8 @@ pub fn read_config(username: &str) -> Result<BiopassConfig, String> {
         .map_err(|error| format!("Failed to parse config {}: {error}", path.display()))
 }
 
-pub fn migrate_config_schema(username: &str) -> io::Result<bool> {
-    let path = config_path(username);
-    let Ok(config_text) = fs::read_to_string(&path) else {
+pub fn migrate_config_at_path(path: &Path) -> io::Result<bool> {
+    let Ok(config_text) = fs::read_to_string(path) else {
         return Ok(false);
     };
     let mut yaml = serde_yaml::from_str::<Value>(&config_text)
@@ -491,6 +490,10 @@ pub fn migrate_config_schema(username: &str) -> io::Result<bool> {
     let serialized = serde_yaml::to_string(&yaml).map_err(io::Error::other)?;
     fs::write(path, serialized)?;
     Ok(true)
+}
+
+pub fn migrate_config_schema(username: &str) -> io::Result<bool> {
+    migrate_config_at_path(&config_path(username))
 }
 
 pub fn user_data_dir(username: &str) -> PathBuf {

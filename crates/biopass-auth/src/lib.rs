@@ -41,10 +41,11 @@ pub use camera::{
     VideoDevice,
 };
 pub use config::{
-    config_exists, config_path, list_faces, migrate_config_schema, read_config, setup_config,
-    user_data_dir, user_exists, AntiSpoofingConfig, AntiSpoofingModelConfig, BiopassConfig,
-    DetectionConfig, FaceMethodConfig, FingerConfig, FingerprintMethodConfig, MethodConfig,
-    MethodsConfig, ModelConfig, RecognitionConfig, StrategyConfig,
+    config_exists, config_path, list_faces, migrate_config_at_path, migrate_config_schema,
+    read_config, setup_config, user_data_dir, user_exists, AntiSpoofingConfig,
+    AntiSpoofingModelConfig, BiopassConfig, DetectionConfig, FaceMethodConfig, FingerConfig,
+    FingerprintMethodConfig, MethodConfig, MethodsConfig, ModelConfig, RecognitionConfig,
+    StrategyConfig,
 };
 pub use face_antispoofing::{FaceAntiSpoofing, SpoofResult};
 pub use face_auth::FaceAuth;

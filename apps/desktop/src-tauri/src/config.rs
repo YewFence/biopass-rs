@@ -1,5 +1,5 @@
-use serde::{Deserialize, Deserializer, Serialize};
-use serde_yaml::Value as YamlValue;
+use biopass_auth::migrate_config_at_path;
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use tauri::AppHandle;
@@ -30,67 +30,8 @@ pub struct MethodsConfig {
     pub fingerprint: FingerprintMethodConfig,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct FaceMethodConfig {
-    pub enable: bool,
-    pub retries: u32,
-    pub retry_delay: u32,
-    pub camera: Option<String>,
-    pub detection: DetectionConfig,
-    pub recognition: RecognitionConfig,
-    pub anti_spoofing: AntiSpoofingConfig,
-    pub auto_optimize_camera: bool,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct LegacyIRCameraConfig {
-    #[serde(default)]
-    pub enable: bool,
-    #[serde(default)]
-    pub device_id: i32,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct AiAntiSpoofingConfigRaw {
-    #[serde(default)]
-    pub enable: bool,
-    #[serde(default)]
-    pub model: Option<YamlValue>,
-    #[serde(default)]
-    pub threshold: Option<f32>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct IrAntiSpoofingConfigRaw {
-    #[serde(default)]
-    pub enable: bool,
-    #[serde(default)]
-    pub camera: Option<String>,
-    #[serde(default = "default_ir_warmup_delay")]
-    pub warmup_delay_ms: i32,
-}
-
-#[derive(Debug, Deserialize, Default)]
-struct AntiSpoofingConfigRaw {
-    #[serde(default)]
-    pub ai: Option<AiAntiSpoofingConfigRaw>,
-    #[serde(default)]
-    pub ir: Option<IrAntiSpoofingConfigRaw>,
-    // Legacy fields — if any of these appear, surface a clear migration error.
-    #[serde(default)]
-    pub enable: Option<bool>,
-    #[serde(default)]
-    pub model: Option<YamlValue>,
-    #[serde(default)]
-    pub threshold: Option<f32>,
-    #[serde(default)]
-    pub ir_camera: Option<String>,
-    #[serde(default)]
-    pub ir_warmup_delay_ms: Option<i32>,
-}
-
-#[derive(Debug, Deserialize)]
-struct FaceMethodConfigRaw {
     #[serde(default)]
     pub enable: bool,
     #[serde(default = "default_face_retries")]
@@ -104,44 +45,9 @@ struct FaceMethodConfigRaw {
     #[serde(default)]
     pub recognition: RecognitionConfig,
     #[serde(default)]
-    pub anti_spoofing: AntiSpoofingConfigRaw,
-    #[serde(default)]
-    pub ir_camera: Option<LegacyIRCameraConfig>,
+    pub anti_spoofing: AntiSpoofingConfig,
     #[serde(default = "default_face_auto_optimize_camera")]
     pub auto_optimize_camera: bool,
-}
-
-impl<'de> Deserialize<'de> for FaceMethodConfig {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: Deserializer<'de>,
-    {
-        let raw = FaceMethodConfigRaw::deserialize(deserializer)?;
-
-        let mut anti_spoofing = AntiSpoofingConfig::from_raw(raw.anti_spoofing);
-        // Legacy `ir_camera: { enable, device_id }` shape (face-level) was
-        // renamed to anti_spoofing.ir.{enable, camera}.
-        if anti_spoofing.ir.camera.is_none() {
-            if let Some(legacy_ir_camera) = raw.ir_camera {
-                if legacy_ir_camera.enable {
-                    anti_spoofing.ir.camera =
-                        Some(format!("/dev/video{}", legacy_ir_camera.device_id));
-                    anti_spoofing.ir.enable = true;
-                }
-            }
-        }
-
-        Ok(Self {
-            enable: raw.enable,
-            retries: raw.retries,
-            retry_delay: raw.retry_delay,
-            camera: raw.camera,
-            detection: raw.detection,
-            recognition: raw.recognition,
-            anti_spoofing,
-            auto_optimize_camera: raw.auto_optimize_camera,
-        })
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -189,100 +95,30 @@ impl Default for AntiSpoofingModelConfig {
     }
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct AiAntiSpoofingConfig {
+    #[serde(default)]
     pub enable: bool,
+    #[serde(default)]
     pub model: AntiSpoofingModelConfig,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct IrAntiSpoofingConfig {
+    #[serde(default)]
     pub enable: bool,
+    #[serde(default)]
     pub camera: Option<String>,
+    #[serde(default = "default_ir_warmup_delay")]
     pub warmup_delay_ms: i32,
 }
 
-#[derive(Debug, Serialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct AntiSpoofingConfig {
+    #[serde(default)]
     pub ai: AiAntiSpoofingConfig,
+    #[serde(default)]
     pub ir: IrAntiSpoofingConfig,
-}
-
-impl AntiSpoofingConfig {
-    fn from_raw(raw: AntiSpoofingConfigRaw) -> Self {
-        // Reject the legacy schema explicitly so users get a clear migration
-        // error instead of silently losing anti-spoofing config.
-        if raw.enable.is_some()
-            || raw.model.is_some()
-            || raw.threshold.is_some()
-            || raw.ir_camera.is_some()
-            || raw.ir_warmup_delay_ms.is_some()
-        {
-            panic!(
-                "the `anti_spoofing` schema changed: it no longer has a top-level \
-                 `enable` / `model` / `ir_camera` / `ir_warmup_delay_ms`. \
-                 Update your config to:\n\
-                 \n\
-                 anti_spoofing:\n  \
-                   ai:\n    \
-                     enable: <bool>\n    \
-                     model: {{ path: <path>, threshold: <0..1> }}\n  \
-                   ir:\n    \
-                     enable: <bool>\n    \
-                     camera: <path, e.g. /dev/video2>\n    \
-                     warmup_delay_ms: 300"
-            );
-        }
-
-        let ai_raw = raw.ai.unwrap_or_default();
-        let mut model = AntiSpoofingModelConfig::default();
-
-        if let Some(model_value) = ai_raw.model {
-            match model_value {
-                YamlValue::Mapping(map) => {
-                    if let Some(path_value) = map.get(&YamlValue::String("path".to_string())) {
-                        if let Some(path) = path_value.as_str() {
-                            model.path = path.to_string();
-                        }
-                    }
-                    if let Some(threshold_value) =
-                        map.get(&YamlValue::String("threshold".to_string()))
-                    {
-                        if let Some(threshold) = threshold_value.as_f64() {
-                            model.threshold = threshold as f32;
-                        }
-                    }
-                }
-                YamlValue::String(path) => {
-                    // Backward compatibility: ai.model: "<path>"
-                    model.path = path;
-                }
-                _ => {}
-            }
-        }
-
-        if let Some(threshold) = ai_raw.threshold {
-            model.threshold = threshold;
-        }
-
-        let ir_raw = raw.ir.unwrap_or_default();
-
-        Self {
-            ai: AiAntiSpoofingConfig {
-                enable: ai_raw.enable,
-                model,
-            },
-            ir: IrAntiSpoofingConfig {
-                enable: ir_raw.enable,
-                camera: ir_raw.camera,
-                warmup_delay_ms: ir_raw.warmup_delay_ms,
-            },
-        }
-    }
-}
-
-fn default_ir_warmup_delay() -> i32 {
-    300
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -290,7 +126,6 @@ pub struct FingerprintMethodConfig {
     pub enable: bool,
     #[serde(default = "default_fingerprint_retries")]
     pub retries: u32,
-    // TODO: rename the actual field in config from "retry_delay" to "timeout" for clarity
     #[serde(default = "default_fingerprint_timeout", alias = "retry_delay")]
     pub timeout: u32,
     #[serde(default)]
@@ -325,7 +160,9 @@ fn default_fingerprint_retries() -> u32 {
 fn default_fingerprint_timeout() -> u32 {
     5000
 }
-
+fn default_ir_warmup_delay() -> i32 {
+    300
+}
 fn default_ignored_services() -> Vec<String> {
     vec!["polkit-1".to_string(), "pkexec".to_string()]
 }
@@ -399,18 +236,53 @@ fn get_default_config(app: &AppHandle) -> BiopassConfig {
     }
 }
 
+/// Returned by `load_config` so the frontend can show a one-time
+/// notice when the on-disk schema was migrated automatically.
+#[derive(Debug, Serialize, Clone)]
+pub struct LoadConfigResult {
+    pub config: BiopassConfig,
+    /// True if the on-disk config was rewritten to the current schema.
+    /// The frontend should surface a one-time confirmation.
+    pub migrated: bool,
+}
+
+/// Tauri command — exposed to the frontend. Returns the loaded config plus
+/// a flag indicating whether the on-disk file was migrated to the current
+/// schema. The frontend uses the flag to show a one-time confirmation.
 #[tauri::command]
-pub fn load_config(app: AppHandle) -> Result<BiopassConfig, String> {
-    let config_path = get_config_path(&app)?;
+pub fn load_config(app: AppHandle) -> Result<LoadConfigResult, String> {
+    let result = load_config_internal(&app)?;
+    Ok(LoadConfigResult {
+        config: result.config,
+        migrated: result.migrated,
+    })
+}
+
+/// Internal helper that runs the same load/migrate logic but discards the
+/// `migrated` flag. Used by other Tauri commands that only need the config.
+pub fn load_config_internal(app: &AppHandle) -> Result<LoadConfigResult, String> {
+    let config_path = get_config_path(app)?;
 
     if !config_path.exists() {
-        return Ok(get_default_config(&app));
+        let config = get_default_config(app);
+        if let Err(e) = save_config(app.clone(), config.clone()) {
+            eprintln!("Warning: failed to write default config: {e}");
+        }
+        return Ok(LoadConfigResult {
+            config,
+            migrated: false,
+        });
     }
+
+    let migrated = migrate_config_at_path(&config_path)
+        .map_err(|e| format!("Failed to migrate config: {}", e))?;
 
     let content = fs::read_to_string(&config_path)
         .map_err(|e| format!("Failed to read config file: {}", e))?;
+    let config: BiopassConfig = serde_yaml::from_str(&content)
+        .map_err(|e| format!("Failed to parse config file: {}", e))?;
 
-    serde_yaml::from_str(&content).map_err(|e| format!("Failed to parse config file: {}", e))
+    Ok(LoadConfigResult { config, migrated })
 }
 
 #[tauri::command]

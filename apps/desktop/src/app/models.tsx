@@ -104,7 +104,7 @@ function ModelsRouteComponent() {
     setStatusMap({ ...newStatuses });
 
     try {
-      const config = await cmd.config.load();
+      const { config } = await cmd.config.load();
       const inUsePaths = new Set<string>();
 
       if (config.methods.face.detection.model) {
@@ -145,7 +145,7 @@ function ModelsRouteComponent() {
   const loadModels = useCallback(async () => {
     try {
       setLoading(true);
-      const config = await cmd.config.load();
+      const { config } = await cmd.config.load();
       const loadedModels = config.models || [];
       setModels(loadedModels);
       await checkModelsStatus(loadedModels);

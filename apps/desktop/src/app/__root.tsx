@@ -9,6 +9,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Cpu, Laptop, Moon, Settings, Sun, User } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
 import logo from "@/assets/logo.png";
 import { cmd } from "@/commands";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+
+const MIGRATION_NOTICE_KEY = "biopass:config-migrated-notice-shown";
 
 function App() {
   const [username, setUsername] = useState("");
@@ -71,9 +74,16 @@ function App() {
       initialized.current = true;
 
       try {
-        const config = await cmd.config.load();
-        if (config.appearance) {
-          setTheme(config.appearance);
+        const result = await cmd.config.load();
+        if (result.migrated && !sessionStorage.getItem(MIGRATION_NOTICE_KEY)) {
+          sessionStorage.setItem(MIGRATION_NOTICE_KEY, "1");
+          toast.info(
+            "Your configuration was automatically migrated to the current schema. Please review the Configuration page to confirm your settings are correct.",
+            { duration: 12000 },
+          );
+        }
+        if (result.config.appearance) {
+          setTheme(result.config.appearance);
         }
       } catch (err) {
         console.error("Failed to load initial theme from config:", err);
@@ -88,7 +98,7 @@ function App() {
   useEffect(() => {
     const updateConfigTheme = async () => {
       try {
-        const config = await cmd.config.load();
+        const { config } = await cmd.config.load();
         if (config.appearance !== theme) {
           config.appearance = theme ?? "dark";
           await cmd.config.save(config);

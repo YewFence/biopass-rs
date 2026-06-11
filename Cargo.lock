@@ -321,6 +321,7 @@ name = "biopass"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "biopass-auth",
  "gtk",
  "serde",
  "serde_json",

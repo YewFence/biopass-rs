@@ -1,8 +1,8 @@
-import type { BiopassConfig } from "@/types/config";
+import type { BiopassConfig, LoadConfigResult } from "@/types/config";
 import { invokeCommand } from "./core";
 
 function load() {
-  return invokeCommand<BiopassConfig>("load_config");
+  return invokeCommand<LoadConfigResult>("load_config");
 }
 
 function save(config: BiopassConfig) {

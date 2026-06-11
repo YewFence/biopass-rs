@@ -1,4 +1,4 @@
-use crate::config::{load_config, save_config, FingerConfig};
+use crate::config::{load_config_internal, save_config, FingerConfig};
 use crate::fingerprint_ffi::FingerprintAuth;
 use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -60,7 +60,7 @@ pub async fn enroll_fingerprint(
     }
 
     // Save to config
-    let mut config = load_config(app.clone())?;
+    let mut config = load_config_internal(&app)?.config;
 
     // Check if this finger is already enrolled
     if config
@@ -106,7 +106,7 @@ pub async fn remove_fingerprint(
     }
 
     // Remove from config
-    let mut config = load_config(app.clone())?;
+    let mut config = load_config_internal(&app)?.config;
 
     let original_len = config.methods.fingerprint.fingers.len();
     config

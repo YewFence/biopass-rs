@@ -33,7 +33,7 @@ export const useConfigurationStore = create<ConfigurationStore>((set, get) => ({
   initializeConfig: async () => {
     try {
       set({ loading: true });
-      const loadedConfig = await cmd.config.load();
+      const { config: loadedConfig } = await cmd.config.load();
       set({ config: loadedConfig, savedConfig: loadedConfig });
     } catch (err) {
       toast.error(`Failed to load config: ${err}`);

@@ -73,3 +73,9 @@ export interface ModelConfig {
   path: string;
   type: "detection" | "recognition" | "anti-spoofing";
 }
+
+export interface LoadConfigResult {
+  config: BiopassConfig;
+  /** True when the on-disk config was rewritten to the current schema. */
+  migrated: boolean;
+}

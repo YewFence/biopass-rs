@@ -8,7 +8,7 @@ use std::time::Duration;
 use base64::{engine::general_purpose, Engine as _};
 use tauri::{AppHandle, Emitter};
 
-use crate::config::{load_config, BiopassConfig};
+use crate::config::{load_config_internal, BiopassConfig};
 use crate::paths::get_faces_dir;
 
 const PREVIEW_EVENT: &str = "face-preview-frame";
@@ -57,7 +57,7 @@ pub fn start_face_preview(app: AppHandle, camera: Option<String>) -> Result<(), 
         return Ok(());
     }
 
-    let config: BiopassConfig = load_config(app.clone())?;
+    let config: BiopassConfig = load_config_internal(&app)?.config;
     let detect_model = config.methods.face.detection.model;
 
     let mut cmd = Command::new(helper_path());

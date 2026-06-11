@@ -1,13 +1,13 @@
 use std::fs;
 use tauri::AppHandle;
 
-use crate::config::{load_config, BiopassConfig};
+use crate::config::{load_config_internal, BiopassConfig};
 use crate::paths::get_faces_dir;
 
 #[tauri::command]
 pub fn capture_face(app: AppHandle, camera: Option<String>) -> Result<String, String> {
     let faces_dir = get_faces_dir(&app)?;
-    let app_config: BiopassConfig = load_config(app.clone())?;
+    let app_config: BiopassConfig = load_config_internal(&app)?.config;
 
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
