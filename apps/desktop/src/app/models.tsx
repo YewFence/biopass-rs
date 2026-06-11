@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { Cpu } from "lucide-react";
+import { Cpu, Terminal } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { cmd } from "@/commands";
@@ -92,6 +92,8 @@ function ModelsRouteComponent() {
     Record<string, "checking" | "available" | "missing" | "inuse">
   >({});
 
+  const hasMissing = Object.values(statusMap).some((s) => s === "missing");
+
   const checkModelsStatus = useCallback(async (modelList: ModelConfig[]) => {
     const newStatuses: Record<
       string,
@@ -179,6 +181,28 @@ function ModelsRouteComponent() {
           </p>
         </div>
       </div>
+
+      {hasMissing && (
+        <div className="flex gap-3 p-4 rounded-lg border border-amber-500/30 bg-amber-500/5">
+          <Terminal className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+              Some models are missing
+            </p>
+            <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-1">
+              Run the following command in a terminal to download missing
+              models:
+            </p>
+            <code className="block mt-2 px-3 py-2 text-xs font-mono bg-background/50 rounded border border-amber-500/20 select-all">
+              sudo /usr/bin/biopass-helper install
+            </code>
+            <p className="text-[11px] text-amber-800/60 dark:text-amber-300/60 mt-2">
+              The installer will download models with a progress bar, migrate
+              legacy configurations, and refresh the dynamic linker cache.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="flex flex-col gap-4">
         {models.length === 0 ? (

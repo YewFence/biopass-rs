@@ -69,7 +69,10 @@ impl FaceAuth {
 
         log(
             LogLevel::Debug,
-            &format!("loading detection model from {}", self.config.detection.model),
+            &format!(
+                "loading detection model from {}",
+                self.config.detection.model
+            ),
         );
         let mut detector = FaceDetector::load_with_threshold(
             &self.config.detection.model,
@@ -91,10 +94,7 @@ impl FaceAuth {
 
         log(LogLevel::Debug, "running anti-spoofing check");
         if !self.check_anti_spoofing(username, auth_config, cancel_signal, &candidate)? {
-            log(
-                LogLevel::Info,
-                "anti-spoofing check rejected the candidate",
-            );
+            log(LogLevel::Info, "anti-spoofing check rejected the candidate");
             return Ok(AuthResult::Failure);
         }
 
@@ -165,10 +165,7 @@ impl FaceAuth {
         let ai_enabled = self.config.anti_spoofing.ai.enable;
         let ir_enabled = self.config.anti_spoofing.ir.enable;
         if !ai_enabled && !ir_enabled {
-            log(
-                LogLevel::Info,
-                "skipped (no ai or ir sub-check enabled)",
-            );
+            log(LogLevel::Info, "skipped (no ai or ir sub-check enabled)");
             return Ok(true);
         }
 
@@ -289,8 +286,7 @@ impl FaceAuth {
         auth_config: &AuthConfig,
     ) -> Result<bool, String> {
         let debug = auth_config.debug;
-        let log =
-            |level: LogLevel, msg: &str| emit_log(level, debug, "face:anti-spoofing:ir", msg);
+        let log = |level: LogLevel, msg: &str| emit_log(level, debug, "face:anti-spoofing:ir", msg);
 
         let Some(camera) = self
             .config
@@ -300,12 +296,18 @@ impl FaceAuth {
             .as_deref()
             .filter(|camera| !camera.is_empty())
         else {
-            log(LogLevel::Warn, "no IR camera configured, treating as missing");
+            log(
+                LogLevel::Warn,
+                "no IR camera configured, treating as missing",
+            );
             return Ok(false);
         };
 
         if !Path::new(&self.config.detection.model).is_file() {
-            log(LogLevel::Warn, "detection model missing, cannot run IR check");
+            log(
+                LogLevel::Warn,
+                "detection model missing, cannot run IR check",
+            );
             return Ok(false);
         }
 
@@ -322,7 +324,10 @@ impl FaceAuth {
             ));
         }
 
-        log(LogLevel::Debug, &format!("capturing IR frame from {camera}"));
+        log(
+            LogLevel::Debug,
+            &format!("capturing IR frame from {camera}"),
+        );
         let frame = capture_rgb_frame(&ir_camera_request(camera, debug))?;
         log(
             LogLevel::Debug,
@@ -357,7 +362,11 @@ fn ir_camera_request(camera: &str, debug: bool) -> CameraRequest {
     }
 }
 
-fn face_camera_request(camera: Option<&str>, auto_optimize_camera: bool, debug: bool) -> CameraRequest {
+fn face_camera_request(
+    camera: Option<&str>,
+    auto_optimize_camera: bool,
+    debug: bool,
+) -> CameraRequest {
     CameraRequest {
         device_path: camera
             .filter(|camera| !camera.is_empty())

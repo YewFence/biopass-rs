@@ -1,7 +1,7 @@
 use biopass_auth::{
-    capture_rgb_frame, config_exists, decode_jpeg_rgb, encode_jpeg, migrate_config_schema,
-    read_config, user_exists, AuthManager, CameraRequest, FaceAuth, FaceDetector, FingerprintAuth,
-    PamCode, RgbFrame,
+    capture_rgb_frame, config_exists, decode_jpeg_rgb, download_models, encode_jpeg,
+    migrate_all_users, migrate_config_schema, read_config, run_ldconfig, user_exists, AuthManager,
+    CameraRequest, FaceAuth, FaceDetector, FingerprintAuth, PamCode, RgbFrame,
 };
 use std::env;
 use std::io::{BufRead, Write};
@@ -41,6 +41,7 @@ fn run(args: Vec<String>) -> Result<u8, String> {
             let options = UsernameOptions::parse(&args[1..])?;
             Ok(migrate(&options.username))
         }
+        "install" => Ok(install()),
         "capture-face" => {
             let options = CaptureFaceOptions::parse(&args[1..])?;
             Ok(capture_face(&options))
@@ -129,6 +130,30 @@ fn migrate(username: &str) -> u8 {
         Ok(_) => EXIT_SUCCESS,
         Err(error) => {
             eprintln!("Failed to migrate config schema: {error}");
+            EXIT_AUTH_ERR
+        }
+    }
+}
+
+fn install() -> u8 {
+    eprintln!("Running ldconfig...");
+    if let Err(error) = run_ldconfig() {
+        eprintln!("Warning: {error}");
+    }
+
+    eprintln!("Migrating configurations...");
+    if let Err(error) = migrate_all_users() {
+        eprintln!("Warning: {error}");
+    }
+
+    eprintln!("Downloading models...");
+    match download_models() {
+        Ok(_) => {
+            eprintln!("Installation complete.");
+            EXIT_SUCCESS
+        }
+        Err(error) => {
+            eprintln!("Failed to download models: {error}");
             EXIT_AUTH_ERR
         }
     }
@@ -538,7 +563,7 @@ fn parse_quality(value: Option<&String>) -> Result<u8, String> {
 }
 
 fn help() -> String {
-    "Usage: biopass-helper auth --service <service> [--username <name>] | migrate --username <name> | crop-face --input <path> --output <path> --model <path> | capture-face --output <path> --model <path> [--camera <path>] | preview-session --model <path> [--camera <path>]"
+    "Usage: biopass-helper auth --service <service> [--username <name>] | migrate --username <name> | install | crop-face --input <path> --output <path> --model <path> | capture-face --output <path> --model <path> [--camera <path>] | preview-session --model <path> [--camera <path>]"
         .to_string()
 }
 

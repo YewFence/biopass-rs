@@ -39,7 +39,6 @@
         "depends": ["fprintd", "curl", "libwebkit2gtk-4.1-0"],
         "postInstallScript": "scripts/deb/postinst",
         "files": {
-          "/usr/share/biopass-rs/download_models.sh": "scripts/download_models.sh",
           "/lib/security/libbiopass_pam.so": "../../../target/release/libbiopass_pam.so",
           "/usr/bin/biopass-helper": "../../../target/release/biopass-helper",
           "/etc/ld.so.conf.d/biopass.conf": "scripts/ldconf",
@@ -51,7 +50,6 @@
         "postInstallScript": "scripts/rpm/postinst",
         "postRemoveScript": "scripts/rpm/postrm",
         "files": {
-          "/usr/share/biopass-rs/download_models.sh": "scripts/download_models.sh",
           "/lib64/security/libbiopass_pam.so": "../../../target/release/libbiopass_pam.so",
           "/usr/bin/biopass-helper": "../../../target/release/biopass-helper",
           "/etc/ld.so.conf.d/biopass.conf": "scripts/ldconf",

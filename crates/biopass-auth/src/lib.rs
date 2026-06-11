@@ -7,6 +7,7 @@ pub mod face_recognition;
 pub mod fingerprint_auth;
 pub mod image_io;
 pub mod inference;
+pub mod installer;
 pub mod manager;
 
 #[derive(Clone, Copy)]
@@ -52,6 +53,7 @@ pub use face_recognition::{FaceMatch, FaceRecognizer};
 pub use fingerprint_auth::FingerprintAuth;
 pub use image_io::{decode_jpeg_rgb, encode_jpeg};
 pub use inference::{OrtModel, OrtTensorInfo};
+pub use installer::{check_models_present, download_models, migrate_all_users, run_ldconfig};
 pub use manager::{
     AuthConfig, AuthManager, AuthMethod, AuthOutcome, AuthResult, ExecutionMode, PamCode,
 };

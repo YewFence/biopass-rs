@@ -19,6 +19,8 @@ serde_yaml.workspace = true
 tract-onnx.workspace = true
 v4l.workspace = true
 zbus.workspace = true
+ureq = "3"
+indicatif = "0.18"
 
 [dev-dependencies]
 tempfile.workspace = true
