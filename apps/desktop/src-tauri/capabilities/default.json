@@ -12,10 +12,10 @@
       "identifier": "fs:allow-read",
       "allow": [
         {
-          "path": "$HOME/.local/share/com.ticklab.biopass/**"
+          "path": "$HOME/.local/share/biopass-rs/**"
         },
         {
-          "path": "$DATA/com.ticklab.biopass/**"
+          "path": "$DATA/biopass-rs/**"
         }
       ]
     },
@@ -23,10 +23,10 @@
       "identifier": "fs:allow-exists",
       "allow": [
         {
-          "path": "$HOME/.local/share/com.ticklab.biopass/**"
+          "path": "$HOME/.local/share/biopass-rs/**"
         },
         {
-          "path": "$DATA/com.ticklab.biopass/**"
+          "path": "$DATA/biopass-rs/**"
         }
       ]
     }
