@@ -1,7 +1,7 @@
 use crate::{
-    camera_available, capture_rgb_frame, decode_jpeg_rgb, encode_jpeg, list_faces, user_data_dir,
-    AuthConfig, AuthMethod, AuthResult, CameraRequest, FaceAntiSpoofing, FaceDetector,
-    FaceMethodConfig, FaceRecognizer, FrameFormat, RgbFrame,
+    camera_available, capture_rgb_frame, decode_jpeg_rgb, emit_log, encode_jpeg, list_faces,
+    user_data_dir, AuthConfig, AuthMethod, AuthResult, CameraRequest, FaceAntiSpoofing,
+    FaceDetector, FaceMethodConfig, FaceRecognizer, FrameFormat, LogLevel, RgbFrame,
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,103 +25,122 @@ impl FaceAuth {
         auth_config: &AuthConfig,
         cancel_signal: Option<&AtomicBool>,
     ) -> Result<AuthResult, String> {
-        let log = |msg: &str| {
-            if auth_config.debug {
-                eprintln!("FaceAuth: {msg}");
-            }
-        };
+        let debug = auth_config.debug;
+        let log = |level: LogLevel, msg: &str| emit_log(level, debug, "face", msg);
 
-        log(&format!("Starting authentication for user {username}"));
+        log(
+            LogLevel::Info,
+            &format!("Starting authentication for user {username}"),
+        );
 
         let enrolled = list_faces(username);
         if enrolled.is_empty() {
-            log("no enrolled faces found");
+            log(LogLevel::Info, "no enrolled faces found");
             return Ok(AuthResult::Unavailable);
         }
 
-        log(&format!("found {} enrolled face(s)", enrolled.len()));
+        log(
+            LogLevel::Debug,
+            &format!("found {} enrolled face(s)", enrolled.len()),
+        );
 
         if !Path::new(&self.config.detection.model).is_file()
             || !Path::new(&self.config.recognition.model).is_file()
         {
-            log("model files not found");
+            log(LogLevel::Warn, "model files not found");
             return Ok(AuthResult::Unavailable);
         }
 
         if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
-            log("authentication cancelled");
+            log(LogLevel::Info, "authentication cancelled");
             return Ok(AuthResult::Failure);
         }
 
-        log("capturing frame from camera");
+        log(LogLevel::Debug, "capturing frame from camera");
         let frame = capture_rgb_frame(&face_camera_request(
             self.config.camera.as_deref(),
             self.config.auto_optimize_camera,
+            debug,
         ))?;
-        log(&format!("frame captured: {}x{}", frame.width, frame.height));
+        log(
+            LogLevel::Debug,
+            &format!("frame captured: {}x{}", frame.width, frame.height),
+        );
 
-        log(&format!(
-            "loading detection model from {}",
-            self.config.detection.model
-        ));
+        log(
+            LogLevel::Debug,
+            &format!("loading detection model from {}", self.config.detection.model),
+        );
         let mut detector = FaceDetector::load_with_threshold(
             &self.config.detection.model,
             self.config.detection.threshold,
         )?;
 
-        log("running face detection");
+        log(LogLevel::Debug, "running face detection");
         let Some(candidate) = detector.crop_largest_face(&frame)? else {
-            log("no face detected in frame");
+            log(LogLevel::Info, "no face detected in frame");
             return Ok(AuthResult::Retry);
         };
-        log(&format!(
-            "face candidate cropped: {}x{}",
-            candidate.width, candidate.height
-        ));
+        log(
+            LogLevel::Debug,
+            &format!(
+                "face candidate cropped: {}x{}",
+                candidate.width, candidate.height
+            ),
+        );
 
-        log("running anti-spoofing check");
+        log(LogLevel::Debug, "running anti-spoofing check");
         if !self.check_anti_spoofing(username, auth_config, cancel_signal, &candidate)? {
-            log("anti-spoofing check rejected the candidate");
+            log(
+                LogLevel::Info,
+                "anti-spoofing check rejected the candidate",
+            );
             return Ok(AuthResult::Failure);
         }
 
-        log("loading recognition model");
+        log(LogLevel::Debug, "loading recognition model");
         let mut recognizer = FaceRecognizer::load(
             &self.config.recognition.model,
             self.config.recognition.threshold,
         )?;
-        log(&format!(
-            "comparing against {} enrolled face(s)",
-            enrolled.len()
-        ));
+        log(
+            LogLevel::Debug,
+            &format!("comparing against {} enrolled face(s)", enrolled.len()),
+        );
         for enrolled_path in enrolled {
             if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
-                log("authentication cancelled during matching");
+                log(LogLevel::Info, "authentication cancelled during matching");
                 return Ok(AuthResult::Failure);
             }
 
             let Ok(enrolled_face) = read_enrolled_face(&enrolled_path) else {
-                log(&format!(
-                    "skipping unreadable enrolled face {}",
-                    enrolled_path.display()
-                ));
+                log(
+                    LogLevel::Warn,
+                    &format!(
+                        "skipping unreadable enrolled face {}",
+                        enrolled_path.display()
+                    ),
+                );
                 continue;
             };
             let face_match = recognizer.match_faces(&enrolled_face, &candidate)?;
-            log(&format!(
-                "match against {}: similarity={:.4} threshold={:.4} similar={}",
-                enrolled_path.display(),
-                face_match.similarity,
-                self.config.recognition.threshold,
-                face_match.similar
-            ));
+            log(
+                LogLevel::Debug,
+                &format!(
+                    "match against {}: similarity={:.4} threshold={:.4} similar={}",
+                    enrolled_path.display(),
+                    face_match.similarity,
+                    self.config.recognition.threshold,
+                    face_match.similar
+                ),
+            );
             if face_match.similar {
-                log("face matched, authentication successful");
+                log(LogLevel::Info, "face matched, authentication successful");
                 return Ok(AuthResult::Success);
             }
         }
 
-        log("no enrolled face matched, will retry");
+        log(LogLevel::Info, "no enrolled face matched, will retry");
         if auth_config.debug {
             save_debug_frame(username, &candidate, "not_similar");
         }
@@ -135,33 +154,37 @@ impl FaceAuth {
         cancel_signal: Option<&AtomicBool>,
         face: &RgbFrame,
     ) -> Result<bool, String> {
-        let log = |msg: &str| {
-            if auth_config.debug {
-                eprintln!("FaceAuth: anti-spoofing: {msg}");
-            }
-        };
+        let debug = auth_config.debug;
+        let log = |level: LogLevel, msg: &str| emit_log(level, debug, "face:anti-spoofing", msg);
 
         if !auth_config.antispoof {
-            log("skipped (antispoof disabled at runtime)");
+            log(LogLevel::Info, "skipped (antispoof disabled at runtime)");
             return Ok(true);
         }
 
         let ai_enabled = self.config.anti_spoofing.ai.enable;
         let ir_enabled = self.config.anti_spoofing.ir.enable;
         if !ai_enabled && !ir_enabled {
-            log("skipped (no ai or ir sub-check enabled)");
+            log(
+                LogLevel::Info,
+                "skipped (no ai or ir sub-check enabled)",
+            );
             return Ok(true);
         }
 
-        log(&format!(
-            "running checks (ai={ai_enabled}, ir={ir_enabled})"
-        ));
+        log(
+            LogLevel::Info,
+            &format!("running checks (ai={ai_enabled}, ir={ir_enabled})"),
+        );
 
         if ai_enabled {
             let ai_cfg = &self.config.anti_spoofing.ai;
             let model = &ai_cfg.model;
             if model.path.is_empty() || !Path::new(&model.path).is_file() {
-                log("ai model not configured or missing on disk, treating as spoof");
+                log(
+                    LogLevel::Warn,
+                    "ai model not configured or missing on disk, treating as spoof",
+                );
                 if auth_config.debug {
                     save_debug_frame(username, face, "ai_spoof_detected");
                 }
@@ -173,9 +196,15 @@ impl FaceAuth {
             let mut attempt = 0u32;
             let verdict = loop {
                 attempt += 1;
-                log(&format!("ai attempt {attempt}/{max_attempts}"));
+                log(
+                    LogLevel::Debug,
+                    &format!("ai attempt {attempt}/{max_attempts}"),
+                );
                 let verdict = anti_spoofing.detect(face)?;
-                log(&format!("ai model verdict: spoof={}", verdict.spoof));
+                log(
+                    LogLevel::Debug,
+                    &format!("ai model verdict: spoof={}", verdict.spoof),
+                );
                 if !verdict.spoof {
                     break verdict;
                 }
@@ -183,11 +212,14 @@ impl FaceAuth {
                     break verdict;
                 }
                 if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
-                    log("ai check cancelled during retry");
+                    log(LogLevel::Info, "ai check cancelled during retry");
                     return Ok(false);
                 }
                 if ai_cfg.retry_delay_ms > 0 {
-                    log(&format!("ai retry sleeping {}ms", ai_cfg.retry_delay_ms));
+                    log(
+                        LogLevel::Debug,
+                        &format!("ai retry sleeping {}ms", ai_cfg.retry_delay_ms),
+                    );
                     std::thread::sleep(Duration::from_millis(ai_cfg.retry_delay_ms as u64));
                 }
             };
@@ -200,7 +232,7 @@ impl FaceAuth {
         }
 
         if ir_enabled {
-            log("running IR face presence check");
+            log(LogLevel::Info, "running IR face presence check");
             if !self.run_ir_check_with_retries(username, auth_config, cancel_signal)? {
                 return Ok(false);
             }
@@ -217,12 +249,18 @@ impl FaceAuth {
     ) -> Result<bool, String> {
         let ir_cfg = &self.config.anti_spoofing.ir;
         let max_attempts = ir_cfg.retries.saturating_add(1);
+        let debug = auth_config.debug;
         for attempt in 1..=max_attempts {
             if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
                 return Ok(false);
             }
             if attempt > 1 {
-                eprintln!("FaceAuth: ir: attempt {attempt}/{max_attempts}");
+                emit_log(
+                    LogLevel::Debug,
+                    debug,
+                    "face:anti-spoofing:ir",
+                    &format!("attempt {attempt}/{max_attempts}"),
+                );
             }
             if self.check_ir_face_presence(username, auth_config)? {
                 return Ok(true);
@@ -232,7 +270,12 @@ impl FaceAuth {
                     return Ok(false);
                 }
                 if ir_cfg.retry_delay_ms > 0 {
-                    eprintln!("FaceAuth: ir: retry sleeping {}ms", ir_cfg.retry_delay_ms);
+                    emit_log(
+                        LogLevel::Debug,
+                        debug,
+                        "face:anti-spoofing:ir",
+                        &format!("retry sleeping {}ms", ir_cfg.retry_delay_ms),
+                    );
                     std::thread::sleep(Duration::from_millis(ir_cfg.retry_delay_ms as u64));
                 }
             }
@@ -245,11 +288,9 @@ impl FaceAuth {
         username: &str,
         auth_config: &AuthConfig,
     ) -> Result<bool, String> {
-        let log = |msg: &str| {
-            if auth_config.debug {
-                eprintln!("FaceAuth: ir: {msg}");
-            }
-        };
+        let debug = auth_config.debug;
+        let log =
+            |level: LogLevel, msg: &str| emit_log(level, debug, "face:anti-spoofing:ir", msg);
 
         let Some(camera) = self
             .config
@@ -259,38 +300,44 @@ impl FaceAuth {
             .as_deref()
             .filter(|camera| !camera.is_empty())
         else {
-            log("no IR camera configured, treating as missing");
+            log(LogLevel::Warn, "no IR camera configured, treating as missing");
             return Ok(false);
         };
 
         if !Path::new(&self.config.detection.model).is_file() {
-            log("detection model missing, cannot run IR check");
+            log(LogLevel::Warn, "detection model missing, cannot run IR check");
             return Ok(false);
         }
 
         if self.config.anti_spoofing.ir.warmup_delay_ms > 0 {
-            log(&format!(
-                "sleeping {}ms for IR warmup",
-                self.config.anti_spoofing.ir.warmup_delay_ms
-            ));
+            log(
+                LogLevel::Debug,
+                &format!(
+                    "sleeping {}ms for IR warmup",
+                    self.config.anti_spoofing.ir.warmup_delay_ms
+                ),
+            );
             std::thread::sleep(Duration::from_millis(
                 self.config.anti_spoofing.ir.warmup_delay_ms as u64,
             ));
         }
 
-        log(&format!("capturing IR frame from {camera}"));
-        let frame = capture_rgb_frame(&ir_camera_request(camera))?;
-        log(&format!(
-            "IR frame captured: {}x{}",
-            frame.width, frame.height
-        ));
+        log(LogLevel::Debug, &format!("capturing IR frame from {camera}"));
+        let frame = capture_rgb_frame(&ir_camera_request(camera, debug))?;
+        log(
+            LogLevel::Debug,
+            &format!("IR frame captured: {}x{}", frame.width, frame.height),
+        );
 
         let mut detector = FaceDetector::load_with_threshold(
             &self.config.detection.model,
             self.config.detection.threshold,
         )?;
         let detections = detector.detect(&frame)?;
-        log(&format!("IR detection found {} face(s)", detections.len()));
+        log(
+            LogLevel::Debug,
+            &format!("IR detection found {} face(s)", detections.len()),
+        );
         let has_face = !detections.is_empty();
         if !has_face && auth_config.debug {
             save_debug_frame(username, &frame, "ir_no_face");
@@ -299,22 +346,24 @@ impl FaceAuth {
     }
 }
 
-fn ir_camera_request(camera: &str) -> CameraRequest {
+fn ir_camera_request(camera: &str, debug: bool) -> CameraRequest {
     CameraRequest {
         device_path: Some(PathBuf::from(camera)),
         preferred_formats: vec![FrameFormat::Grey],
         warmup_frames: IR_CAPTURE_WARMUP_FRAMES,
         timeout: Duration::from_millis(IR_CAPTURE_TIMEOUT_MS),
+        debug,
         ..CameraRequest::default()
     }
 }
 
-fn face_camera_request(camera: Option<&str>, auto_optimize_camera: bool) -> CameraRequest {
+fn face_camera_request(camera: Option<&str>, auto_optimize_camera: bool, debug: bool) -> CameraRequest {
     CameraRequest {
         device_path: camera
             .filter(|camera| !camera.is_empty())
             .map(PathBuf::from),
         auto_optimize_camera,
+        debug,
         ..CameraRequest::default()
     }
 }
@@ -329,6 +378,7 @@ impl AuthMethod for FaceAuth {
             && camera_available(&face_camera_request(
                 self.config.camera.as_deref(),
                 self.config.auto_optimize_camera,
+                false,
             ))
     }
 
@@ -349,9 +399,12 @@ impl AuthMethod for FaceAuth {
         match self.authenticate_face(username, config, cancel_signal) {
             Ok(result) => result,
             Err(error) => {
-                if config.debug {
-                    eprintln!("FaceAuth: error during authentication: {error}");
-                }
+                emit_log(
+                    LogLevel::Error,
+                    config.debug,
+                    "face",
+                    &format!("error during authentication for {username}: {error}"),
+                );
                 AuthResult::Retry
             }
         }
@@ -430,7 +483,7 @@ mod tests {
 
     #[test]
     fn face_camera_request_uses_configured_camera() {
-        let request = face_camera_request(Some("/dev/video4"), true);
+        let request = face_camera_request(Some("/dev/video4"), true, false);
 
         assert_eq!(request.device_path, Some(PathBuf::from("/dev/video4")));
         assert!(request.preferred_formats.contains(&FrameFormat::Yuyv));
@@ -440,7 +493,7 @@ mod tests {
 
     #[test]
     fn face_camera_request_disables_auto_optimize() {
-        let request = face_camera_request(None, false);
+        let request = face_camera_request(None, false, false);
 
         assert!(request.auto_optimize_camera == false);
     }
@@ -461,7 +514,7 @@ mod tests {
 
     #[test]
     fn ir_camera_request_requires_grey_frames() {
-        let request = ir_camera_request("/dev/video2");
+        let request = ir_camera_request("/dev/video2", false);
 
         assert_eq!(request.device_path, Some(PathBuf::from("/dev/video2")));
         assert_eq!(request.preferred_formats, vec![FrameFormat::Grey]);

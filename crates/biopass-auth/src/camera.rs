@@ -1,3 +1,4 @@
+use crate::{emit_log, LogLevel};
 use jpeg_decoder::{Decoder, PixelFormat as JpegPixelFormat};
 use std::fs;
 use std::io::Cursor;
@@ -75,6 +76,7 @@ pub struct CameraRequest {
     pub timeout: Duration,
     pub max_dark_frames: u32,
     pub auto_optimize_camera: bool,
+    pub debug: bool,
 }
 
 impl Default for CameraRequest {
@@ -96,6 +98,7 @@ impl Default for CameraRequest {
             timeout: Duration::from_millis(DEFAULT_TIMEOUT_MS),
             max_dark_frames: DEFAULT_MAX_DARK_FRAMES,
             auto_optimize_camera: true,
+            debug: false,
         }
     }
 }
@@ -165,7 +168,7 @@ pub fn capture_rgb_frame(request: &CameraRequest) -> Result<RgbFrame, String> {
 
     // 在开始流式传输前启用所有自动优化
     if request.auto_optimize_camera {
-        apply_camera_optimizations(&mut device)?;
+        apply_camera_optimizations(&mut device, request.debug)?;
     }
 
     let mut stream = MmapStream::with_buffers(&mut device, Type::VideoCapture, 4)
@@ -190,6 +193,7 @@ pub fn capture_rgb_frame(request: &CameraRequest) -> Result<RgbFrame, String> {
             &actual,
             &deadline,
             request.max_dark_frames,
+            request.debug,
         );
     }
 
@@ -211,6 +215,7 @@ fn capture_grey_ir_frame(
     actual: &Format,
     deadline: &Instant,
     max_dark_frames: u32,
+    debug: bool,
 ) -> Result<RgbFrame, String> {
     let width = actual.width;
     let height = actual.height;
@@ -226,18 +231,28 @@ fn capture_grey_ir_frame(
     }
     skipped_dark_frames += 1;
     last_dark = Some((stats, decode_grey(width, height, stride, warmup)?));
-    eprintln!(
-        "FaceAuth: skipping dark IR frame from V4L2 GREY mean={:.2}, min={}, max={}, skipped={}",
-        stats.mean, stats.min, stats.max, skipped_dark_frames
+    emit_log(
+        LogLevel::Debug,
+        debug,
+        "camera:ir",
+        &format!(
+            "skipping dark IR frame from V4L2 GREY mean={:.2}, min={}, max={}, skipped={}",
+            stats.mean, stats.min, stats.max, skipped_dark_frames
+        ),
     );
 
     loop {
         if skipped_dark_frames >= max_dark_frames {
             if let Some((stats, frame)) = last_dark.take() {
-                eprintln!(
-                    "FaceAuth: Reached max dark frames limit ({}) for V4L2 GREY, \
-                     returning last dark frame mean={:.2}, min={}, max={}",
-                    max_dark_frames, stats.mean, stats.min, stats.max
+                emit_log(
+                    LogLevel::Warn,
+                    debug,
+                    "camera:ir",
+                    &format!(
+                        "reached max dark frames limit ({}) for V4L2 GREY, \
+                         returning last dark frame mean={:.2}, min={}, max={}",
+                        max_dark_frames, stats.mean, stats.min, stats.max
+                    ),
                 );
                 return Ok(frame);
             }
@@ -245,10 +260,15 @@ fn capture_grey_ir_frame(
 
         if Instant::now() >= *deadline {
             if let Some((stats, frame)) = last_dark.take() {
-                eprintln!(
-                    "FaceAuth: Timed out waiting for non-dark V4L2 GREY frame after skipping \
-                     {} dark frame(s), returning last dark frame mean={:.2}, min={}, max={}",
-                    skipped_dark_frames, stats.mean, stats.min, stats.max
+                emit_log(
+                    LogLevel::Warn,
+                    debug,
+                    "camera:ir",
+                    &format!(
+                        "timed out waiting for non-dark V4L2 GREY frame after skipping \
+                         {} dark frame(s), returning last dark frame mean={:.2}, min={}, max={}",
+                        skipped_dark_frames, stats.mean, stats.min, stats.max
+                    ),
                 );
                 return Ok(frame);
             }
@@ -262,16 +282,26 @@ fn capture_grey_ir_frame(
         if dark {
             skipped_dark_frames += 1;
             last_dark = Some((stats, decode_grey(width, height, stride, &buffer)?));
-            eprintln!(
-                "FaceAuth: skipping dark IR frame from V4L2 GREY mean={:.2}, min={}, max={}, skipped={}",
-                stats.mean, stats.min, stats.max, skipped_dark_frames
+            emit_log(
+                LogLevel::Debug,
+                debug,
+                "camera:ir",
+                &format!(
+                    "skipping dark IR frame from V4L2 GREY mean={:.2}, min={}, max={}, skipped={}",
+                    stats.mean, stats.min, stats.max, skipped_dark_frames
+                ),
             );
             continue;
         }
 
-        eprintln!(
-            "FaceAuth: returning V4L2 GREY IR frame mean={:.2}, min={}, max={}, skipped_dark={}",
-            stats.mean, stats.min, stats.max, skipped_dark_frames
+        emit_log(
+            LogLevel::Debug,
+            debug,
+            "camera:ir",
+            &format!(
+                "returning V4L2 GREY IR frame mean={:.2}, min={}, max={}, skipped_dark={}",
+                stats.mean, stats.min, stats.max, skipped_dark_frames
+            ),
         );
         return decode_grey(width, height, stride, &buffer);
     }
@@ -356,7 +386,7 @@ fn open_device(request: &CameraRequest) -> Result<Device, String> {
 /// control (typical for IR cameras which lack white-balance / exposure
 /// controls) the EINVAL from the kernel is treated as a no-op so we don't
 /// spam warnings for a perfectly normal configuration.
-fn apply_camera_optimizations(device: &mut Device) -> Result<(), String> {
+fn apply_camera_optimizations(device: &mut Device, debug: bool) -> Result<(), String> {
     // V4L2 control constants
     const WHITE_BALANCE_AUTOMATIC: u32 = 0x0098_090c;
     const POWER_LINE_FREQUENCY: u32 = 0x0098_0918;
@@ -376,7 +406,12 @@ fn apply_camera_optimizations(device: &mut Device) -> Result<(), String> {
                 // Device doesn't expose this control — expected for IR / cheap webcams.
             }
             Err(error) => {
-                eprintln!("Warning: Failed to {label}: {error}");
+                emit_log(
+                    LogLevel::Warn,
+                    debug,
+                    "camera:controls",
+                    &format!("failed to set {label}: {error}"),
+                );
             }
         }
     };

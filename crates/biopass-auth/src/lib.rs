@@ -9,6 +9,32 @@ pub mod image_io;
 pub mod inference;
 pub mod manager;
 
+#[derive(Clone, Copy)]
+pub enum LogLevel {
+    Info,
+    Debug,
+    Warn,
+    Error,
+}
+
+impl LogLevel {
+    pub fn as_prefix(self) -> &'static str {
+        match self {
+            LogLevel::Info => "[info]",
+            LogLevel::Debug => "[debug]",
+            LogLevel::Warn => "[warn]",
+            LogLevel::Error => "[error]",
+        }
+    }
+}
+
+pub fn emit_log(level: LogLevel, debug_enabled: bool, scope: &str, message: &str) {
+    if !debug_enabled {
+        return;
+    }
+    eprintln!("{} [{}] {}", level.as_prefix(), scope, message);
+}
+
 pub use camera::{
     camera_available, capture_rgb_frame, list_video_devices, CameraRequest, FrameFormat, RgbFrame,
     VideoDevice,
