@@ -350,53 +350,81 @@ fn open_device(request: &CameraRequest) -> Result<Device, String> {
 /// - 防闪烁 (50Hz)
 /// - 宽动态范围 (背光补偿)
 /// - 曝光优先 (动态帧率)
+/// Apply camera control parameters to improve image quality.
+///
+/// Controls are best-effort: when the device does not expose a particular
+/// control (typical for IR cameras which lack white-balance / exposure
+/// controls) the EINVAL from the kernel is treated as a no-op so we don't
+/// spam warnings for a perfectly normal configuration.
 fn apply_camera_optimizations(device: &mut Device) -> Result<(), String> {
-    // V4L2 控制常量
+    // V4L2 control constants
     const WHITE_BALANCE_AUTOMATIC: u32 = 0x0098_090c;
     const POWER_LINE_FREQUENCY: u32 = 0x0098_0918;
     const BACKLIGHT_COMPENSATION: u32 = 0x0098_091c;
     const AUTO_EXPOSURE: u32 = 0x009a_0901;
     const EXPOSURE_DYNAMIC_FRAMERATE: u32 = 0x009a_0903;
+    // ENOTTY is returned when the device is not a V4L2 device at all
+    // (some virtual devices /dev/videoN entries). Treat it the same way
+    // as EINVAL: silently skip the control.
+    const ENOTTY: i32 = 25;
+    const EINVAL: i32 = 22;
 
-    // 自动白平衡
-    if let Err(error) = device.set_control(Control {
-        id: WHITE_BALANCE_AUTOMATIC,
-        value: ControlValue::Boolean(true),
-    }) {
-        eprintln!("Warning: Failed to enable auto white balance: {error}");
-    }
+    let try_control = |control: Control, label: &str| {
+        match device.set_control(control) {
+            Ok(()) => {}
+            Err(error) if matches!(error.raw_os_error(), Some(EINVAL) | Some(ENOTTY)) => {
+                // Device doesn't expose this control — expected for IR / cheap webcams.
+            }
+            Err(error) => {
+                eprintln!("Warning: Failed to {label}: {error}");
+            }
+        }
+    };
 
-    // 防闪烁 - 设置为 50Hz (中国/欧洲)
-    if let Err(error) = device.set_control(Control {
-        id: POWER_LINE_FREQUENCY,
-        value: ControlValue::Integer(1),
-    }) {
-        eprintln!("Warning: Failed to set anti-flicker (50Hz): {error}");
-    }
+    // Auto white balance
+    try_control(
+        Control {
+            id: WHITE_BALANCE_AUTOMATIC,
+            value: ControlValue::Boolean(true),
+        },
+        "enable auto white balance",
+    );
 
-    // 背光补偿 (等价于宽动态范围优化)
-    if let Err(error) = device.set_control(Control {
-        id: BACKLIGHT_COMPENSATION,
-        value: ControlValue::Integer(2),
-    }) {
-        eprintln!("Warning: Failed to set backlight compensation: {error}");
-    }
+    // Anti-flicker - 50Hz (China/Europe)
+    try_control(
+        Control {
+            id: POWER_LINE_FREQUENCY,
+            value: ControlValue::Integer(1),
+        },
+        "set anti-flicker (50Hz)",
+    );
 
-    // 自动曝光 - 光圈优先模式
-    if let Err(error) = device.set_control(Control {
-        id: AUTO_EXPOSURE,
-        value: ControlValue::Integer(3),
-    }) {
-        eprintln!("Warning: Failed to set auto exposure (aperture priority): {error}");
-    }
+    // Backlight compensation (≈ wide dynamic range)
+    try_control(
+        Control {
+            id: BACKLIGHT_COMPENSATION,
+            value: ControlValue::Integer(2),
+        },
+        "set backlight compensation",
+    );
 
-    // 启用动态帧率 (曝光优先)
-    if let Err(error) = device.set_control(Control {
-        id: EXPOSURE_DYNAMIC_FRAMERATE,
-        value: ControlValue::Boolean(true),
-    }) {
-        eprintln!("Warning: Failed to enable exposure dynamic framerate: {error}");
-    }
+    // Auto exposure - aperture priority mode
+    try_control(
+        Control {
+            id: AUTO_EXPOSURE,
+            value: ControlValue::Integer(3),
+        },
+        "set auto exposure (aperture priority)",
+    );
+
+    // Enable dynamic framerate (exposure priority)
+    try_control(
+        Control {
+            id: EXPOSURE_DYNAMIC_FRAMERATE,
+            value: ControlValue::Boolean(true),
+        },
+        "enable exposure dynamic framerate",
+    );
 
     Ok(())
 }

@@ -102,10 +102,14 @@ fn authenticate(_username: Option<&str>, service: Option<&str>) -> u8 {
         }
     }
 
-    match manager.authenticate(&username).code {
+    let outcome = manager.authenticate(&username);
+    match outcome.code {
         PamCode::Success => EXIT_SUCCESS,
         PamCode::Ignore => EXIT_IGNORE,
-        PamCode::AuthError => EXIT_AUTH_ERR,
+        PamCode::AuthError => {
+            eprintln!("Authentication failed");
+            EXIT_AUTH_ERR
+        }
     }
 }
 

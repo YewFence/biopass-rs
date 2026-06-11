@@ -5,8 +5,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-const CONFIG_FILE: &str = ".config/com.ticklab.biopass/config.yaml";
-const DATA_DIR: &str = ".local/share/com.ticklab.biopass";
+const CONFIG_FILE: &str = ".config/biopass-rs/config.yaml";
+const DATA_DIR: &str = ".local/share/biopass-rs";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct BiopassConfig {
