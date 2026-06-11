@@ -20,6 +20,8 @@ repository = "https://github.com/TickLabVN/biopass"
 [workspace.dependencies]
 anyhow = "1"
 base64 = "0.22"
+clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
 gtk = "0.18.2"
 jpeg-decoder = "0.3"
 jpeg-encoder = "0.6"

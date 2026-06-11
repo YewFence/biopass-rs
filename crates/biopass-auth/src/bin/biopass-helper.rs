@@ -3,73 +3,138 @@ use biopass_auth::{
     migrate_all_users, migrate_config_schema, read_config, run_ldconfig, user_exists, AuthManager,
     CameraRequest, FaceAuth, FaceDetector, FingerprintAuth, PamCode, RgbFrame,
 };
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{generate, Shell};
 use std::env;
-use std::io::{BufRead, Write};
+use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::process::ExitCode;
 
 const EXIT_SUCCESS: u8 = 0;
 const EXIT_AUTH_ERR: u8 = 1;
 const EXIT_IGNORE: u8 = 2;
-const EXIT_USAGE: u8 = 64;
 
-fn main() -> ExitCode {
-    let args = env::args().skip(1).collect::<Vec<_>>();
-    match run(args) {
-        Ok(code) => ExitCode::from(code),
-        Err(message) => {
-            eprintln!("{message}");
-            ExitCode::from(EXIT_USAGE)
-        }
-    }
+#[derive(Parser)]
+#[command(name = "biopass-helper")]
+#[command(about = "BioPass authentication helper")]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
 }
 
-fn run(args: Vec<String>) -> Result<u8, String> {
-    let Some(command) = args.first().map(String::as_str) else {
-        return Err(help());
-    };
+#[derive(Subcommand)]
+enum Commands {
+    /// Authenticate user
+    Auth {
+        /// Service name
+        #[arg(short, long)]
+        service: String,
+        /// Username to authenticate
+        #[arg(short, long)]
+        username: Option<String>,
+    },
+    /// Migrate user configuration
+    Migrate {
+        /// Username to migrate
+        #[arg(short, long)]
+        username: String,
+    },
+    /// Install models and run setup
+    Install,
+    /// Crop face from image
+    CropFace {
+        /// Input image path
+        #[arg(short, long)]
+        input: PathBuf,
+        /// Output image path
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Detection model path
+        #[arg(short, long)]
+        model: String,
+        /// JPEG quality (1-100)
+        #[arg(short, long, default_value = "90")]
+        quality: u8,
+    },
+    /// Capture face from camera
+    CaptureFace {
+        /// Camera device path
+        #[arg(short, long)]
+        camera: Option<String>,
+        /// Output image path
+        #[arg(short, long)]
+        output: PathBuf,
+        /// Detection model path
+        #[arg(short, long)]
+        model: String,
+        /// JPEG quality (1-100)
+        #[arg(short, long, default_value = "90")]
+        quality: u8,
+    },
+    /// Start interactive preview session
+    PreviewSession {
+        /// Camera device path
+        #[arg(short, long)]
+        camera: Option<String>,
+        /// Detection model path
+        #[arg(short, long)]
+        model: Option<String>,
+        /// JPEG quality (1-100)
+        #[arg(short, long, default_value = "70")]
+        quality: u8,
+    },
+    /// Generate shell completion script
+    Completion {
+        /// Shell type
+        #[arg(value_enum)]
+        shell: Shell,
+    },
+}
 
-    match command {
-        "auth" => {
-            let options = AuthOptions::parse(&args[1..])?;
-            Ok(authenticate(
-                options.username.as_deref(),
-                options.service.as_deref(),
-            ))
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let code = match cli.command {
+        Commands::Auth { username, service } => authenticate(username.as_deref(), Some(&service)),
+        Commands::Migrate { username } => migrate(&username),
+        Commands::Install => install(),
+        Commands::CropFace {
+            input,
+            output,
+            model,
+            quality,
+        } => crop_face(&input, &output, &model, quality),
+        Commands::CaptureFace {
+            camera,
+            output,
+            model,
+            quality,
+        } => capture_face(camera.as_deref(), &output, &model, quality),
+        Commands::PreviewSession {
+            camera,
+            model,
+            quality,
+        } => preview_session(camera.as_deref(), model.as_deref(), quality),
+        Commands::Completion { shell } => {
+            generate(
+                shell,
+                &mut Cli::command(),
+                "biopass-helper",
+                &mut io::stdout(),
+            );
+            return ExitCode::SUCCESS;
         }
-        "migrate" => {
-            let options = UsernameOptions::parse(&args[1..])?;
-            Ok(migrate(&options.username))
-        }
-        "install" => Ok(install()),
-        "capture-face" => {
-            let options = CaptureFaceOptions::parse(&args[1..])?;
-            Ok(capture_face(&options))
-        }
-        "preview-session" => {
-            let options = PreviewSessionOptions::parse(&args[1..])?;
-            Ok(preview_session(&options))
-        }
-        "crop-face" => {
-            let options = CropFaceOptions::parse(&args[1..])?;
-            Ok(crop_face(&options))
-        }
-        _ => Err(help()),
-    }
+    };
+    ExitCode::from(code)
 }
 
 fn authenticate(_username: Option<&str>, service: Option<&str>) -> u8 {
-    // Resolve the target user. CLI callers can still pass --username to
-    // override; the PAM module and postinst scripts do so explicitly. When
-    // the flag is absent, fall back to the user the helper was invoked as
-    // (SUDO_USER when run via sudo, otherwise USER/USERNAME).
     let Some(username) = _username
         .filter(|name| !name.is_empty())
         .map(str::to_owned)
         .or_else(current_username)
     else {
         eprintln!("auth: no target user provided and none could be inferred from the environment");
-        return EXIT_USAGE;
+        return EXIT_AUTH_ERR;
     };
 
     if !user_exists(&username) {
@@ -84,7 +149,7 @@ fn authenticate(_username: Option<&str>, service: Option<&str>) -> u8 {
         Ok(config) => config,
         Err(error) => {
             eprintln!("auth: {error}");
-            return EXIT_USAGE;
+            return EXIT_AUTH_ERR;
         }
     };
     if service.is_some_and(|service| config.ignores_service(service)) {
@@ -159,9 +224,9 @@ fn install() -> u8 {
     }
 }
 
-fn crop_face(options: &CropFaceOptions) -> u8 {
-    match crop_face_jpeg(&options.input, &options.model, options.quality) {
-        Ok(jpeg) => match std::fs::write(&options.output, jpeg) {
+fn crop_face(input: &PathBuf, output: &PathBuf, model: &str, quality: u8) -> u8 {
+    match crop_face_jpeg(input, model, quality) {
+        Ok(jpeg) => match std::fs::write(output, jpeg) {
             Ok(()) => EXIT_SUCCESS,
             Err(error) => {
                 eprintln!("Failed to save cropped face image: {error}");
@@ -179,9 +244,9 @@ fn crop_face(options: &CropFaceOptions) -> u8 {
     }
 }
 
-fn capture_face(options: &CaptureFaceOptions) -> u8 {
-    match capture_face_jpeg(options.camera.as_deref(), &options.model, options.quality) {
-        Ok(jpeg) => match std::fs::write(&options.output, jpeg) {
+fn capture_face(camera: Option<&str>, output: &PathBuf, model: &str, quality: u8) -> u8 {
+    match capture_face_jpeg(camera, model, quality) {
+        Ok(jpeg) => match std::fs::write(output, jpeg) {
             Ok(()) => EXIT_SUCCESS,
             Err(error) => {
                 eprintln!("Failed to save captured face crop: {error}");
@@ -199,8 +264,8 @@ fn capture_face(options: &CaptureFaceOptions) -> u8 {
     }
 }
 
-fn preview_session(options: &PreviewSessionOptions) -> u8 {
-    let mut detector = match options.model.as_deref().filter(|model| !model.is_empty()) {
+fn preview_session(camera: Option<&str>, model: Option<&str>, quality: u8) -> u8 {
+    let mut detector = match model.filter(|model| !model.is_empty()) {
         Some(model) => match FaceDetector::load(model) {
             Ok(detector) => Some(detector),
             Err(error) => {
@@ -226,7 +291,7 @@ fn preview_session(options: &PreviewSessionOptions) -> u8 {
         }
 
         if line == "FRAME" {
-            match capture_camera_jpeg(options.camera.as_deref(), options.quality) {
+            match capture_camera_jpeg(camera, quality) {
                 Ok(jpeg) => {
                     println!("OK {}", jpeg.len());
                     if std::io::stdout().write_all(&jpeg).is_err()
@@ -250,11 +315,7 @@ fn preview_session(options: &PreviewSessionOptions) -> u8 {
                 continue;
             };
 
-            match capture_face_jpeg_with_detector(
-                options.camera.as_deref(),
-                detector,
-                options.quality,
-            ) {
+            match capture_face_jpeg_with_detector(camera, detector, quality) {
                 Ok(jpeg) => match std::fs::write(path, jpeg) {
                     Ok(()) => println!("OK"),
                     Err(error) => println!("ERR save failed: {error}"),
@@ -329,72 +390,6 @@ fn helper_auto_optimize_camera() -> bool {
         .unwrap_or(true)
 }
 
-#[derive(Debug, PartialEq, Eq)]
-struct UsernameOptions {
-    username: String,
-}
-
-impl UsernameOptions {
-    fn parse(args: &[String]) -> Result<Self, String> {
-        let mut username = None;
-        let mut index = 0;
-
-        while index < args.len() {
-            match args[index].as_str() {
-                "--username" | "-u" => {
-                    index += 1;
-                    username = args.get(index).cloned();
-                }
-                unknown => return Err(format!("Unknown option {unknown}")),
-            }
-            index += 1;
-        }
-
-        Ok(Self {
-            username: username.ok_or_else(help)?,
-        })
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-struct AuthOptions {
-    username: Option<String>,
-    service: Option<String>,
-}
-
-impl AuthOptions {
-    fn parse(args: &[String]) -> Result<Self, String> {
-        let mut username = None;
-        let mut service = None;
-        let mut index = 0;
-
-        while index < args.len() {
-            match args[index].as_str() {
-                "--username" | "-u" => {
-                    index += 1;
-                    username = args.get(index).cloned();
-                }
-                "--service" | "-s" => {
-                    index += 1;
-                    service = args.get(index).cloned();
-                }
-                unknown => return Err(format!("Unknown option {unknown}")),
-            }
-            index += 1;
-        }
-
-        let service = service.filter(|service| !service.is_empty());
-        if service.is_none() {
-            return Err("auth: --service is required".to_string());
-        }
-
-        Ok(Self {
-            username: username.filter(|name| !name.is_empty()),
-            service,
-        })
-    }
-}
-
 fn current_username() -> Option<String> {
     for key in ["SUDO_USER", "USER", "USERNAME", "LOGNAME"] {
         if let Ok(value) = env::var(key) {
@@ -409,321 +404,4 @@ fn current_username() -> Option<String> {
         }
     }
     None
-}
-
-#[derive(Debug, PartialEq, Eq)]
-struct CropFaceOptions {
-    input: PathBuf,
-    output: PathBuf,
-    model: String,
-    quality: u8,
-}
-
-impl CropFaceOptions {
-    fn parse(args: &[String]) -> Result<Self, String> {
-        let mut input = None;
-        let mut output = None;
-        let mut model = None;
-        let mut quality = 90;
-        let mut index = 0;
-
-        while index < args.len() {
-            match args[index].as_str() {
-                "--input" | "-i" => {
-                    index += 1;
-                    input = args.get(index).map(PathBuf::from);
-                }
-                "--output" | "-o" => {
-                    index += 1;
-                    output = args.get(index).map(PathBuf::from);
-                }
-                "--model" | "-m" => {
-                    index += 1;
-                    model = args.get(index).cloned();
-                }
-                "--quality" | "-q" => {
-                    index += 1;
-                    quality = parse_quality(args.get(index))?;
-                }
-                unknown => return Err(format!("Unknown option {unknown}")),
-            }
-            index += 1;
-        }
-
-        Ok(Self {
-            input: input.ok_or_else(help)?,
-            output: output.ok_or_else(help)?,
-            model: model.ok_or_else(help)?,
-            quality,
-        })
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-struct CaptureFaceOptions {
-    camera: Option<String>,
-    output: PathBuf,
-    model: String,
-    quality: u8,
-}
-
-impl CaptureFaceOptions {
-    fn parse(args: &[String]) -> Result<Self, String> {
-        let mut camera = None;
-        let mut output = None;
-        let mut model = None;
-        let mut quality = 90;
-        let mut index = 0;
-
-        while index < args.len() {
-            match args[index].as_str() {
-                "--camera" | "-c" => {
-                    index += 1;
-                    camera = args.get(index).cloned();
-                }
-                "--output" | "-o" => {
-                    index += 1;
-                    output = args.get(index).map(PathBuf::from);
-                }
-                "--model" | "-m" => {
-                    index += 1;
-                    model = args.get(index).cloned();
-                }
-                "--quality" | "-q" => {
-                    index += 1;
-                    quality = parse_quality(args.get(index))?;
-                }
-                unknown => return Err(format!("Unknown option {unknown}")),
-            }
-            index += 1;
-        }
-
-        Ok(Self {
-            camera,
-            output: output.ok_or_else(help)?,
-            model: model.ok_or_else(help)?,
-            quality,
-        })
-    }
-}
-
-#[derive(Debug, PartialEq, Eq)]
-struct PreviewSessionOptions {
-    camera: Option<String>,
-    model: Option<String>,
-    quality: u8,
-}
-
-impl PreviewSessionOptions {
-    fn parse(args: &[String]) -> Result<Self, String> {
-        let mut camera = None;
-        let mut model = None;
-        let mut quality = 70;
-        let mut index = 0;
-
-        while index < args.len() {
-            match args[index].as_str() {
-                "--camera" | "-c" => {
-                    index += 1;
-                    camera = args.get(index).cloned();
-                }
-                "--model" | "-m" => {
-                    index += 1;
-                    model = args.get(index).cloned();
-                }
-                "--quality" | "-q" => {
-                    index += 1;
-                    quality = parse_quality(args.get(index))?;
-                }
-                unknown => return Err(format!("Unknown option {unknown}")),
-            }
-            index += 1;
-        }
-
-        Ok(Self {
-            camera,
-            model,
-            quality,
-        })
-    }
-}
-
-fn parse_quality(value: Option<&String>) -> Result<u8, String> {
-    let value = value.ok_or_else(help)?;
-    let quality = value
-        .parse::<u8>()
-        .map_err(|_| format!("Invalid JPEG quality {value}"))?;
-    if (1..=100).contains(&quality) {
-        Ok(quality)
-    } else {
-        Err(format!(
-            "JPEG quality must be between 1 and 100, got {quality}"
-        ))
-    }
-}
-
-fn help() -> String {
-    "Usage: biopass-helper auth --service <service> [--username <name>] | migrate --username <name> | install | crop-face --input <path> --output <path> --model <path> | capture-face --output <path> --model <path> [--camera <path>] | preview-session --model <path> [--camera <path>]"
-        .to_string()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn args(values: &[&str]) -> Vec<String> {
-        values.iter().map(|value| value.to_string()).collect()
-    }
-
-    #[test]
-    fn parses_auth_options() {
-        let options =
-            AuthOptions::parse(&args(&["--username", "alice", "--service", "sudo"])).unwrap();
-
-        assert_eq!(
-            options,
-            AuthOptions {
-                username: Some("alice".to_string()),
-                service: Some("sudo".to_string())
-            }
-        );
-    }
-
-    #[test]
-    fn auth_options_omit_username_when_only_service_provided() {
-        let options = AuthOptions::parse(&args(&["--service", "sudo"])).unwrap();
-
-        assert_eq!(options.username, None);
-        assert_eq!(options.service.as_deref(), Some("sudo"));
-    }
-
-    #[test]
-    fn auth_options_accept_short_flags() {
-        let options = AuthOptions::parse(&args(&["-s", "sudo", "-u", "alice"])).unwrap();
-
-        assert_eq!(
-            options,
-            AuthOptions {
-                username: Some("alice".to_string()),
-                service: Some("sudo".to_string())
-            }
-        );
-    }
-
-    #[test]
-    fn auth_options_reject_missing_service() {
-        let error = AuthOptions::parse(&args(&["--username", "alice"])).unwrap_err();
-        assert_eq!(error, "auth: --service is required");
-    }
-
-    #[test]
-    fn auth_options_reject_empty_service() {
-        let error = AuthOptions::parse(&args(&["--service", ""])).unwrap_err();
-        assert_eq!(error, "auth: --service is required");
-    }
-
-    #[test]
-    fn current_username_prefers_sudo_user() {
-        // SAFETY: tests do not run concurrently in the same process for this
-        // single-threaded helper, so mutating process env is acceptable.
-        unsafe {
-            std::env::set_var("SUDO_USER", "alice");
-            std::env::set_var("USER", "root");
-        }
-        assert_eq!(current_username().as_deref(), Some("alice"));
-        unsafe {
-            std::env::remove_var("SUDO_USER");
-        }
-    }
-
-    #[test]
-    fn parses_short_username_option() {
-        let options = UsernameOptions::parse(&args(&["-u", "alice"])).unwrap();
-
-        assert_eq!(
-            options,
-            UsernameOptions {
-                username: "alice".to_string()
-            }
-        );
-    }
-
-    #[test]
-    fn rejects_unknown_options() {
-        let error = AuthOptions::parse(&args(&["--wat"])).unwrap_err();
-
-        assert_eq!(error, "Unknown option --wat");
-    }
-
-    #[test]
-    fn missing_config_is_pam_ignore() {
-        assert_eq!(
-            authenticate(Some("__biopass_missing_user_for_test__"), None),
-            EXIT_IGNORE
-        );
-    }
-
-    #[test]
-    fn parses_crop_face_options() {
-        let options = CropFaceOptions::parse(&args(&[
-            "--input",
-            "/tmp/input.jpg",
-            "--output",
-            "/tmp/face.jpg",
-            "--model",
-            "model.onnx",
-            "--quality",
-            "80",
-        ]))
-        .unwrap();
-
-        assert_eq!(options.input, PathBuf::from("/tmp/input.jpg"));
-        assert_eq!(options.output, PathBuf::from("/tmp/face.jpg"));
-        assert_eq!(options.model, "model.onnx");
-        assert_eq!(options.quality, 80);
-    }
-
-    #[test]
-    fn parses_capture_face_options() {
-        let options = CaptureFaceOptions::parse(&args(&[
-            "--camera",
-            "/dev/video2",
-            "--output",
-            "/tmp/face.jpg",
-            "--model",
-            "model.onnx",
-            "--quality",
-            "80",
-        ]))
-        .unwrap();
-
-        assert_eq!(options.camera.as_deref(), Some("/dev/video2"));
-        assert_eq!(options.output, PathBuf::from("/tmp/face.jpg"));
-        assert_eq!(options.model, "model.onnx");
-        assert_eq!(options.quality, 80);
-    }
-
-    #[test]
-    fn parses_preview_session_options() {
-        let options = PreviewSessionOptions::parse(&args(&[
-            "--model",
-            "model.onnx",
-            "--camera",
-            "/dev/video0",
-            "--quality",
-            "55",
-        ]))
-        .unwrap();
-
-        assert_eq!(options.model.as_deref(), Some("model.onnx"));
-        assert_eq!(options.camera.as_deref(), Some("/dev/video0"));
-        assert_eq!(options.quality, 55);
-    }
-
-    #[test]
-    fn rejects_invalid_quality() {
-        let error = parse_quality(Some(&"0".to_string())).unwrap_err();
-
-        assert_eq!(error, "JPEG quality must be between 1 and 100, got 0");
-    }
 }

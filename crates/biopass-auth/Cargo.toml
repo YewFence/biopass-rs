@@ -11,6 +11,8 @@ path = "src/lib.rs"
 
 [dependencies]
 anyhow.workspace = true
+clap.workspace = true
+clap_complete.workspace = true
 jpeg-decoder.workspace = true
 jpeg-encoder.workspace = true
 ort.workspace = true
