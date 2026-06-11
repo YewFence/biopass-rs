@@ -4,6 +4,7 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 use v4l::buffer::Type;
+use v4l::control::{Control, Value as ControlValue};
 use v4l::io::mmap::Stream as MmapStream;
 use v4l::io::traits::CaptureStream;
 use v4l::prelude::*;
@@ -134,6 +135,10 @@ pub fn capture_rgb_frame(request: &CameraRequest) -> Result<RgbFrame, String> {
 
     let actual_format = FrameFormat::from_fourcc(actual.fourcc)
         .ok_or_else(|| unsupported_format_message(actual.fourcc))?;
+
+    // 在开始流式传输前启用所有自动优化
+    apply_camera_optimizations(&mut device)?;
+
     let mut stream = MmapStream::with_buffers(&mut device, Type::VideoCapture, 4)
         .map_err(|error| format!("Failed to create V4L2 mmap stream: {error}"))?;
 
@@ -171,6 +176,65 @@ fn open_device(request: &CameraRequest) -> Result<Device, String> {
     }
 
     Device::new(0).map_err(|error| format!("Failed to open default V4L2 device: {error}"))
+}
+
+/// 应用相机控制参数以优化图像质量
+///
+/// 此函数会尽力启用以下功能:
+/// - 自动白平衡 (AWB)
+/// - 自动曝光 (光圈优先)
+/// - 防闪烁 (50Hz)
+/// - 宽动态范围 (背光补偿)
+/// - 曝光优先 (动态帧率)
+fn apply_camera_optimizations(device: &mut Device) -> Result<(), String> {
+    // V4L2 控制常量
+    const WHITE_BALANCE_AUTOMATIC: u32 = 0x0098_090c;
+    const POWER_LINE_FREQUENCY: u32 = 0x0098_0918;
+    const BACKLIGHT_COMPENSATION: u32 = 0x0098_091c;
+    const AUTO_EXPOSURE: u32 = 0x009a_0901;
+    const EXPOSURE_DYNAMIC_FRAMERATE: u32 = 0x009a_0903;
+
+    // 自动白平衡
+    if let Err(error) = device.set_control(Control {
+        id: WHITE_BALANCE_AUTOMATIC,
+        value: ControlValue::Boolean(true),
+    }) {
+        eprintln!("Warning: Failed to enable auto white balance: {error}");
+    }
+
+    // 防闪烁 - 设置为 50Hz (中国/欧洲)
+    if let Err(error) = device.set_control(Control {
+        id: POWER_LINE_FREQUENCY,
+        value: ControlValue::Integer(1),
+    }) {
+        eprintln!("Warning: Failed to set anti-flicker (50Hz): {error}");
+    }
+
+    // 背光补偿 (等价于宽动态范围优化)
+    if let Err(error) = device.set_control(Control {
+        id: BACKLIGHT_COMPENSATION,
+        value: ControlValue::Integer(2),
+    }) {
+        eprintln!("Warning: Failed to set backlight compensation: {error}");
+    }
+
+    // 自动曝光 - 光圈优先模式
+    if let Err(error) = device.set_control(Control {
+        id: AUTO_EXPOSURE,
+        value: ControlValue::Integer(3),
+    }) {
+        eprintln!("Warning: Failed to set auto exposure (aperture priority): {error}");
+    }
+
+    // 启用动态帧率 (曝光优先)
+    if let Err(error) = device.set_control(Control {
+        id: EXPOSURE_DYNAMIC_FRAMERATE,
+        value: ControlValue::Boolean(true),
+    }) {
+        eprintln!("Warning: Failed to enable exposure dynamic framerate: {error}");
+    }
+
+    Ok(())
 }
 
 fn video_device_paths() -> Vec<PathBuf> {
