@@ -156,7 +156,7 @@ mod tests {
     }
 
     #[test]
-    fn spoof_result_matches_cpp_threshold_logic() {
+    fn spoof_result_uses_real_class_threshold() {
         assert_eq!(
             spoof_result_from_logits(&[0.8, 0.2], 0.8),
             SpoofResult {

@@ -210,7 +210,7 @@ mod tests {
     }
 
     #[test]
-    fn image_to_normalized_chw_matches_cpp_formula() {
+    fn image_to_normalized_chw_applies_channel_normalization() {
         let frame = RgbFrame::new(2, 1, vec![255, 0, 128, 0, 255, 64]).unwrap();
 
         let chw = image_to_normalized_chw(&frame, NORMALIZATION_MEAN, NORMALIZATION_STD);

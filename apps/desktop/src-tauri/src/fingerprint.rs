@@ -1,5 +1,5 @@
 use crate::config::{load_config_internal, save_config, FingerConfig};
-use crate::fingerprint_ffi::FingerprintAuth;
+use crate::fingerprint_auth::FingerprintAuth;
 use serde::Serialize;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::AppHandle;

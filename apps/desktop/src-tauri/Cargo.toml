@@ -22,16 +22,13 @@ tauri-build = { workspace = true, features = [] }
 [dependencies]
 base64.workspace = true
 biopass-rs-auth = { path = "../../../crates/biopass-rs-auth" }
-gtk.workspace = true
 serde.workspace = true
-serde_json.workspace = true
 serde_yaml.workspace = true
 tauri = { workspace = true, features = ["protocol-asset", "devtools"] }
 tauri-plugin-fs.workspace = true
 tauri-plugin-opener.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 webkit2gtk.workspace = true
-zbus.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

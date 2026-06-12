@@ -25,7 +25,7 @@ impl EnrollStatusCallback for TauriEnrollCallback<'_> {
     }
 }
 
-/// Rust fprintd client kept behind the old module name so Tauri commands stay compatible.
+/// Rust fprintd client wrapper used by Tauri commands.
 pub struct FingerprintAuth;
 
 impl FingerprintAuth {

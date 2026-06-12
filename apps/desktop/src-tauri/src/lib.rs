@@ -3,7 +3,7 @@ pub mod config;
 pub mod face;
 pub mod face_session;
 pub mod fingerprint;
-pub mod fingerprint_ffi;
+pub mod fingerprint_auth;
 pub mod paths;
 pub mod system;
 

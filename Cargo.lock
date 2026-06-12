@@ -316,9 +316,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
  "biopass-rs-auth",
- "gtk",
  "serde",
- "serde_json",
  "serde_yaml",
  "tauri",
  "tauri-build",
@@ -327,7 +325,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "webkit2gtk",
- "zbus",
 ]
 
 [[package]]
