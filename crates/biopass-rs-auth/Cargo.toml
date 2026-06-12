@@ -9,6 +9,10 @@ repository.workspace = true
 name = "biopass_rs_auth"
 path = "src/lib.rs"
 
+[[bin]]
+name = "biopass-rs-helper"
+path = "src/bin/biopass-rs-helper.rs"
+
 [dependencies]
 anyhow.workspace = true
 clap.workspace = true
