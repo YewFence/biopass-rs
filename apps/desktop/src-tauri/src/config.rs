@@ -10,6 +10,8 @@ use tauri::AppHandle;
 
 use crate::paths::{get_config_dir, get_config_path, get_data_dir};
 
+const UPSTREAM_CONFIG_PATH: &str = ".config/com.ticklab.biopass/config.yaml";
+
 fn get_default_config(app: &AppHandle) -> BiopassConfig {
     let models_dir = get_data_dir(app)
         .map(|d| d.join("models"))
@@ -70,6 +72,38 @@ pub fn load_config_internal(app: &AppHandle) -> Result<LoadConfigResult, String>
     let config_path = get_config_path(app)?;
 
     if !config_path.exists() {
+        let config_dir = get_config_dir(app)?;
+        if let Some(upstream_config_path) = std::env::var_os("HOME")
+            .map(PathBuf::from)
+            .map(|home| home.join(UPSTREAM_CONFIG_PATH))
+        {
+            if upstream_config_path.exists() {
+                if let Err(e) = fs::create_dir_all(&config_dir) {
+                    eprintln!("Warning: failed to create config directory: {e}");
+                } else if let Err(e) = fs::copy(&upstream_config_path, &config_path) {
+                    eprintln!("Warning: failed to copy upstream config: {e}");
+                } else {
+                    match migrate_config_at_path(&config_path)
+                        .map_err(|e| format!("Failed to migrate config: {}", e))
+                        .and_then(|_| read_config_from_path(&config_path))
+                    {
+                        Ok(config) => {
+                            return Ok(LoadConfigResult {
+                                config,
+                                migrated: true,
+                            });
+                        }
+                        Err(e) => {
+                            eprintln!("Warning: failed to load copied upstream config: {e}");
+                            if let Err(e) = fs::remove_file(&config_path) {
+                                eprintln!("Warning: failed to remove invalid copied config: {e}");
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         let config = get_default_config(app);
         if let Err(e) = save_config(app.clone(), config.clone()) {
             eprintln!("Warning: failed to write default config: {e}");
@@ -80,12 +114,12 @@ pub fn load_config_internal(app: &AppHandle) -> Result<LoadConfigResult, String>
         });
     }
 
-    let migrated = migrate_config_at_path(&config_path)
-        .map_err(|e| format!("Failed to migrate config: {}", e))?;
-
     let config = read_config_from_path(&config_path)?;
 
-    Ok(LoadConfigResult { config, migrated })
+    Ok(LoadConfigResult {
+        config,
+        migrated: false,
+    })
 }
 
 #[tauri::command]

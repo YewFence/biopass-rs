@@ -186,22 +186,36 @@ pub fn migrate_all_users() -> Result<(), String> {
         let old_config = home_path.join(OLD_CONFIG_PATH);
         let new_config = home_path.join(NEW_CONFIG_PATH);
 
-        // Migrate old config to new location
-        if old_config.exists() && !new_config.exists() {
+        let mut copied_legacy_config = false;
+
+        // Copy old config to new location only when the new config does not exist.
+        if new_config.exists() {
             eprintln!(
-                "Migrating config from old location for user '{}'...",
-                username
+                "Skipping config migration for user '{}': config already exists at {}",
+                username,
+                new_config.display()
+            );
+        } else if old_config.exists() {
+            eprintln!(
+                "Copying upstream config for user '{}' from {} to {}",
+                username,
+                old_config.display(),
+                new_config.display()
             );
             if let Some(parent) = new_config.parent() {
                 let _ = fs::create_dir_all(parent);
             }
-            if let Err(e) = fs::rename(&old_config, &new_config) {
-                eprintln!(
-                    "Warning: Failed to migrate config for '{}': {}",
-                    username, e
-                );
-                // Try copy instead
-                let _ = fs::copy(&old_config, &new_config);
+            match fs::copy(&old_config, &new_config) {
+                Ok(_) => {
+                    copied_legacy_config = true;
+                    eprintln!("Copied upstream config for user '{}'", username);
+                }
+                Err(e) => {
+                    eprintln!(
+                        "Warning: Failed to migrate config for '{}': {}",
+                        username, e
+                    );
+                }
             }
         }
 
@@ -218,10 +232,17 @@ pub fn migrate_all_users() -> Result<(), String> {
             }
         }
 
-        // Migrate config schema (handles anti_spoofing structure changes)
-        if new_config.exists() {
+        // Only migrate the schema for configs this install copied from upstream.
+        if copied_legacy_config {
             eprintln!("Migrating config schema for user '{}'...", username);
-            let _ = crate::migrate_config_schema(username);
+            match crate::migrate_config_schema(username) {
+                Ok(true) => eprintln!("Migrated config schema for user '{}'", username),
+                Ok(false) => eprintln!("Config schema already current for user '{}'", username),
+                Err(error) => eprintln!(
+                    "Warning: Failed to migrate config schema for '{}': {}",
+                    username, error
+                ),
+            }
         }
     }
 

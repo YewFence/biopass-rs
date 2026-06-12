@@ -587,6 +587,11 @@ fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
     let mut model = AntiSpoofingModelConfig::default();
     let mut ir_camera_path = None;
     let mut warmup_delay = default_ir_warmup_delay();
+    let mut ai_retries = 0;
+    let mut ai_retry_delay_ms = default_antispoofing_retry_delay();
+    let mut ir_enable = false;
+    let mut ir_retries = 0;
+    let mut ir_retry_delay_ms = default_antispoofing_retry_delay();
 
     if let Some(anti) = anti {
         if let Some(value) = anti
@@ -609,12 +614,80 @@ fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
             .and_then(Value::as_str)
         {
             ir_camera_path = Some(value.to_string());
+            ir_enable = !value.is_empty();
         }
         if let Some(value) = anti
             .get(Value::String("ir_warmup_delay_ms".to_string()))
             .and_then(Value::as_i64)
         {
             warmup_delay = value as i32;
+        }
+        if let Some(ai) = anti
+            .get(Value::String("ai".to_string()))
+            .and_then(Value::as_mapping)
+        {
+            if let Some(value) = ai
+                .get(Value::String("enable".to_string()))
+                .and_then(Value::as_bool)
+            {
+                enable = value;
+            }
+            if let Some(value) = ai.get(Value::String("model".to_string())) {
+                read_antispoofing_model(value, &mut model);
+            }
+            if let Some(value) = ai
+                .get(Value::String("threshold".to_string()))
+                .and_then(Value::as_f64)
+            {
+                model.threshold = value as f32;
+            }
+            if let Some(value) = ai
+                .get(Value::String("retries".to_string()))
+                .and_then(Value::as_u64)
+            {
+                ai_retries = value as u32;
+            }
+            if let Some(value) = ai
+                .get(Value::String("retry_delay_ms".to_string()))
+                .and_then(Value::as_u64)
+            {
+                ai_retry_delay_ms = value as u32;
+            }
+        }
+        if let Some(ir) = anti
+            .get(Value::String("ir".to_string()))
+            .and_then(Value::as_mapping)
+        {
+            if let Some(value) = ir
+                .get(Value::String("enable".to_string()))
+                .and_then(Value::as_bool)
+            {
+                ir_enable = value;
+            }
+            if let Some(value) = ir
+                .get(Value::String("camera".to_string()))
+                .and_then(Value::as_str)
+            {
+                ir_camera_path = Some(value.to_string());
+            }
+            if let Some(value) = ir
+                .get(Value::String("warmup_delay_ms".to_string()))
+                .and_then(Value::as_i64)
+            {
+                warmup_delay = value as i32;
+            }
+            if let Some(value) = ir
+                .get(Value::String("retries".to_string()))
+                .and_then(Value::as_u64)
+            {
+                ir_retries = value as u32;
+            }
+            if let Some(value) = ir
+                .get(Value::String("retry_delay_ms".to_string()))
+                .and_then(Value::as_u64)
+            {
+                ir_retry_delay_ms = value as u32;
+            }
         }
     }
 
@@ -633,6 +706,7 @@ fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
                 .unwrap_or(0);
             if enabled {
                 ir_camera_path = Some(format!("/dev/video{}", device_id));
+                ir_enable = true;
             }
         }
     }
@@ -650,13 +724,20 @@ fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
             model.contains_key(Value::String("path".to_string()))
                 && model.contains_key(Value::String("threshold".to_string()))
         });
-    let has_new_ir_key =
+    let has_new_ai = anti.is_some_and(|anti| anti.contains_key(Value::String("ai".to_string())));
+    let has_new_ir = anti.is_some_and(|anti| anti.contains_key(Value::String("ir".to_string())));
+    let has_legacy_ir_key =
         anti.is_some_and(|anti| anti.contains_key(Value::String("ir_camera".to_string())));
+    let has_legacy_ir_warmup =
+        anti.is_some_and(|anti| anti.contains_key(Value::String("ir_warmup_delay_ms".to_string())));
     let needs_migration = has_legacy_face_ir
         || has_legacy_anti_threshold
         || has_legacy_anti_model_scalar
-        || !has_new_model_map
-        || !has_new_ir_key;
+        || has_new_model_map
+        || has_legacy_ir_key
+        || has_legacy_ir_warmup
+        || !has_new_ai
+        || !has_new_ir;
 
     let mut model_value = Mapping::new();
     model_value.insert(Value::String("path".to_string()), Value::String(model.path));
@@ -665,20 +746,43 @@ fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
         Value::from(model.threshold),
     );
 
-    let mut anti_value = Mapping::new();
-    anti_value.insert(Value::String("enable".to_string()), Value::Bool(enable));
-    anti_value.insert(
+    let mut ai_value = Mapping::new();
+    ai_value.insert(Value::String("enable".to_string()), Value::Bool(enable));
+    ai_value.insert(
+        Value::String("retries".to_string()),
+        Value::from(ai_retries),
+    );
+    ai_value.insert(
+        Value::String("retry_delay_ms".to_string()),
+        Value::from(ai_retry_delay_ms),
+    );
+    ai_value.insert(
         Value::String("model".to_string()),
         Value::Mapping(model_value),
     );
-    anti_value.insert(
-        Value::String("ir_camera".to_string()),
+
+    let mut ir_value = Mapping::new();
+    ir_value.insert(Value::String("enable".to_string()), Value::Bool(ir_enable));
+    ir_value.insert(
+        Value::String("retries".to_string()),
+        Value::from(ir_retries),
+    );
+    ir_value.insert(
+        Value::String("retry_delay_ms".to_string()),
+        Value::from(ir_retry_delay_ms),
+    );
+    ir_value.insert(
+        Value::String("camera".to_string()),
         ir_camera_path.map(Value::String).unwrap_or(Value::Null),
     );
-    anti_value.insert(
-        Value::String("ir_warmup_delay_ms".to_string()),
+    ir_value.insert(
+        Value::String("warmup_delay_ms".to_string()),
         Value::from(warmup_delay),
     );
+
+    let mut anti_value = Mapping::new();
+    anti_value.insert(Value::String("ai".to_string()), Value::Mapping(ai_value));
+    anti_value.insert(Value::String("ir".to_string()), Value::Mapping(ir_value));
 
     (Value::Mapping(anti_value), needs_migration)
 }
@@ -961,11 +1065,77 @@ methods:
 
         assert!(needs_migration);
         assert_eq!(
-            anti["model"]["path"],
+            anti["ai"]["model"]["path"],
             Value::String("legacy.onnx".to_string())
         );
-        assert_eq!(anti["model"]["threshold"], Value::from(0.67_f32));
-        assert_eq!(anti["ir_camera"], Value::String("/dev/video2".to_string()));
+        assert_eq!(anti["ai"]["model"]["threshold"], Value::from(0.67_f32));
+        assert_eq!(anti["ai"]["enable"], Value::Bool(true));
+        assert_eq!(anti["ir"]["enable"], Value::Bool(true));
+        assert_eq!(
+            anti["ir"]["camera"],
+            Value::String("/dev/video2".to_string())
+        );
+    }
+
+    #[test]
+    fn migrate_config_at_path_writes_current_antispoofing_schema() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.yaml");
+        fs::write(
+            &path,
+            r#"
+methods:
+  face:
+    anti_spoofing:
+      enable: true
+      model: legacy.onnx
+      threshold: 0.67
+      ir_camera: /dev/video2
+      ir_warmup_delay_ms: 250
+"#,
+        )
+        .unwrap();
+
+        assert!(migrate_config_at_path(&path).unwrap());
+        let config = read_config_from_path(&path).unwrap();
+
+        assert!(config.methods.face.anti_spoofing.ai.enable);
+        assert_eq!(
+            config.methods.face.anti_spoofing.ai.model.path,
+            "legacy.onnx"
+        );
+        assert_eq!(config.methods.face.anti_spoofing.ai.model.threshold, 0.67);
+        assert!(config.methods.face.anti_spoofing.ir.enable);
+        assert_eq!(
+            config.methods.face.anti_spoofing.ir.camera.as_deref(),
+            Some("/dev/video2")
+        );
+        assert_eq!(config.methods.face.anti_spoofing.ir.warmup_delay_ms, 250);
+    }
+
+    #[test]
+    fn migrate_config_at_path_leaves_current_schema_untouched() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.yaml");
+        let yaml = r#"
+methods:
+  face:
+    anti_spoofing:
+      ai:
+        enable: true
+        model:
+          path: current.onnx
+          threshold: 0.7
+      ir:
+        enable: true
+        camera: /dev/video4
+        warmup_delay_ms: 400
+"#;
+        fs::write(&path, yaml).unwrap();
+
+        assert!(!migrate_config_at_path(&path).unwrap());
+
+        assert_eq!(fs::read_to_string(&path).unwrap(), yaml);
     }
 
     #[test]

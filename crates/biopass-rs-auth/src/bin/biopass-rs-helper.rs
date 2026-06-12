@@ -1,5 +1,5 @@
 use biopass_rs_auth::{
-    capture_rgb_frame, config_exists, decode_jpeg_rgb, download_models, encode_jpeg,
+    capture_rgb_frame, config_exists, config_path, decode_jpeg_rgb, download_models, encode_jpeg,
     migrate_all_users, migrate_config_schema, read_config, run_ldconfig, user_exists, AuthManager,
     CameraRequest, FaceAuth, FaceDetector, FingerprintAuth, PamCode, RgbFrame,
 };
@@ -191,8 +191,30 @@ fn migrate(username: &str) -> u8 {
         return EXIT_AUTH_ERR;
     }
 
+    let path = config_path(username);
+    if !path.is_file() {
+        eprintln!(
+            "No config found for user '{username}' at {}",
+            path.display()
+        );
+        return EXIT_SUCCESS;
+    }
+
     match migrate_config_schema(username) {
-        Ok(_) => EXIT_SUCCESS,
+        Ok(true) => {
+            eprintln!(
+                "Migrated config schema for user '{username}' at {}",
+                path.display()
+            );
+            EXIT_SUCCESS
+        }
+        Ok(false) => {
+            eprintln!(
+                "Config schema already current for user '{username}' at {}",
+                path.display()
+            );
+            EXIT_SUCCESS
+        }
         Err(error) => {
             eprintln!("Failed to migrate config schema: {error}");
             EXIT_AUTH_ERR
