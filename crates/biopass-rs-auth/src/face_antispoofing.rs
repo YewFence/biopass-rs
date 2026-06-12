@@ -1,5 +1,4 @@
-use crate::{OrtModel, RgbFrame};
-use ort::value::TensorRef;
+use crate::{InferenceModel, RgbFrame};
 use std::path::Path;
 
 const DEFAULT_INPUT_SIZE: u32 = 128;
@@ -8,7 +7,7 @@ const NORMALIZATION_STD: [f32; 3] = [0.2471, 0.2214, 0.2157];
 
 #[derive(Debug)]
 pub struct FaceAntiSpoofing {
-    model: OrtModel,
+    model: InferenceModel,
     input_size: u32,
     threshold: f32,
 }
@@ -22,7 +21,7 @@ pub struct SpoofResult {
 impl FaceAntiSpoofing {
     pub fn load(model_path: impl AsRef<Path>, threshold: f32) -> Result<Self, String> {
         Ok(Self {
-            model: OrtModel::load(model_path)?,
+            model: InferenceModel::load(model_path)?,
             input_size: DEFAULT_INPUT_SIZE,
             threshold,
         })
@@ -35,32 +34,29 @@ impl FaceAntiSpoofing {
 
         let prepared = resize_rgb(frame, self.input_size, self.input_size)?;
         let input = image_to_normalized_chw(&prepared, NORMALIZATION_MEAN, NORMALIZATION_STD);
-        let tensor = TensorRef::from_array_view((
-            [
+        let outputs = self.model.run_f32(
+            &[
                 1usize,
                 3usize,
                 self.input_size as usize,
                 self.input_size as usize,
             ],
-            &input[..],
-        ))
-        .map_err(|error| format!("Failed to create anti-spoofing input tensor: {error}"))?;
-
-        let outputs = self
-            .model
-            .session()
-            .run(ort::inputs![tensor])
-            .map_err(|error| format!("Failed to run face anti-spoofing model: {error}"))?;
-        let (shape, logits) = outputs[0]
-            .try_extract_tensor::<f32>()
-            .map_err(|error| format!("Failed to read anti-spoofing output tensor: {error}"))?;
-        if logits.len() < 2 {
+            &input,
+        )?;
+        let output = outputs
+            .first()
+            .ok_or_else(|| "Face anti-spoofing model returned no outputs".to_string())?;
+        if output.values.len() < 2 {
             return Err(format!(
-                "Expected at least 2 anti-spoofing logits, got shape {shape:?}"
+                "Expected at least 2 anti-spoofing logits, got shape {:?}",
+                output.shape
             ));
         }
 
-        Ok(spoof_result_from_logits(&logits[0..2], self.threshold))
+        Ok(spoof_result_from_logits(
+            &output.values[0..2],
+            self.threshold,
+        ))
     }
 }
 

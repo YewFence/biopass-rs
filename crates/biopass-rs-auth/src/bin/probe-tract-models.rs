@@ -1,16 +1,24 @@
 use anyhow::bail;
+use biopass_rs_auth::InferenceModel;
 use std::path::{Path, PathBuf};
-use tract_onnx::prelude::*;
 
-fn main() -> TractResult<()> {
+fn main() -> anyhow::Result<()> {
     let mut failed = false;
 
     for model in model_paths_from_args(std::env::args().skip(1).collect())? {
-        match probe_model(&model) {
-            Ok(()) => println!("tract-compatible {}", model.display()),
+        match InferenceModel::load(&model) {
+            Ok(model) => {
+                println!("tract-compatible {}", model.path().display());
+                for input in model.inputs() {
+                    println!("  input {} {}", input.name, input.tensor_type);
+                }
+                for output in model.outputs() {
+                    println!("  output {} {}", output.name, output.tensor_type);
+                }
+            }
             Err(error) => {
                 failed = true;
-                eprintln!("tract-incompatible {}: {error:#}", model.display());
+                eprintln!("tract-incompatible {}: {error}", model.display());
             }
         }
     }
@@ -22,7 +30,7 @@ fn main() -> TractResult<()> {
     Ok(())
 }
 
-fn model_paths_from_args(args: Vec<String>) -> TractResult<Vec<PathBuf>> {
+fn model_paths_from_args(args: Vec<String>) -> anyhow::Result<Vec<PathBuf>> {
     if args.is_empty() {
         return Ok(default_model_paths());
     }
@@ -51,27 +59,6 @@ fn model_paths_in_dir(dir: &Path) -> Vec<PathBuf> {
     ]
 }
 
-fn probe_model(path: &Path) -> TractResult<()> {
-    reject_lfs_pointer(path)?;
-    tract_onnx::onnx()
-        .model_for_path(path)?
-        .into_optimized()?
-        .into_runnable()?;
-    Ok(())
-}
-
-fn reject_lfs_pointer(path: &Path) -> TractResult<()> {
-    let bytes = std::fs::read(path)?;
-    if bytes.starts_with(b"version https://git-lfs.github.com/spec/v1\n") {
-        bail!(
-            "{} is a Git LFS pointer, run git lfs pull before probing ONNX compatibility",
-            path.display()
-        );
-    }
-
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -88,20 +75,6 @@ mod tests {
         assert!(paths
             .iter()
             .any(|path| path.ends_with("mobilenetv3_antispoof.onnx")));
-    }
-
-    #[test]
-    fn reports_lfs_pointer_models_before_tract_parse() {
-        let temp = tempfile::NamedTempFile::new().unwrap();
-        std::fs::write(
-            temp.path(),
-            "version https://git-lfs.github.com/spec/v1\noid sha256:test\nsize 1\n",
-        )
-        .unwrap();
-
-        let error = reject_lfs_pointer(temp.path()).unwrap_err().to_string();
-
-        assert!(error.contains("Git LFS pointer"));
     }
 
     #[test]

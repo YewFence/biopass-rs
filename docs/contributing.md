@@ -69,7 +69,7 @@ Biopass is built using modern and reliable technologies across both the backend 
 - **Cargo**: Build system for the auth core, helper and PAM module.
 - **V4L2**: Camera capture for RGB and IR frame paths.
 - **fprintd over D-Bus**: Fingerprint device management and verification.
-- **ONNX Runtime via Rust bindings**: Running the machine learning models (YOLO for detection, EdgeFace for recognition, MobileNetV3 for anti-spoofing).
+- **tract-onnx**: Running the machine learning models (YOLO for detection, EdgeFace for recognition, MobileNetV3 for anti-spoofing).
 - **Linux PAM**: Pluggable Authentication Module integration for the OS.
 
 ### Desktop Application (`apps/desktop/`)

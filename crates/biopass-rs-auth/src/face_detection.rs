@@ -1,5 +1,4 @@
-use crate::{OrtModel, RgbFrame};
-use ort::value::TensorRef;
+use crate::{InferenceModel, RgbFrame};
 use std::path::Path;
 
 const DEFAULT_INPUT_SIZE: u32 = 640;
@@ -10,7 +9,7 @@ const LETTERBOX_PAD: u8 = 114;
 
 #[derive(Debug)]
 pub struct FaceDetector {
-    model: OrtModel,
+    model: InferenceModel,
     input_size: u32,
     confidence_threshold: f32,
     iou_threshold: f32,
@@ -56,7 +55,7 @@ impl FaceDetector {
         confidence_threshold: f32,
     ) -> Result<Self, String> {
         Ok(Self {
-            model: OrtModel::load(model_path)?,
+            model: InferenceModel::load(model_path)?,
             input_size: DEFAULT_INPUT_SIZE,
             confidence_threshold,
             iou_threshold: DEFAULT_IOU_THRESHOLD,
@@ -71,28 +70,21 @@ impl FaceDetector {
 
         let letterboxed = letterbox(frame, self.input_size, self.input_size)?;
         let input = image_to_chw(&letterboxed);
-        let tensor = TensorRef::from_array_view((
-            [
+        let outputs = self.model.run_f32(
+            &[
                 1usize,
                 3usize,
                 self.input_size as usize,
                 self.input_size as usize,
             ],
-            &input[..],
-        ))
-        .map_err(|error| format!("Failed to create detection input tensor: {error}"))?;
-
-        let outputs = self
-            .model
-            .session()
-            .run(ort::inputs![tensor])
-            .map_err(|error| format!("Failed to run face detection model: {error}"))?;
-        let (shape, output) = outputs[0]
-            .try_extract_tensor::<f32>()
-            .map_err(|error| format!("Failed to read face detection output tensor: {error}"))?;
+            &input,
+        )?;
+        let output = outputs
+            .first()
+            .ok_or_else(|| "Face detection model returned no outputs".to_string())?;
         let detections = detections_from_yolov8_output(
-            output,
-            &shape[..],
+            &output.values,
+            &output.shape,
             frame,
             self.input_size,
             self.confidence_threshold,
@@ -151,7 +143,7 @@ impl RawDetection {
 
 fn detections_from_yolov8_output(
     output: &[f32],
-    shape: &[i64],
+    shape: &[usize],
     frame: &RgbFrame,
     input_size: u32,
     confidence_threshold: f32,
@@ -450,7 +442,7 @@ mod tests {
 
         let detections = detections_from_yolov8_output(
             &output,
-            &[1, pred_dim as i64, num_preds as i64],
+            &[1, pred_dim, num_preds],
             &frame,
             640,
             0.5,
@@ -488,7 +480,7 @@ mod tests {
 
         let detections = detections_from_yolov8_output(
             &output,
-            &[1, pred_dim as i64, num_preds as i64],
+            &[1, pred_dim, num_preds],
             &frame,
             100,
             0.5,

@@ -1,5 +1,4 @@
-use crate::{OrtModel, RgbFrame};
-use ort::value::TensorRef;
+use crate::{InferenceModel, RgbFrame};
 use std::path::Path;
 
 const DEFAULT_INPUT_SIZE: u32 = 112;
@@ -8,7 +7,7 @@ const NORMALIZATION_STD: [f32; 3] = [0.5, 0.5, 0.5];
 
 #[derive(Debug)]
 pub struct FaceRecognizer {
-    model: OrtModel,
+    model: InferenceModel,
     input_size: u32,
     threshold: f32,
 }
@@ -22,7 +21,7 @@ pub struct FaceMatch {
 impl FaceRecognizer {
     pub fn load(model_path: impl AsRef<Path>, threshold: f32) -> Result<Self, String> {
         Ok(Self {
-            model: OrtModel::load(model_path)?,
+            model: InferenceModel::load(model_path)?,
             input_size: DEFAULT_INPUT_SIZE,
             threshold,
         })
@@ -35,32 +34,26 @@ impl FaceRecognizer {
 
         let prepared = resize_pad(frame, self.input_size, self.input_size)?;
         let input = image_to_normalized_chw(&prepared, NORMALIZATION_MEAN, NORMALIZATION_STD);
-        let tensor = TensorRef::from_array_view((
-            [
+        let outputs = self.model.run_f32(
+            &[
                 1usize,
                 3usize,
                 self.input_size as usize,
                 self.input_size as usize,
             ],
-            &input[..],
-        ))
-        .map_err(|error| format!("Failed to create recognition input tensor: {error}"))?;
-
-        let outputs = self
-            .model
-            .session()
-            .run(ort::inputs![tensor])
-            .map_err(|error| format!("Failed to run face recognition model: {error}"))?;
-        let (shape, output) = outputs[0]
-            .try_extract_tensor::<f32>()
-            .map_err(|error| format!("Failed to read face recognition output tensor: {error}"))?;
-        if shape.len() != 2 || shape[0] != 1 {
+            &input,
+        )?;
+        let output = outputs
+            .first()
+            .ok_or_else(|| "Face recognition model returned no outputs".to_string())?;
+        if output.shape.len() != 2 || output.shape[0] != 1 {
             return Err(format!(
-                "Expected face recognition output shape [1, embedding], got {shape:?}"
+                "Expected face recognition output shape [1, embedding], got {:?}",
+                output.shape
             ));
         }
 
-        Ok(output.to_vec())
+        Ok(output.values.clone())
     }
 
     pub fn match_faces(
