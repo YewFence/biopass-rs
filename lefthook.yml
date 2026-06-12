@@ -1,5 +1,0 @@
-pre-commit:
-  commands:
-    check:
-      glob: "*.{js,ts,jsx,tsx,json,rs}"
-      run: mise run check

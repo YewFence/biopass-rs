@@ -2,53 +2,170 @@ name: Release
 
 on:
   push:
-    tags:
-      - "*"
+    branches:
+      - main
   workflow_dispatch:
-    inputs:
-      release_name:
-        description: "Name of the release"
-        required: true
-        type: string
-  workflow_call:
-    inputs:
-      release_name:
-        description: "Name of the release"
-        required: true
-        type: string
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 env:
-  BUILD_TYPE: Release
+  MISE_TASK_RUN_AUTO_INSTALL: "false"
+  MISE_LOCKED: "1"
+  PACKAGE_NAME: biopass-rs
 
 jobs:
-  build:
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    outputs:
+      release_tag: ${{ steps.metadata.outputs.release_tag }}
+      should_upload_assets: ${{ steps.assets.outputs.should_upload_assets }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run release-plz
+        uses: release-plz/action@e8792575c7f2366cf6ff3ccc33ead9ace5b691c7 # v0.5.130
+        with:
+          command: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve release metadata
+        id: metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if ! version="$(cargo metadata --format-version=1 --no-deps | jq -er --arg name "${PACKAGE_NAME}" '[.packages[] | select(.name == $name) | .version][0]')"; then
+            echo "package ${PACKAGE_NAME} not found in cargo metadata" >&2
+            exit 1
+          fi
+
+          {
+            echo "release_tag=v${version}"
+          } >> "${GITHUB_OUTPUT}"
+
+      - name: Check release assets
+        id: assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.release_tag }}
+        run: |
+          set -euo pipefail
+
+          should_upload_assets="false"
+          release_exists="false"
+          existing_assets="$(mktemp)"
+
+          for _ in {1..6}; do
+            if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json assets --jq '[.assets[].name | select(test("\\.(deb|rpm)$"))] | length' > "${existing_assets}" 2>/dev/null; then
+              release_exists="true"
+              break
+            fi
+            sleep 2
+          done
+
+          if [[ "${release_exists}" == "true" ]]; then
+            asset_count="$(cat "${existing_assets}")"
+            if [[ "${asset_count}" -lt 4 ]]; then
+              should_upload_assets="true"
+            fi
+          else
+            echo "release ${RELEASE_TAG} does not exist yet, skipping asset upload"
+          fi
+
+          echo "should_upload_assets=${should_upload_assets}" >> "${GITHUB_OUTPUT}"
+
+  release-pr:
+    name: Open or update Release-plz PR
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Run release-plz
+        uses: release-plz/action@e8792575c7f2366cf6ff3ccc33ead9ace5b691c7 # v0.5.130
+        with:
+          command: release-pr
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-assets:
+    name: Build ${{ matrix.arch }}
+    needs: release
+    if: ${{ needs.release.outputs.should_upload_assets == 'true' }}
     runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
     strategy:
-      max-parallel: 2
+      fail-fast: false
       matrix:
         include:
           - runner: ubuntu-24.04
             arch: amd64
           - runner: ubuntu-24.04-arm
             arch: arm64
-
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout release tag
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ needs.release.outputs.release_tag }}
 
       - name: Install system dependencies
-        if: contains(matrix.runner, 'ubuntu')
         run: |
           sudo apt update
-          sudo apt install -y librsvg2-dev libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev libpam0g-dev libv4l-dev fprintd rpm nasm
+          sudo apt install -y \
+            build-essential \
+            curl \
+            file \
+            fprintd \
+            libayatana-appindicator3-dev \
+            libpam0g-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libv4l-dev \
+            libwebkit2gtk-4.1-dev \
+            libxdo-dev \
+            nasm \
+            pkg-config \
+            rpm \
+            wget
 
-      - name: Install Rust stable
-        uses: dtolnay/rust-toolchain@stable
+      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_args: node rust bun viteplus
+          add_shims_to_path: true
+          cache_key: "mise-v1-{{platform}}-{{install_args_hash}}-{{file_hash}}"
 
       - name: Cache Cargo registry
-        uses: actions/cache@v5
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: |
             ~/.cargo/registry
@@ -57,42 +174,55 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('Cargo.lock') }}
           restore-keys: ${{ runner.os }}-${{ matrix.arch }}-cargo-
 
-      - name: Install Bun
-        uses: oven-sh/setup-bun@v2
+      - name: Cache Bun dependencies
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: |
+            ~/.bun/install/cache
+            apps/desktop/node_modules
+          key: bun-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('apps/desktop/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-${{ matrix.arch }}-
+            bun-${{ runner.os }}-
 
-      - name: Extract Version
-        id: get_version
-        run: |
-          if [ -n "${{ inputs.release_name }}" ]; then
-            VERSION="${{ inputs.release_name }}"
-          else
-            VERSION="${{ github.ref_name }}"
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      - name: Install frontend dependencies
+        working-directory: apps/desktop
+        run: bun install --frozen-lockfile
 
-      - name: Update Cargo.toml version
-        run: |
-          echo "Updating Cargo.toml version to ${{ steps.get_version.outputs.version }}"
-          sed -i -e "0,/^version = \".*\"/s//version = \"${{ steps.get_version.outputs.version }}\"/" Cargo.toml
-          cat Cargo.toml
-
-      - name: Build & package
+      - name: Build packages
         run: |
           rm -rf target/release/bundle/
-          cargo build --release --package biopass-auth --package biopass-pam
-          cd apps/desktop
-          bun install --frozen-lockfile
-          bun run tauri build
-          cd ../..
+          CARGO_PROFILE=release mise run build
           ls -R target/release/bundle/
 
-      - name: Release
-        uses: softprops/action-gh-release@v2
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ steps.get_version.outputs.version }}
-          name: ${{ steps.get_version.outputs.version }}
-          prerelease: ${{ contains(steps.get_version.outputs.version, 'rc') || contains(steps.get_version.outputs.version, 'beta') }}
-          files: |
+          name: packages-${{ matrix.arch }}
+          path: |
             target/release/bundle/deb/*.deb
             target/release/bundle/rpm/*.rpm
+          if-no-files-found: error
+
+  upload-release-assets:
+    name: Upload GitHub Release assets
+    needs:
+      - release
+      - build-assets
+    if: ${{ needs.release.outputs.should_upload_assets == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Upload assets to release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
+        with:
+          tag_name: ${{ needs.release.outputs.release_tag }}
+          files: dist/*
+          overwrite_files: true

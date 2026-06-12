@@ -1,0 +1,22 @@
+[workspace]
+git_only = true
+git_release_enable = false
+git_tag_enable = false
+semver_check = false
+
+[[package]]
+name = "biopass-rs"
+publish = false
+git_release_enable = true
+git_release_name = "biopass-rs v{{ version }}"
+git_tag_enable = true
+git_tag_name = "v{{ version }}"
+changelog_include = ["biopass-rs-auth", "biopass-rs-pam"]
+
+[[package]]
+name = "biopass-rs-auth"
+release = false
+
+[[package]]
+name = "biopass-rs-pam"
+release = false
