@@ -317,11 +317,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "biopass"
+name = "biopass-rs"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
- "biopass-auth",
+ "biopass-rs-auth",
  "gtk",
  "serde",
  "serde_json",
@@ -337,7 +337,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "biopass-auth"
+name = "biopass-rs-auth"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -357,7 +357,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "biopass-pam"
+name = "biopass-rs-pam"
 version = "0.1.0"
 
 [[package]]

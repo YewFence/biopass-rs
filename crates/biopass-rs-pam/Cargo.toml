@@ -1,11 +1,11 @@
 [package]
-name = "biopass-pam"
+name = "biopass-rs-pam"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
 [lib]
-name = "biopass_pam"
+name = "biopass_rs_pam"
 crate-type = ["cdylib"]
 path = "src/lib.rs"

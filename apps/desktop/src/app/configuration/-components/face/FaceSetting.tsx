@@ -159,7 +159,7 @@ export function FaceSetting() {
               Auto-optimize Camera
             </Label>
             <p className="text-xs text-muted-foreground">
-              On startup, biopass adjusts auto white balance, exposure, anti-flicker (50Hz),
+              On startup, biopass-rs adjusts auto white balance, exposure, anti-flicker (50Hz),
               backlight compensation, and dynamic framerate. <strong>Disable</strong> this if you
               use{" "}
               <a

@@ -177,7 +177,7 @@ function ModelsRouteComponent() {
               Run the following command in a terminal to download missing models:
             </p>
             <code className="block mt-2 px-3 py-2 text-xs font-mono bg-background/50 rounded border border-amber-500/20 select-all">
-              sudo /usr/bin/biopass-helper install
+              sudo /usr/bin/biopass-rs-helper install
             </code>
             <p className="text-[11px] text-amber-800/60 dark:text-amber-300/60 mt-2">
               The installer will download models with a progress bar, migrate legacy configurations,

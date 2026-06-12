@@ -1,12 +1,12 @@
 [package]
-name = "biopass-auth"
+name = "biopass-rs-auth"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
 
 [lib]
-name = "biopass_auth"
+name = "biopass_rs_auth"
 path = "src/lib.rs"
 
 [dependencies]

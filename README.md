@@ -38,7 +38,7 @@ While Windows Hello provides a seamless multi-modal biometric experience (Face, 
 | **Anti-spoofing config** | Modular structure | Refactored into separate `ai` and `ir` modules for clearer configuration |
 | **Retry behavior** | Independent controls | AI and IR anti-spoofing checks now support separate retry configuration |
 | **Camera handling** | Quality optimization | Added image quality controls, dark-frame skipping for V4L2 GREY IR cameras, and an auto-optimize option |
-| **`biopass-helper` ergonomics** | Expanded CLI surface | New subcommands beyond the upstream `auth` and `crop-face`: `migrate`, `install`, `capture-face`, `preview-session`, and `completion`; the `auth` subcommand's `--username` argument is now optional and falls back to environment variable lookup |
+| **`biopass-rs-helper` ergonomics** | Expanded CLI surface | New subcommands beyond the upstream `auth` and `crop-face`: `migrate`, `install`, `capture-face`, `preview-session`, and `completion`; the `auth` subcommand's `--username` argument is now optional and falls back to environment variable lookup |
 
 ## Installation
 
@@ -46,7 +46,7 @@ While Windows Hello provides a seamless multi-modal biometric experience (Face, 
 - System sign-in setup uses distro-managed PAM configuration when available (for example `pam-auth-update` on Debian/Ubuntu): [docs/PAM.md](docs/PAM.md)
 - Interactive `polkit` authentication setup: [docs/Polkit.md](docs/Polkit.md)
 - [IR camera setup guide](docs/IR%20camera.md)
-- [`biopass-helper` CLI reference](docs/biopass-helper.md) — authentication, face capture, model install, and shell completion.
+- [`biopass-rs-helper` CLI reference](docs/biopass-rs-helper.md) — authentication, face capture, model install, and shell completion.
 
 ## Features
 

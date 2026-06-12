@@ -484,7 +484,7 @@ mod tests {
     #[test]
     fn missing_configured_face_camera_is_unavailable() {
         let mut config = face_config();
-        config.camera = Some("/dev/biopass-missing-camera".to_string());
+        config.camera = Some("/dev/biopass-rs-missing-camera".to_string());
         let method = FaceAuth::new(config);
 
         assert!(!method.is_available());

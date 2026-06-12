@@ -1,5 +1,5 @@
-use biopass_auth::{migrate_config_at_path, read_config_from_path};
-pub use biopass_auth::{
+use biopass_rs_auth::{migrate_config_at_path, read_config_from_path};
+pub use biopass_rs_auth::{
     BiopassConfig, DetectionConfig, FaceMethodConfig, FingerConfig, FingerprintMethodConfig,
     MethodsConfig, ModelConfig, RecognitionConfig, StrategyConfig,
 };

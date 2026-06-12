@@ -15,7 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-const MIGRATION_NOTICE_KEY = "biopass:config-migrated-notice-shown";
+const MIGRATION_NOTICE_KEY = "biopass-rs:config-migrated-notice-shown";
 
 function App() {
   const [username, setUsername] = useState("");

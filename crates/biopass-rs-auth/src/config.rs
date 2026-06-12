@@ -444,7 +444,7 @@ pub fn config_path(username: &str) -> PathBuf {
         None => std::env::var_os("HOME")
             .map(PathBuf::from)
             .map(|home| home.join(CONFIG_FILE))
-            .unwrap_or_else(|| PathBuf::from("/etc/com.ticklab.biopass/config.yaml")),
+            .unwrap_or_else(|| PathBuf::from("/etc/biopass-rs/config.yaml")),
     }
 }
 
@@ -1010,6 +1010,6 @@ methods:
 
     #[test]
     fn unknown_user_does_not_exist() {
-        assert!(!user_exists("__biopass_missing_user_for_test__"));
+        assert!(!user_exists("__biopass_rs_missing_user_for_test__"));
     }
 }

@@ -1,4 +1,4 @@
-use biopass_auth::{EnrollStatusCallback, FingerprintAuth as BioFingerprintAuth};
+use biopass_rs_auth::{EnrollStatusCallback, FingerprintAuth as BioFingerprintAuth};
 use tauri::{AppHandle, Emitter};
 
 struct TauriEnrollCallback<'a> {

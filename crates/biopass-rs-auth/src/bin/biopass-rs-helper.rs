@@ -1,4 +1,4 @@
-use biopass_auth::{
+use biopass_rs_auth::{
     capture_rgb_frame, config_exists, decode_jpeg_rgb, download_models, encode_jpeg,
     migrate_all_users, migrate_config_schema, read_config, run_ldconfig, user_exists, AuthManager,
     CameraRequest, FaceAuth, FaceDetector, FingerprintAuth, PamCode, RgbFrame,
@@ -15,7 +15,7 @@ const EXIT_AUTH_ERR: u8 = 1;
 const EXIT_IGNORE: u8 = 2;
 
 #[derive(Parser)]
-#[command(name = "biopass-helper")]
+#[command(name = "biopass-rs-helper")]
 #[command(about = "BioPass authentication helper")]
 struct Cli {
     #[command(subcommand)]
@@ -118,7 +118,7 @@ fn main() -> ExitCode {
             generate(
                 shell,
                 &mut Cli::command(),
-                "biopass-helper",
+                "biopass-rs-helper",
                 &mut io::stdout(),
             );
             return ExitCode::SUCCESS;

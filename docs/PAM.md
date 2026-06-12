@@ -4,7 +4,7 @@
 
 1. Verify the Biopass PAM profile exists:
     ```bash
-    ls /usr/share/pam-configs/biopass
+    ls /usr/share/pam-configs/biopass-rs
     ```
 2. Enable the Biopass PAM profile.
     ```bash
@@ -31,7 +31,7 @@ Keep a root terminal open while testing. Incorrect PAM configuration can lock yo
 
 1. Verify the PAM module is installed:
     ```bash
-    ls /usr/lib/security/libbiopass_pam.so
+    ls /usr/lib/security/libbiopass_rs_pam.so
     ```
 2. Edit the PAM service you want to protect, for example:
     ```bash
@@ -39,7 +39,7 @@ Keep a root terminal open while testing. Incorrect PAM configuration can lock yo
     ```
 3. Insert Biopass before the existing `pam_unix.so` auth rule:
     ```pam
-    auth sufficient libbiopass_pam.so
+    auth sufficient libbiopass_rs_pam.so
     auth [success=1 default=ignore] pam_unix.so nullok
     auth requisite pam_deny.so
     ```

@@ -29,7 +29,7 @@ struct PreviewSession {
 static SESSION: Mutex<Option<PreviewSession>> = Mutex::new(None);
 
 fn helper_path() -> String {
-    crate::system::biopass_helper_path()
+    crate::system::biopass_rs_helper_path()
 }
 
 fn read_line_trim(reader: &mut BufReader<ChildStdout>) -> std::io::Result<String> {

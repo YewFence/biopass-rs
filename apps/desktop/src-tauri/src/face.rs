@@ -23,7 +23,7 @@ pub fn capture_face(app: AppHandle, camera: Option<String>) -> Result<String, St
 
     let detect_model = app_config.methods.face.detection.model;
 
-    let helper_bin = crate::system::biopass_helper_path();
+    let helper_bin = crate::system::biopass_rs_helper_path();
 
     let mut cmd_builder = std::process::Command::new(&helper_bin);
     cmd_builder

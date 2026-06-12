@@ -4,12 +4,12 @@
 
 set -e
 
-HELPER="/usr/bin/biopass-helper"
+HELPER="/usr/bin/biopass-rs-helper"
 if [ -x "$HELPER" ]; then
-    echo "Biopass: Running post-install tasks..."
+    echo "Biopass-rs: Running post-install tasks..."
     "$HELPER" install || true
 else
-    echo "Biopass: Warning - biopass-helper not found, skipping post-install tasks" >&2
+    echo "Biopass-rs: Warning - biopass-rs-helper not found, skipping post-install tasks" >&2
 fi
 
 exit 0

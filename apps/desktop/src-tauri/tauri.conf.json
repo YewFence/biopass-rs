@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "biopass",
+  "productName": "biopass-rs",
   "identifier": "biopass-rs",
   "build": {
     "beforeDevCommand": "bun run dev",
@@ -11,7 +11,7 @@
   "app": {
     "windows": [
       {
-        "title": "Biopass",
+        "title": "Biopass-rs",
         "width": 800,
         "height": 600
       }
@@ -39,10 +39,10 @@
         "depends": ["fprintd", "curl", "libwebkit2gtk-4.1-0"],
         "postInstallScript": "scripts/deb/postinst",
         "files": {
-          "/lib/security/libbiopass_pam.so": "../../../target/release/libbiopass_pam.so",
-          "/usr/bin/biopass-helper": "../../../target/release/biopass-helper",
-          "/etc/ld.so.conf.d/biopass.conf": "scripts/ldconf",
-          "/usr/share/pam-configs/biopass": "scripts/pam.conf"
+          "/lib/security/libbiopass_rs_pam.so": "../../../target/release/libbiopass_rs_pam.so",
+          "/usr/bin/biopass-rs-helper": "../../../target/release/biopass-rs-helper",
+          "/etc/ld.so.conf.d/biopass-rs.conf": "scripts/ldconf",
+          "/usr/share/pam-configs/biopass-rs": "scripts/pam.conf"
         }
       },
       "rpm": {
@@ -50,10 +50,10 @@
         "postInstallScript": "scripts/rpm/postinst",
         "postRemoveScript": "scripts/rpm/postrm",
         "files": {
-          "/lib64/security/libbiopass_pam.so": "../../../target/release/libbiopass_pam.so",
-          "/usr/bin/biopass-helper": "../../../target/release/biopass-helper",
-          "/etc/ld.so.conf.d/biopass.conf": "scripts/ldconf",
-          "/usr/share/pam-configs/biopass": "scripts/pam.conf"
+          "/lib64/security/libbiopass_rs_pam.so": "../../../target/release/libbiopass_rs_pam.so",
+          "/usr/bin/biopass-rs-helper": "../../../target/release/biopass-rs-helper",
+          "/etc/ld.so.conf.d/biopass-rs.conf": "scripts/ldconf",
+          "/usr/share/pam-configs/biopass-rs": "scripts/pam.conf"
         }
       }
     }

@@ -15,7 +15,7 @@ else
 fi
 
 echo "==> [auth] Building Rust helper and auth core (CARGO_PROFILE=${CARGO_PROFILE:-release})..."
-cargo build --package biopass-auth --package biopass-pam "${cargo_build_flags[@]}"
+cargo build --package biopass-rs-auth --package biopass-rs-pam "${cargo_build_flags[@]}"
 '''
 
 [tasks.build-app]
@@ -28,14 +28,14 @@ bun run tauri build
 dir = "{{config_root}}/{{vars.app_dir}}"
 
 [tasks.dev-helper-build]
-description = "Build the biopass helper in debug mode"
-run = "cargo build --package biopass-auth --bin biopass-helper"
+description = "Build the biopass-rs helper in debug mode"
+run = "cargo build --package biopass-rs-auth --bin biopass-rs-helper"
 
 [tasks.dev-helper]
-description = "Run the biopass helper CLI in debug mode"
+description = "Run the biopass-rs helper CLI in debug mode"
 depends = ["dev-helper-build"]
 raw_args = true
-run = "cargo run --package biopass-auth --bin biopass-helper --"
+run = "cargo run --package biopass-rs-auth --bin biopass-rs-helper --"
 
 [tasks.dev-app]
 description = "Run the Tauri app in development mode"
@@ -50,15 +50,15 @@ depends = ["clean-auth", "clean-app"]
 [tasks.clean-auth]
 description = "Remove Rust auth build artifacts"
 run = '''
-cargo clean --package biopass-auth
-cargo clean --package biopass-pam
+cargo clean --package biopass-rs-auth
+cargo clean --package biopass-rs-pam
 '''
 
 [tasks.clean-app]
 description = "Remove app build artifacts"
 run = '''
 echo "==> [app] Cleaning build artifacts..."
-cargo clean --package biopass 2>/dev/null || true
+cargo clean --package biopass-rs 2>/dev/null || true
 rm -rf dist
 '''
 dir = "{{config_root}}/{{vars.app_dir}}"
@@ -102,5 +102,4 @@ depends = ["fix-rust", "fix-app"]
 node = "24"
 rust = "1"
 bun = "1"
-lefthook = "2"
 viteplus = "0"

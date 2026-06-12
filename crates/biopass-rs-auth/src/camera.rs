@@ -699,7 +699,7 @@ mod tests {
     #[test]
     fn missing_explicit_camera_is_unavailable() {
         let request = CameraRequest {
-            device_path: Some(PathBuf::from("/dev/biopass-missing-camera")),
+            device_path: Some(PathBuf::from("/dev/biopass-rs-missing-camera")),
             ..CameraRequest::default()
         };
 

@@ -2,13 +2,13 @@
 resolver = "2"
 members = [
     "apps/desktop/src-tauri",
-    "crates/biopass-auth",
-    "crates/biopass-pam",
+    "crates/biopass-rs-auth",
+    "crates/biopass-rs-pam",
 ]
 default-members = [
     "apps/desktop/src-tauri",
-    "crates/biopass-auth",
-    "crates/biopass-pam",
+    "crates/biopass-rs-auth",
+    "crates/biopass-rs-pam",
 ]
 
 [workspace.package]

@@ -86,8 +86,8 @@ The Biopass system is split into two primary layers: **The Backend Authenticatio
 ```mermaid
 sequenceDiagram
     participant OS as Linux Login/Sudo (PAM)
-    participant Lib as libbiopass_pam.so
-    participant Helper as biopass-helper
+    participant Lib as libbiopass_rs_pam.so
+    participant Helper as biopass-rs-helper
     participant Sensors as Camera/Mic/Fingerprint
     participant TauriBackend as Tauri Rust Backend
     participant ReactUI as React Frontend
@@ -112,22 +112,22 @@ sequenceDiagram
     end
 ```
 
-### The PAM Module (`crates/biopass-pam/`)
+### The PAM Module (`crates/biopass-rs-pam/`)
 
 ### Directory Structure
 
 The repository is organized by separating the backend systems-level logic from the frontend desktop application logic.
 
 ```text
-biopass/
+biopass-rs/
 ├── apps/
 │   └── desktop/          # The Tauri desktop application
 │       ├── src/          # React frontend (Vite + TypeScript + Tailwind)
 │       └── src-tauri/    # Rust backend bridging system calls and the UI
 │
 ├── crates/
-│   ├── biopass-auth/     # Rust auth core and helper binary
-│   └── biopass-pam/      # Linux PAM module
+│   ├── biopass-rs-auth/     # Rust auth core and helper binary
+│   └── biopass-rs-pam/      # Linux PAM module
 │
 ├── assets/
 │   └── models/face/      # Face detection, recognition and anti-spoofing models
@@ -139,7 +139,7 @@ biopass/
 
 ## 4. Development Warnings and Debugging
 
-When you need to modify the Rust PAM logic, we recommend you enable the `debug` flag in the configuration. You may open the UI app and toggle **Debug Mode** to ON, or manually edit `~/.config/com.ticklab.biopass/config.yaml`. When the debug flag is enabled, detailed logs are printed, and face captures that fail authentication (or get caught spoofing) are saved as `.bmp` images to `~/.local/share/com.ticklab.biopass/debugs/`.
+When you need to modify the Rust PAM logic, we recommend you enable the `debug` flag in the configuration. You may open the UI app and toggle **Debug Mode** to ON, or manually edit `~/.config/biopass-rs/config.yaml`. When the debug flag is enabled, detailed logs are printed, and face captures that fail authentication (or get caught spoofing) are saved as `.bmp` images to `~/.local/share/biopass-rs/debugs/`.
 
 ### ⚠️ System Lockout Warnings
 

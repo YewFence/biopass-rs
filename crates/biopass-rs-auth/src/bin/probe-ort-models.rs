@@ -1,4 +1,4 @@
-use biopass_auth::OrtModel;
+use biopass_rs_auth::OrtModel;
 use std::path::{Path, PathBuf};
 
 fn main() -> Result<(), String> {

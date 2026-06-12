@@ -1,8 +1,8 @@
-# `biopass-helper` CLI Reference
+# `biopass-rs-helper` CLI Reference
 
-`biopass-helper` is the low-level command-line tool that the desktop GUI and the PAM module use to perform authentication, capture and crop face images, install AI models, and more. It is also the primary entry point for scripting and debugging.
+`biopass-rs-helper` is the low-level command-line tool that the desktop GUI and the PAM module use to perform authentication, capture and crop face images, install AI models, and more. It is also the primary entry point for scripting and debugging.
 
-The binary is installed to `/usr/bin/biopass-helper` when using the distro package. When developing from this repository, run it via:
+The binary is installed to `/usr/bin/biopass-rs-helper` when using the distro package. When developing from this repository, run it via:
 
 ```bash
 mise run helper
@@ -19,7 +19,7 @@ mise run helper -- auth --service sudo
 ```text
 Biopass authentication helper
 
-Usage: biopass-helper [OPTIONS] SUBCOMMAND
+Usage: biopass-rs-helper [OPTIONS] SUBCOMMAND
 
 Options:
   -h, --help    Print this help message and exit
@@ -39,7 +39,7 @@ Subcommands:
 Authenticate a user against Biopass. This is the subcommand invoked by the PAM module during system sign-in.
 
 ```bash
-biopass-helper auth --service <SERVICE> [--username <USERNAME>]
+biopass-rs-helper auth --service <SERVICE> [--username <USERNAME>]
 ```
 
 | Flag         | Required | Description                                                                                  |
@@ -59,10 +59,10 @@ biopass-helper auth --service <SERVICE> [--username <USERNAME>]
 
 ```bash
 # Test the sudo path as the current user
-biopass-helper auth --service sudo
+biopass-rs-helper auth --service sudo
 
 # Authenticate a specific user explicitly
-biopass-helper auth --service login --username alice
+biopass-rs-helper auth --service login --username alice
 ```
 
 ## `migrate`
@@ -70,7 +70,7 @@ biopass-helper auth --service login --username alice
 Run the configuration schema migration for one user. The configuration format has evolved over time; older layouts are upgraded in place.
 
 ```bash
-biopass-helper migrate --username <USERNAME>
+biopass-rs-helper migrate --username <USERNAME>
 ```
 
 | Flag         | Required | Description                |
@@ -88,7 +88,7 @@ One-shot setup used by the post-install scripts of the distro package. It runs t
 3. `download-models` to fetch the AI models (EdgeFace recognition, YOLO-Face detection) into the system data directory.
 
 ```bash
-biopass-helper install
+biopass-rs-helper install
 ```
 
 Warnings from the first two steps are non-fatal — only the model download step determines the final exit code.
@@ -98,10 +98,10 @@ Warnings from the first two steps are non-fatal — only the model download step
 Detect the largest face in a JPEG/PNG file and write a cropped, re-encoded JPEG. Useful for preparing training data or previewing the detector on a still image.
 
 ```bash
-biopass-helper crop-face \
+biopass-rs-helper crop-face \
   --input  path/to/photo.jpg \
   --output path/to/cropped.jpg \
-  --model  /usr/share/biopass/models/yolo-face.onnx \
+  --model  /usr/share/biopass-rs/models/yolo-face.onnx \
   [--quality 90]
 ```
 
@@ -119,10 +119,10 @@ Exits with code `2` if no face is detected in the input, so callers can distingu
 Capture a single frame from a camera, detect the largest face, and write the crop to disk. Combines `crop-face` with a V4L2 capture step.
 
 ```bash
-biopass-helper capture-face \
+biopass-rs-helper capture-face \
   [--camera /dev/video0] \
   --output  path/to/captured.jpg \
-  --model   /usr/share/biopass/models/yolo-face.onnx \
+  --model   /usr/share/biopass-rs/models/yolo-face.onnx \
   [--quality 90]
 ```
 
@@ -133,16 +133,16 @@ biopass-helper capture-face \
 | `--model`   | Yes      |         | Path to the YOLO-Face detection model. |
 | `--quality` | No       | `90`    | JPEG quality, 1–100. |
 
-Honors the `auto_optimize_camera` setting in the current user's face config (see `helper_auto_optimize_camera` in `biopass-helper.rs`). Exits with code `2` if no face is detected.
+Honors the `auto_optimize_camera` setting in the current user's face config (see `helper_auto_optimize_camera` in `biopass-rs-helper.rs`). Exits with code `2` if no face is detected.
 
 ## `preview-session`
 
 Start a long-lived interactive session for the desktop preview window. The helper reads newline-delimited commands on **stdin** and writes framed responses to **stdout**; the GUI side drives the protocol.
 
 ```bash
-biopass-helper preview-session \
+biopass-rs-helper preview-session \
   [--camera /dev/video0] \
-  [--model  /usr/share/biopass/models/yolo-face.onnx] \
+  [--model  /usr/share/biopass-rs/models/yolo-face.onnx] \
   [--quality 70]
 ```
 
@@ -166,17 +166,17 @@ Any other input is answered with `ERR unknown command\n`. The session exits with
 
 ### Typical usage
 
-The desktop frontend spawns this helper as a subprocess and pipes commands into it; there is little reason to drive it manually. If you do, use `printf 'FRAME\nCAPTURE /tmp/face.jpg\nQUIT\n' | biopass-helper preview-session --model /path/to/yolo.onnx`.
+The desktop frontend spawns this helper as a subprocess and pipes commands into it; there is little reason to drive it manually. If you do, use `printf 'FRAME\nCAPTURE /tmp/face.jpg\nQUIT\n' | biopass-rs-helper preview-session --model /path/to/yolo.onnx`.
 
 ## `completion`
 
 Generate a shell completion script and print it to stdout. Pair with `eval` to enable tab-completion in the current shell.
 
 ```bash
-biopass-helper completion bash > /etc/bash_completion.d/biopass-helper
-biopass-helper completion zsh  > "${fpath[1]}/_biopass-helper"
-biopass-helper completion fish > ~/.config/fish/completions/biopass-helper.fish
-biopass-helper completion powershell | Out-String | Invoke-Expression
+biopass-rs-helper completion bash > /etc/bash_completion.d/biopass-rs-helper
+biopass-rs-helper completion zsh  > "${fpath[1]}/_biopass-rs-helper"
+biopass-rs-helper completion fish > ~/.config/fish/completions/biopass-rs-helper.fish
+biopass-rs-helper completion powershell | Out-String | Invoke-Expression
 ```
 
 | Argument | Description |
@@ -189,7 +189,7 @@ biopass-helper completion powershell | Out-String | Invoke-Expression
 
 ## Environment variables
 
-Several environment variables influence `biopass-helper` behavior:
+Several environment variables influence `biopass-rs-helper` behavior:
 
 | Variable       | Used by                            | Purpose |
 | :------------- | :--------------------------------- | :------ |
@@ -201,6 +201,6 @@ Several environment variables influence `biopass-helper` behavior:
 
 ## See also
 
-- [PAM setup](PAM.md) — how `biopass-helper auth` is wired into system sign-in.
+- [PAM setup](PAM.md) — how `biopass-rs-helper auth` is wired into system sign-in.
 - [Polkit setup](Polkit.md) — for the polkit authentication flow.
 - [Contributing](contributing.md) — architecture overview, including how the desktop GUI talks to `preview-session`.
