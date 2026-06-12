@@ -44,6 +44,7 @@ While Windows Hello provides a seamless multi-modal biometric experience (Face, 
 
 - Please refer to the [upstream Biopass releases](https://github.com/TickLabVN/biopass/releases) for prebuilt Debian and RPM packages, or the [AUR package](https://aur.archlinux.org/packages/biopass-bin) for Arch-based distributions.
 - System sign-in setup uses distro-managed PAM configuration when available (for example `pam-auth-update` on Debian/Ubuntu): [docs/PAM.md](docs/PAM.md)
+- Migrating from upstream Biopass requires both per-user config/data migration and a PAM review so the upstream and Rust rewrite PAM modules are not enabled for the same service: [docs/upstream-migration.md](docs/upstream-migration.md)
 - Interactive `polkit` authentication setup: [docs/Polkit.md](docs/Polkit.md)
 - [IR camera setup guide](docs/IR%20camera.md)
 - [`biopass-rs-helper` CLI reference](docs/biopass-rs-helper.md) — authentication, face capture, model install, and shell completion.

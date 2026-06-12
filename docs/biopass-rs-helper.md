@@ -77,15 +77,17 @@ biopass-rs-helper migrate --username <USERNAME>
 | :----------- | :------- | :------------------------- |
 | `--username` | Yes      | User whose config to migrate. |
 
-Exits with a non-zero status if the user does not exist or if the migration fails. The `install` subcommand runs the same migration across **all** users.
+This command only touches the current biopass-rs config path, `~/.config/biopass-rs/config.yaml`. It does not copy the upstream config from `~/.config/com.ticklab.biopass/config.yaml`, move the upstream data directory, edit PAM, or disable the upstream Biopass PAM module.
+
+Exits with a non-zero status if the user does not exist or if the migration fails. The `install` subcommand runs migration across **all** users after copying upstream configs into the new path when the new config is absent. See [Migrating from upstream Biopass](upstream-migration.md) for the full migration flow.
 
 ## `install`
 
 One-shot setup used by the post-install scripts of the distro package. It runs three steps in order:
 
 1. `ldconfig` to refresh the dynamic linker cache (so the PAM module can be located).
-2. `migrate-all` to bring every existing user's config up to the current schema.
-3. `download-models` to fetch the AI models (EdgeFace recognition, YOLO-Face detection) into the system data directory.
+2. `migrate-all` to copy upstream configs into the biopass-rs path when needed, move upstream user data directories when possible, and bring copied configs up to the current schema.
+3. `download-models` to fetch the AI models (EdgeFace recognition, YOLO-Face detection) into the user's biopass-rs data directory.
 
 ```bash
 biopass-rs-helper install
