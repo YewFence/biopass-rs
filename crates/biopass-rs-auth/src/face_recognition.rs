@@ -63,6 +63,14 @@ impl FaceRecognizer {
     ) -> Result<FaceMatch, String> {
         let enrolled_embedding = self.embedding(enrolled)?;
         let candidate_embedding = self.embedding(candidate)?;
+        self.match_embeddings(&enrolled_embedding, &candidate_embedding)
+    }
+
+    pub fn match_embeddings(
+        &self,
+        enrolled_embedding: &[f32],
+        candidate_embedding: &[f32],
+    ) -> Result<FaceMatch, String> {
         let similarity = cosine_similarity(&enrolled_embedding, &candidate_embedding)?;
         Ok(FaceMatch {
             similarity,

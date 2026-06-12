@@ -12,11 +12,58 @@ const IR_CAPTURE_TIMEOUT_MS: u64 = 3000;
 
 pub struct FaceAuth {
     config: FaceMethodConfig,
+    session: FaceAuthSession,
+}
+
+#[derive(Default)]
+struct FaceAuthSession {
+    detector: Option<FaceDetector>,
+    recognizer: Option<FaceRecognizer>,
+    anti_spoofing: Option<FaceAntiSpoofing>,
 }
 
 impl FaceAuth {
     pub fn new(config: FaceMethodConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            session: FaceAuthSession::default(),
+        }
+    }
+
+    fn clear_session(&mut self) {
+        self.session = FaceAuthSession::default();
+    }
+
+    fn detector(&mut self) -> Result<&mut FaceDetector, String> {
+        if self.session.detector.is_none() {
+            self.session.detector = Some(FaceDetector::load_with_threshold(
+                &self.config.detection.model,
+                self.config.detection.threshold,
+            )?);
+        }
+
+        Ok(self.session.detector.as_mut().unwrap())
+    }
+
+    fn recognizer(&mut self) -> Result<&mut FaceRecognizer, String> {
+        if self.session.recognizer.is_none() {
+            self.session.recognizer = Some(FaceRecognizer::load(
+                &self.config.recognition.model,
+                self.config.recognition.threshold,
+            )?);
+        }
+
+        Ok(self.session.recognizer.as_mut().unwrap())
+    }
+
+    fn anti_spoofing(&mut self) -> Result<&mut FaceAntiSpoofing, String> {
+        if self.session.anti_spoofing.is_none() {
+            let model = &self.config.anti_spoofing.ai.model;
+            self.session.anti_spoofing =
+                Some(FaceAntiSpoofing::load(&model.path, model.threshold)?);
+        }
+
+        Ok(self.session.anti_spoofing.as_mut().unwrap())
     }
 
     fn authenticate_face(
@@ -26,7 +73,7 @@ impl FaceAuth {
         cancel_signal: Option<&AtomicBool>,
     ) -> Result<AuthResult, String> {
         let debug = auth_config.debug;
-        let log = |level: LogLevel, msg: &str| emit_log(level, debug, "face", msg);
+        let log = |level: LogLevel, msg: &str| emit_log(level, debug, "FaceAuth", msg);
 
         log(
             LogLevel::Info,
@@ -74,13 +121,8 @@ impl FaceAuth {
                 self.config.detection.model
             ),
         );
-        let mut detector = FaceDetector::load_with_threshold(
-            &self.config.detection.model,
-            self.config.detection.threshold,
-        )?;
-
         log(LogLevel::Debug, "running face detection");
-        let Some(candidate) = detector.crop_largest_face(&frame)? else {
+        let Some(candidate) = self.detector()?.crop_largest_face(&frame)? else {
             log(LogLevel::Info, "no face detected in frame");
             return Ok(AuthResult::Retry);
         };
@@ -93,10 +135,11 @@ impl FaceAuth {
         );
 
         log(LogLevel::Debug, "loading recognition model");
-        let mut recognizer = FaceRecognizer::load(
-            &self.config.recognition.model,
-            self.config.recognition.threshold,
-        )?;
+        let recognition_threshold = self.config.recognition.threshold;
+        let candidate_embedding = {
+            let recognizer = self.recognizer()?;
+            recognizer.embedding(&candidate)?
+        };
         log(
             LogLevel::Debug,
             &format!("comparing against {} enrolled face(s)", enrolled.len()),
@@ -117,14 +160,18 @@ impl FaceAuth {
                 );
                 continue;
             };
-            let face_match = recognizer.match_faces(&enrolled_face, &candidate)?;
+            let face_match = {
+                let recognizer = self.recognizer()?;
+                let enrolled_embedding = recognizer.embedding(&enrolled_face)?;
+                recognizer.match_embeddings(&enrolled_embedding, &candidate_embedding)?
+            };
             log(
                 LogLevel::Debug,
                 &format!(
                     "match against {}: similarity={:.4} threshold={:.4} similar={}",
                     enrolled_path.display(),
                     face_match.similarity,
-                    self.config.recognition.threshold,
+                    recognition_threshold,
                     face_match.similar
                 ),
             );
@@ -148,14 +195,14 @@ impl FaceAuth {
     }
 
     fn check_anti_spoofing(
-        &self,
+        &mut self,
         username: &str,
         auth_config: &AuthConfig,
         cancel_signal: Option<&AtomicBool>,
         face: &RgbFrame,
     ) -> Result<bool, String> {
         let debug = auth_config.debug;
-        let log = |level: LogLevel, msg: &str| emit_log(level, debug, "face:anti-spoofing", msg);
+        let log = |level: LogLevel, msg: &str| emit_log(level, debug, "FaceAntiSpoofing", msg);
 
         if !auth_config.antispoof {
             log(LogLevel::Info, "skipped (antispoof disabled at runtime)");
@@ -175,9 +222,10 @@ impl FaceAuth {
         );
 
         if ai_enabled {
-            let ai_cfg = &self.config.anti_spoofing.ai;
-            let model = &ai_cfg.model;
-            if model.path.is_empty() || !Path::new(&model.path).is_file() {
+            let model_path = self.config.anti_spoofing.ai.model.path.clone();
+            let max_attempts = self.config.anti_spoofing.ai.retries.saturating_add(1);
+            let retry_delay_ms = self.config.anti_spoofing.ai.retry_delay_ms;
+            if model_path.is_empty() || !Path::new(&model_path).is_file() {
                 log(
                     LogLevel::Warn,
                     "ai model not configured or missing on disk, treating as spoof",
@@ -188,8 +236,6 @@ impl FaceAuth {
                 return Ok(false);
             }
 
-            let mut anti_spoofing = FaceAntiSpoofing::load(&model.path, model.threshold)?;
-            let max_attempts = ai_cfg.retries.saturating_add(1);
             let mut attempt = 0u32;
             let verdict = loop {
                 attempt += 1;
@@ -197,7 +243,7 @@ impl FaceAuth {
                     LogLevel::Debug,
                     &format!("ai attempt {attempt}/{max_attempts}"),
                 );
-                let verdict = anti_spoofing.detect(face)?;
+                let verdict = self.anti_spoofing()?.detect(face)?;
                 log(
                     LogLevel::Debug,
                     &format!("ai model verdict: spoof={}", verdict.spoof),
@@ -212,12 +258,12 @@ impl FaceAuth {
                     log(LogLevel::Info, "ai check cancelled during retry");
                     return Ok(false);
                 }
-                if ai_cfg.retry_delay_ms > 0 {
+                if retry_delay_ms > 0 {
                     log(
                         LogLevel::Debug,
-                        &format!("ai retry sleeping {}ms", ai_cfg.retry_delay_ms),
+                        &format!("ai retry sleeping {retry_delay_ms}ms"),
                     );
-                    std::thread::sleep(Duration::from_millis(ai_cfg.retry_delay_ms as u64));
+                    std::thread::sleep(Duration::from_millis(retry_delay_ms as u64));
                 }
             };
             if verdict.spoof {
@@ -239,13 +285,13 @@ impl FaceAuth {
     }
 
     fn run_ir_check_with_retries(
-        &self,
+        &mut self,
         username: &str,
         auth_config: &AuthConfig,
         cancel_signal: Option<&AtomicBool>,
     ) -> Result<bool, String> {
-        let ir_cfg = &self.config.anti_spoofing.ir;
-        let max_attempts = ir_cfg.retries.saturating_add(1);
+        let max_attempts = self.config.anti_spoofing.ir.retries.saturating_add(1);
+        let retry_delay_ms = self.config.anti_spoofing.ir.retry_delay_ms;
         let debug = auth_config.debug;
         for attempt in 1..=max_attempts {
             if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
@@ -255,7 +301,7 @@ impl FaceAuth {
                 emit_log(
                     LogLevel::Debug,
                     debug,
-                    "face:anti-spoofing:ir",
+                    "FaceAntiSpoofingIr",
                     &format!("attempt {attempt}/{max_attempts}"),
                 );
             }
@@ -266,14 +312,14 @@ impl FaceAuth {
                 if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
                     return Ok(false);
                 }
-                if ir_cfg.retry_delay_ms > 0 {
+                if retry_delay_ms > 0 {
                     emit_log(
                         LogLevel::Debug,
                         debug,
-                        "face:anti-spoofing:ir",
-                        &format!("retry sleeping {}ms", ir_cfg.retry_delay_ms),
+                        "FaceAntiSpoofingIr",
+                        &format!("retry sleeping {retry_delay_ms}ms"),
                     );
-                    std::thread::sleep(Duration::from_millis(ir_cfg.retry_delay_ms as u64));
+                    std::thread::sleep(Duration::from_millis(retry_delay_ms as u64));
                 }
             }
         }
@@ -281,12 +327,12 @@ impl FaceAuth {
     }
 
     fn check_ir_face_presence(
-        &self,
+        &mut self,
         username: &str,
         auth_config: &AuthConfig,
     ) -> Result<bool, String> {
         let debug = auth_config.debug;
-        let log = |level: LogLevel, msg: &str| emit_log(level, debug, "face:anti-spoofing:ir", msg);
+        let log = |level: LogLevel, msg: &str| emit_log(level, debug, "FaceAntiSpoofingIr", msg);
 
         let Some(camera) = self
             .config
@@ -334,11 +380,7 @@ impl FaceAuth {
             &format!("IR frame captured: {}x{}", frame.width, frame.height),
         );
 
-        let mut detector = FaceDetector::load_with_threshold(
-            &self.config.detection.model,
-            self.config.detection.threshold,
-        )?;
-        let detections = detector.detect(&frame)?;
+        let detections = self.detector()?.detect(&frame)?;
         log(
             LogLevel::Debug,
             &format!("IR detection found {} face(s)", detections.len()),
@@ -399,6 +441,14 @@ impl AuthMethod for FaceAuth {
         self.config.retry_delay
     }
 
+    fn begin_authentication_session(&mut self) {
+        self.clear_session();
+    }
+
+    fn end_authentication_session(&mut self) {
+        self.clear_session();
+    }
+
     fn authenticate(
         &mut self,
         username: &str,
@@ -411,7 +461,7 @@ impl AuthMethod for FaceAuth {
                 emit_log(
                     LogLevel::Error,
                     config.debug,
-                    "face",
+                    "FaceAuth",
                     &format!("error during authentication for {username}: {error}"),
                 );
                 AuthResult::Retry

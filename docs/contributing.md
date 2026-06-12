@@ -141,6 +141,13 @@ biopass-rs/
 
 When you need to modify the Rust PAM logic, we recommend you enable the `debug` flag in the configuration. You may open the UI app and toggle **Debug Mode** to ON, or manually edit `~/.config/biopass-rs/config.yaml`. When the debug flag is enabled, detailed logs are printed, and face captures that fail authentication (or get caught spoofing) are saved as `.bmp` images to `~/.local/share/biopass-rs/debugs/`.
 
+Face authentication runs several ONNX models for detection, recognition and anti-spoofing. In Rust debug builds, those model loading and inference paths are expected to be much slower than the packaged application or a release helper build. Use release mode when comparing authentication latency or investigating face performance:
+
+```bash
+mise run build
+biopass-rs-helper auth --service login --username "$USER"
+```
+
 ### ⚠️ System Lockout Warnings
 
 Editing your distro PAM include file (typically `/etc/pam.d/common-auth` on Debian/Ubuntu or `/etc/pam.d/system-auth` on Fedora) incorrectly may **lock you out of your system permanently**. Be extremely careful when manually testing new PAM libraries. Use one of the following methods to prevent lockout:

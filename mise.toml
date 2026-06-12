@@ -1,6 +1,9 @@
 [vars]
 app_dir = "apps/desktop"
 
+[env]
+_.path = "./target/release"
+
 [tasks.install-app]
 description = "Install JS dependencies for the Tauri app"
 run = "bun install --frozen-lockfile"

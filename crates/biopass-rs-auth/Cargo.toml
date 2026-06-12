@@ -15,6 +15,7 @@ path = "src/bin/biopass-rs-helper.rs"
 
 [dependencies]
 anyhow.workspace = true
+chrono.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
 jpeg-decoder.workspace = true
