@@ -192,7 +192,7 @@ jobs:
       - name: Build packages
         run: |
           rm -rf target/release/bundle/
-          CARGO_PROFILE=release mise run build
+          mise run build --release
           ls -R target/release/bundle/
 
       - name: Upload build artifacts
