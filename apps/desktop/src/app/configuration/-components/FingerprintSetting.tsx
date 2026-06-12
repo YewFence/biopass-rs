@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { cmd } from "@/commands";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { formatError } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -15,12 +16,8 @@ import {
 import { useConfigurationStore } from "../-stores/configuration-store";
 
 export function FingerprintSetting() {
-  const config = useConfigurationStore(
-    (state) => state.config?.methods.fingerprint,
-  );
-  const setFingerprintConfig = useConfigurationStore(
-    (state) => state.setFingerprintConfig,
-  );
+  const config = useConfigurationStore((state) => state.config?.methods.fingerprint);
+  const setFingerprintConfig = useConfigurationStore((state) => state.setFingerprintConfig);
   const [selectedFinger, setSelectedFinger] = useState<string>("");
   const [isAdding, setIsAdding] = useState(false);
   const [username, setUsername] = useState<string>("");
@@ -39,8 +36,7 @@ export function FingerprintSetting() {
         const enrolledFingers = await cmd.fingerprint.listEnrolled(user);
         if (canceled) return;
 
-        const currentConfig =
-          useConfigurationStore.getState().config?.methods.fingerprint;
+        const currentConfig = useConfigurationStore.getState().config?.methods.fingerprint;
         if (!currentConfig) return;
 
         // Update local config if there's a mismatch (best effort)
@@ -52,9 +48,7 @@ export function FingerprintSetting() {
         if (needsSync) {
           const syncedFingers = enrolledFingers.map((name) => {
             const existing = currentConfig.fingers.find((f) => f.name === name);
-            return (
-              existing || { name, created_at: Math.floor(Date.now() / 1000) }
-            );
+            return existing || { name, created_at: Math.floor(Date.now() / 1000) };
           });
           setFingerprintConfig({ ...currentConfig, fingers: syncedFingers });
         }
@@ -63,7 +57,7 @@ export function FingerprintSetting() {
       }
     };
 
-    fetchUsername();
+    void fetchUsername();
 
     return () => {
       canceled = true;
@@ -84,8 +78,7 @@ export function FingerprintSetting() {
   ];
 
   const handleAdd = async () => {
-    const currentConfig =
-      useConfigurationStore.getState().config?.methods.fingerprint;
+    const currentConfig = useConfigurationStore.getState().config?.methods.fingerprint;
     if (!currentConfig) return;
 
     setIsAdding(true);
@@ -111,8 +104,7 @@ export function FingerprintSetting() {
       await cmd.fingerprint.enroll(username, selectedFinger);
 
       const formattedName = selectedFinger.replace(/-/g, " ");
-      const capitalizedName =
-        formattedName.charAt(0).toUpperCase() + formattedName.slice(1);
+      const capitalizedName = formattedName.charAt(0).toUpperCase() + formattedName.slice(1);
       toast.success(`${capitalizedName} enrolled!`, {
         id: toastId,
       });
@@ -127,7 +119,7 @@ export function FingerprintSetting() {
       });
       setSelectedFinger("");
     } catch (err) {
-      toast.error(`Enrollment failed: ${err}`, { id: toastId });
+      toast.error(`Enrollment failed: ${formatError(err)}`, { id: toastId });
     } finally {
       unlisten();
       setIsAdding(false);
@@ -135,15 +127,13 @@ export function FingerprintSetting() {
   };
 
   const handleDelete = async (fingerName: string) => {
-    const currentConfig =
-      useConfigurationStore.getState().config?.methods.fingerprint;
+    const currentConfig = useConfigurationStore.getState().config?.methods.fingerprint;
     if (!currentConfig) return;
 
     try {
       await cmd.fingerprint.remove(username, fingerName);
       const formattedName = fingerName.replace(/-/g, " ");
-      const capitalizedName =
-        formattedName.charAt(0).toUpperCase() + formattedName.slice(1);
+      const capitalizedName = formattedName.charAt(0).toUpperCase() + formattedName.slice(1);
       toast.success(`${capitalizedName} deleted`);
 
       setFingerprintConfig({
@@ -151,7 +141,7 @@ export function FingerprintSetting() {
         fingers: currentConfig.fingers.filter((f) => f.name !== fingerName),
       });
     } catch (err) {
-      toast.error(`Delete failed: ${err}`);
+      toast.error(`Delete failed: ${formatError(err)}`);
     }
   };
 
@@ -184,9 +174,7 @@ export function FingerprintSetting() {
             ))}
           </div>
         ) : (
-          <p className="text-xs text-muted-foreground italic">
-            No fingers registered yet.
-          </p>
+          <p className="text-xs text-muted-foreground italic">No fingers registered yet.</p>
         )}
       </div>
 
@@ -194,16 +182,12 @@ export function FingerprintSetting() {
         <h4 className="font-medium mb-3 text-sm">Enroll New Finger</h4>
         <div className="grid gap-3">
           <div className="grid gap-2">
-            <Label className="text-xs text-muted-foreground">
-              Select Finger
-            </Label>
+            <Label className="text-xs text-muted-foreground">Select Finger</Label>
             <Select value={selectedFinger} onValueChange={setSelectedFinger}>
               <SelectTrigger className="h-9">
                 <SelectValue placeholder="Select Finger">
                   {selectedFinger && (
-                    <span className="capitalize">
-                      {selectedFinger.replace(/-/g, " ")}
-                    </span>
+                    <span className="capitalize">{selectedFinger.replace(/-/g, " ")}</span>
                   )}
                 </SelectValue>
               </SelectTrigger>

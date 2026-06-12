@@ -30,8 +30,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { useConfigurationStore } from "../-stores/configuration-store";
 
-const PAM_MANUAL_SETUP_GUIDE_URL =
-  "https://github.com/TickLabVN/biopass/blob/main/docs/PAM.md";
+const PAM_MANUAL_SETUP_GUIDE_URL = "https://github.com/TickLabVN/biopass/blob/main/docs/PAM.md";
 
 function parseIgnoredServicesInput(raw: string): string[] {
   return raw
@@ -86,9 +85,8 @@ export function StrategyConfig() {
         <div className="p-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5">
           <Label className="text-sm font-semibold">System Sign-in Setup</Label>
           <p className="text-xs text-muted-foreground mt-1 max-w-140">
-            Biopass does not edit PAM configurations automatically. To use it
-            for login, unlock, or sudo, configure your PAM stack manually using
-            this guide:
+            Biopass does not edit PAM configurations automatically. To use it for login, unlock, or
+            sudo, configure your PAM stack manually using this guide:
           </p>
           <a
             href={PAM_MANUAL_SETUP_GUIDE_URL}
@@ -103,31 +101,23 @@ export function StrategyConfig() {
         {/* Debug Logging Toggle */}
         <div className="flex items-center justify-between p-3 rounded-lg border border-border transition-all">
           <div className="grid gap-0.5">
-            <Label
-              htmlFor="debug-enabled"
-              className="text-sm font-medium flex items-center gap-2"
-            >
+            <Label htmlFor="debug-enabled" className="text-sm font-medium flex items-center gap-2">
               Verbose Debug Logging
             </Label>
             <p className="text-xs text-muted-foreground max-w-100">
-              Enable detailed console output for authentication methods. Useful
-              for troubleshooting.
+              Enable detailed console output for authentication methods. Useful for troubleshooting.
             </p>
           </div>
           <Switch
             id="debug-enabled"
             checked={strategyConfig.debug}
-            onCheckedChange={(checked) =>
-              setStrategy({ ...strategyConfig, debug: checked })
-            }
+            onCheckedChange={(checked) => setStrategy({ ...strategyConfig, debug: checked })}
           />
         </div>
 
         {/* Execution Mode */}
         <div className="grid gap-2.5">
-          <Label className="text-sm font-medium text-muted-foreground">
-            Execution Mode
-          </Label>
+          <Label className="text-sm font-medium text-muted-foreground">Execution Mode</Label>
           <Select
             value={strategyConfig.execution_mode}
             onValueChange={(value) =>
@@ -161,26 +151,17 @@ export function StrategyConfig() {
           <div className="grid gap-2.5">
             <Label className="text-sm font-medium text-muted-foreground">
               Method Priority Order
-              <span className="text-xs text-muted-foreground/70 ml-2">
-                (drag to reorder)
-              </span>
+              <span className="text-xs text-muted-foreground/70 ml-2">(drag to reorder)</span>
             </Label>
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
               onDragEnd={handleDragEnd}
             >
-              <SortableContext
-                items={strategyConfig.order}
-                strategy={verticalListSortingStrategy}
-              >
+              <SortableContext items={strategyConfig.order} strategy={verticalListSortingStrategy}>
                 <div className="flex flex-col gap-2">
                   {strategyConfig.order.map((method, index) => (
-                    <SortableMethodItem
-                      key={method}
-                      id={method}
-                      index={index}
-                    />
+                    <SortableMethodItem key={method} id={method} index={index} />
                   ))}
                 </div>
               </SortableContext>
@@ -190,10 +171,7 @@ export function StrategyConfig() {
 
         {/* Ignored PAM Services */}
         <div className="grid gap-2.5">
-          <Label
-            htmlFor="ignored-services"
-            className="text-sm font-medium text-muted-foreground"
-          >
+          <Label htmlFor="ignored-services" className="text-sm font-medium text-muted-foreground">
             Ignored PAM Services (optional)
           </Label>
           <Input
@@ -209,8 +187,8 @@ export function StrategyConfig() {
             }}
           />
           <p className="text-xs text-muted-foreground">
-            Comma-separated PAM service names to bypass Biopass. Example:{" "}
-            <code>polkit-1</code>, <code>pkexec</code> or <code>sudo</code>.
+            Comma-separated PAM service names to bypass Biopass. Example: <code>polkit-1</code>,{" "}
+            <code>pkexec</code> or <code>sudo</code>.
           </p>
         </div>
       </div>
@@ -219,14 +197,9 @@ export function StrategyConfig() {
 }
 
 function SortableMethodItem({ id, index }: { id: string; index: number }) {
-  const {
-    attributes,
-    listeners,
-    setNodeRef,
-    transform,
-    transition,
-    isDragging,
-  } = useSortable({ id });
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),

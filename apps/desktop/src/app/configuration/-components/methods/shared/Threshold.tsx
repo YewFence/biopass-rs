@@ -12,9 +12,7 @@ export function Threshold({ label, value, onChange }: Props) {
     <div className="grid gap-2">
       <div className="flex items-center justify-between">
         <Label className="text-xs text-muted-foreground">{label}</Label>
-        <span className="text-xs font-mono font-medium">
-          {(value * 100).toFixed(0)}%
-        </span>
+        <span className="text-xs font-mono font-medium">{(value * 100).toFixed(0)}%</span>
       </div>
       <div className="h-9 flex items-center">
         <Slider

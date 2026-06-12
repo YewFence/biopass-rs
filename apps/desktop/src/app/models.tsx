@@ -4,12 +4,8 @@ import { Cpu, Terminal } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { cmd } from "@/commands";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { formatError } from "@/lib/utils";
 import type { ModelConfig } from "@/types/config";
 import { ModelStatus, type ModelStatusType } from "./-components/ModelStatus";
 
@@ -24,7 +20,7 @@ function ModelFileFolderButton({ path }: { path: string }) {
       await revealItemInDir(path);
     } catch (err) {
       console.error("Failed to open file location:", err);
-      toast.error(`Failed to open file location: ${err}`);
+      toast.error(`Failed to open file location: ${formatError(err)}`);
     }
   };
   return (
@@ -39,11 +35,7 @@ function ModelFileFolderButton({ path }: { path: string }) {
             {path.split(/[/]/).pop()}
           </button>
         </TooltipTrigger>
-        <TooltipContent
-          side="bottom"
-          align="end"
-          className="max-w-75 break-all"
-        >
+        <TooltipContent side="bottom" align="end" className="max-w-75 break-all">
           <p className="font-mono text-xs">{path}</p>
         </TooltipContent>
       </Tooltip>
@@ -63,15 +55,10 @@ function ModelCard({ model, status }: ModelCardProps) {
           </div>
           <div>
             <div className="flex items-center gap-4">
-              <h3
-                className="font-semibold leading-none truncate max-w-100"
-                title={filename}
-              >
+              <h3 className="font-semibold leading-none truncate max-w-100" title={filename}>
                 {filename}
               </h3>
-              <p className="text-xs text-muted-foreground capitalize mt-1 block">
-                {model.type}
-              </p>
+              <p className="text-xs text-muted-foreground capitalize mt-1 block">{model.type}</p>
             </div>
             <ModelFileFolderButton path={model.path} />
           </div>
@@ -95,10 +82,7 @@ function ModelsRouteComponent() {
   const hasMissing = Object.values(statusMap).some((s) => s === "missing");
 
   const checkModelsStatus = useCallback(async (modelList: ModelConfig[]) => {
-    const newStatuses: Record<
-      string,
-      "checking" | "available" | "missing" | "inuse"
-    > = {};
+    const newStatuses: Record<string, "checking" | "available" | "missing" | "inuse"> = {};
 
     for (const model of modelList) newStatuses[model.path] = "checking";
     setStatusMap({ ...newStatuses });
@@ -158,7 +142,7 @@ function ModelsRouteComponent() {
   }, [checkModelsStatus]);
 
   useEffect(() => {
-    loadModels();
+    void loadModels();
   }, [loadModels]);
 
   if (loading) {
@@ -190,15 +174,14 @@ function ModelsRouteComponent() {
               Some models are missing
             </p>
             <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-1">
-              Run the following command in a terminal to download missing
-              models:
+              Run the following command in a terminal to download missing models:
             </p>
             <code className="block mt-2 px-3 py-2 text-xs font-mono bg-background/50 rounded border border-amber-500/20 select-all">
               sudo /usr/bin/biopass-helper install
             </code>
             <p className="text-[11px] text-amber-800/60 dark:text-amber-300/60 mt-2">
-              The installer will download models with a progress bar, migrate
-              legacy configurations, and refresh the dynamic linker cache.
+              The installer will download models with a progress bar, migrate legacy configurations,
+              and refresh the dynamic linker cache.
             </p>
           </div>
         </div>
@@ -214,11 +197,7 @@ function ModelsRouteComponent() {
           </div>
         ) : (
           models.map((model) => (
-            <ModelCard
-              key={model.path}
-              model={model}
-              status={statusMap[model.path]}
-            />
+            <ModelCard key={model.path} model={model} status={statusMap[model.path]} />
           ))
         )}
       </div>

@@ -31,7 +31,7 @@ export function FaceSetting() {
       }
     };
 
-    fetchDevices();
+    void fetchDevices();
   }, []);
 
   const selectedCamera = useMemo(() => {
@@ -46,10 +46,7 @@ export function FaceSetting() {
     if (!irCameraPath) return null;
     return videoDevices.find((device) => device.path === irCameraPath) ?? null;
   }, [config, videoDevices]);
-  const antiSpoofModels = useMemo(
-    () => models.filter((m) => m.type === "anti-spoofing"),
-    [models],
-  );
+  const antiSpoofModels = useMemo(() => models.filter((m) => m.type === "anti-spoofing"), [models]);
 
   if (!config) return null;
 
@@ -76,10 +73,7 @@ export function FaceSetting() {
     <div className="grid gap-4">
       <div className="grid grid-cols-2 gap-6 p-4 rounded-lg bg-muted/50 border border-border/50">
         <div className="grid gap-2">
-          <Label
-            htmlFor="face-max-retries"
-            className="text-sm font-medium text-muted-foreground"
-          >
+          <Label htmlFor="face-max-retries" className="text-sm font-medium text-muted-foreground">
             Max Retries
           </Label>
           <Input
@@ -98,10 +92,7 @@ export function FaceSetting() {
           />
         </div>
         <div className="grid gap-2">
-          <Label
-            htmlFor="face-retry-delay"
-            className="text-sm font-medium text-muted-foreground"
-          >
+          <Label htmlFor="face-retry-delay" className="text-sm font-medium text-muted-foreground">
             Retry Delay (ms)
           </Label>
           <Input
@@ -124,10 +115,7 @@ export function FaceSetting() {
 
       <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
         <div className="grid gap-2">
-          <Label
-            htmlFor="camera-device"
-            className="text-sm font-medium text-muted-foreground"
-          >
+          <Label htmlFor="camera-device" className="text-sm font-medium text-muted-foreground">
             Camera Device
           </Label>
           <Select
@@ -144,9 +132,7 @@ export function FaceSetting() {
               <SelectValue placeholder="Auto-select (first device)" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value={disabledOption}>
-                Auto-select (first device)
-              </SelectItem>
+              <SelectItem value={disabledOption}>Auto-select (first device)</SelectItem>
               {cameraValue === unavailableCameraDeviceOption && (
                 <SelectItem value={unavailableCameraDeviceOption} disabled>
                   Selected camera unavailable
@@ -169,16 +155,13 @@ export function FaceSetting() {
 
         <div className="mt-3 flex items-start justify-between gap-4">
           <div className="grid gap-0.5 min-w-0">
-            <Label
-              htmlFor="auto-optimize-camera"
-              className="text-sm font-medium"
-            >
+            <Label htmlFor="auto-optimize-camera" className="text-sm font-medium">
               Auto-optimize Camera
             </Label>
             <p className="text-xs text-muted-foreground">
-              On startup, biopass adjusts auto white balance, exposure,
-              anti-flicker (50Hz), backlight compensation, and dynamic
-              framerate. <strong>Disable</strong> this if you use{" "}
+              On startup, biopass adjusts auto white balance, exposure, anti-flicker (50Hz),
+              backlight compensation, and dynamic framerate. <strong>Disable</strong> this if you
+              use{" "}
               <a
                 href="https://flathub.org/apps/hu.irl.cameractrls"
                 target="_blank"
@@ -187,8 +170,7 @@ export function FaceSetting() {
               >
                 cameractrls
               </a>{" "}
-              (recommended, supports per-device profiles) to fine-tune settings
-              yourself.
+              (recommended, supports per-device profiles) to fine-tune settings yourself.
             </p>
             <code className="text-xs text-muted-foreground break-all mt-1">
               flatpak install flathub hu.irl.cameractrls
@@ -270,10 +252,7 @@ export function FaceSetting() {
       <div className="p-4 rounded-lg bg-muted/50 border border-border/50 space-y-3">
         <h4 className="font-medium text-sm">Anti-Spoofing</h4>
         <div className="grid gap-2">
-          <Label
-            htmlFor="anti-spoofing-method"
-            className="text-xs text-muted-foreground"
-          >
+          <Label htmlFor="anti-spoofing-method" className="text-xs text-muted-foreground">
             AI Model
           </Label>
           <Select
@@ -482,10 +461,7 @@ function SubcheckRetries({
   return (
     <div className="grid grid-cols-2 gap-6 pt-1">
       <div className="grid gap-2">
-        <Label
-          htmlFor={`${idPrefix}-retries`}
-          className="text-xs text-muted-foreground"
-        >
+        <Label htmlFor={`${idPrefix}-retries`} className="text-xs text-muted-foreground">
           Sub-check Retries
         </Label>
         <Input
@@ -499,10 +475,7 @@ function SubcheckRetries({
         />
       </div>
       <div className="grid gap-2">
-        <Label
-          htmlFor={`${idPrefix}-retry-delay`}
-          className="text-xs text-muted-foreground"
-        >
+        <Label htmlFor={`${idPrefix}-retry-delay`} className="text-xs text-muted-foreground">
           Sub-check Retry Delay (ms)
         </Label>
         <Input
@@ -512,9 +485,7 @@ function SubcheckRetries({
           max="5000"
           step="100"
           value={retryDelayMs}
-          onChange={(e) =>
-            onRetryDelayChange(parseInt(e.target.value, 10) || 0)
-          }
+          onChange={(e) => onRetryDelayChange(parseInt(e.target.value, 10) || 0)}
           className="h-10"
         />
       </div>

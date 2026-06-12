@@ -8,16 +8,10 @@ import { FaceSetting } from "./face/FaceSetting";
 import { MethodCard } from "./MethodCard";
 
 export function MethodConfig() {
-  const faceConfig = useConfigurationStore(
-    (state) => state.config?.methods.face,
-  );
-  const fingerprintConfig = useConfigurationStore(
-    (state) => state.config?.methods.fingerprint,
-  );
+  const faceConfig = useConfigurationStore((state) => state.config?.methods.face);
+  const fingerprintConfig = useConfigurationStore((state) => state.config?.methods.fingerprint);
   const setFaceConfig = useConfigurationStore((state) => state.setFaceConfig);
-  const setFingerprintConfig = useConfigurationStore(
-    (state) => state.setFingerprintConfig,
-  );
+  const setFingerprintConfig = useConfigurationStore((state) => state.setFingerprintConfig);
   const [expandedMethod, setExpandedMethod] = useState<string | null>("face");
 
   if (!faceConfig || !fingerprintConfig) return null;
@@ -50,9 +44,7 @@ export function MethodConfig() {
           enabled={faceConfig.enable}
           onToggle={(enable) => setFaceConfig({ ...faceConfig, enable })}
           expanded={expandedMethod === "face"}
-          onExpand={() =>
-            setExpandedMethod(expandedMethod === "face" ? null : "face")
-          }
+          onExpand={() => setExpandedMethod(expandedMethod === "face" ? null : "face")}
         >
           <FaceSetting />
         </MethodCard>
@@ -63,14 +55,10 @@ export function MethodConfig() {
           icon={methodIcons.fingerprint}
           color={methodColors.fingerprint}
           enabled={fingerprintConfig.enable}
-          onToggle={(enable) =>
-            setFingerprintConfig({ ...fingerprintConfig, enable })
-          }
+          onToggle={(enable) => setFingerprintConfig({ ...fingerprintConfig, enable })}
           expanded={expandedMethod === "fingerprint"}
           onExpand={() =>
-            setExpandedMethod(
-              expandedMethod === "fingerprint" ? null : "fingerprint",
-            )
+            setExpandedMethod(expandedMethod === "fingerprint" ? null : "fingerprint")
           }
         >
           <div className="grid gap-4 pt-4">

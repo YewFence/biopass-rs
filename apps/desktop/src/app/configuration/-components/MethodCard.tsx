@@ -76,11 +76,7 @@ export function MethodCard({
           onKeyDown={(e) => e.stopPropagation()}
         >
           <div className="flex items-center gap-2 pr-2 border-r border-border/50">
-            <Switch
-              checked={enabled}
-              onCheckedChange={onToggle}
-              className="cursor-pointer"
-            />
+            <Switch checked={enabled} onCheckedChange={onToggle} className="cursor-pointer" />
           </div>
           <button
             type="button"
@@ -101,9 +97,7 @@ export function MethodCard({
       <div
         className={cn(
           "grid transition-all duration-200 ease-in-out",
-          expanded
-            ? "grid-rows-[1fr] opacity-100"
-            : "grid-rows-[0fr] opacity-0",
+          expanded ? "grid-rows-[1fr] opacity-100" : "grid-rows-[0fr] opacity-0",
         )}
       >
         <div className="overflow-hidden">

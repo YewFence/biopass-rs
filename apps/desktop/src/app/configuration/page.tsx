@@ -10,14 +10,12 @@ function ConfigurationRouteComponent() {
   const config = useConfigurationStore((state) => state.config);
   const loading = useConfigurationStore((state) => state.loading);
   const saving = useConfigurationStore((state) => state.saving);
-  const initializeConfig = useConfigurationStore(
-    (state) => state.initializeConfig,
-  );
+  const initializeConfig = useConfigurationStore((state) => state.initializeConfig);
   const saveConfig = useConfigurationStore((state) => state.saveConfig);
   const resetConfig = useConfigurationStore((state) => state.resetConfig);
 
   useEffect(() => {
-    initializeConfig();
+    void initializeConfig();
   }, [initializeConfig]);
 
   if (loading || !config) {

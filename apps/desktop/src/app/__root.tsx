@@ -1,9 +1,4 @@
-import {
-  createRootRoute,
-  Link,
-  Outlet,
-  useRouterState,
-} from "@tanstack/react-router";
+import { createRootRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Cpu, Laptop, Moon, Settings, Sun, User } from "lucide-react";
@@ -36,15 +31,11 @@ function App() {
     const sync = async () => {
       if (theme === "system") {
         const sysTheme = await window.theme();
-        if (sysTheme)
-          document.documentElement.classList.toggle(
-            "dark",
-            sysTheme === "dark",
-          );
+        if (sysTheme) document.documentElement.classList.toggle("dark", sysTheme === "dark");
       }
     };
 
-    sync();
+    void sync();
 
     const unlisten = window.onThemeChanged(({ payload: newTheme }) => {
       if (theme === "system") {
@@ -53,7 +44,7 @@ function App() {
     });
 
     return () => {
-      unlisten.then((fn) => fn());
+      void unlisten.then((fn) => fn());
     };
   }, [theme]);
 
@@ -90,8 +81,8 @@ function App() {
       }
     };
 
-    loadUsername();
-    loadInitialTheme();
+    void loadUsername();
+    void loadInitialTheme();
   }, [setTheme]);
 
   // Update theme in config when it changes manually via toggle
@@ -107,7 +98,7 @@ function App() {
         console.debug("Theme sync to config skipped or failed:", err);
       }
     };
-    if (theme) updateConfigTheme();
+    if (theme) void updateConfigTheme();
   }, [theme]);
 
   return (
@@ -119,9 +110,7 @@ function App() {
             <div className="flex items-center gap-8">
               <div className="flex items-center gap-3">
                 <img src={logo} className="h-8" alt="Biopass logo" />
-                <span className="font-bold text-lg hidden sm:inline-block">
-                  Biopass
-                </span>
+                <span className="font-bold text-lg hidden sm:inline-block">Biopass</span>
               </div>
 
               {/* Tab Navigation */}
@@ -155,35 +144,22 @@ function App() {
               <div className="flex items-center gap-4">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="cursor-pointer"
-                    >
+                    <Button variant="ghost" size="icon" className="cursor-pointer">
                       <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
                       <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
                       <span className="sr-only">Toggle theme</span>
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      onClick={() => setTheme("light")}
-                      className="cursor-pointer"
-                    >
+                    <DropdownMenuItem onClick={() => setTheme("light")} className="cursor-pointer">
                       <Sun className="mr-2 h-4 w-4" />
                       <span>Light</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setTheme("dark")}
-                      className="cursor-pointer"
-                    >
+                    <DropdownMenuItem onClick={() => setTheme("dark")} className="cursor-pointer">
                       <Moon className="mr-2 h-4 w-4" />
                       <span>Dark</span>
                     </DropdownMenuItem>
-                    <DropdownMenuItem
-                      onClick={() => setTheme("system")}
-                      className="cursor-pointer"
-                    >
+                    <DropdownMenuItem onClick={() => setTheme("system")} className="cursor-pointer">
                       <Laptop className="mr-2 h-4 w-4" />
                       <span>System</span>
                     </DropdownMenuItem>

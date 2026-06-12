@@ -2,6 +2,7 @@ import { toast } from "sonner";
 import { create } from "zustand";
 import { validateConfig } from "@/app/configuration/-components/validation";
 import { cmd } from "@/commands";
+import { formatError } from "@/lib/utils";
 import type {
   BiopassConfig,
   FaceMethodConfig,
@@ -36,7 +37,7 @@ export const useConfigurationStore = create<ConfigurationStore>((set, get) => ({
       const { config: loadedConfig } = await cmd.config.load();
       set({ config: loadedConfig, savedConfig: loadedConfig });
     } catch (err) {
-      toast.error(`Failed to load config: ${err}`);
+      toast.error(`Failed to load config: ${formatError(err)}`);
     } finally {
       set({ loading: false });
     }
@@ -56,7 +57,7 @@ export const useConfigurationStore = create<ConfigurationStore>((set, get) => ({
       toast.success("Settings saved successfully!");
     } catch (err) {
       console.error("Failed to save config:", err);
-      toast.error(`Failed to save config: ${err}`);
+      toast.error(`Failed to save config: ${formatError(err)}`);
     } finally {
       set({ saving: false });
     }

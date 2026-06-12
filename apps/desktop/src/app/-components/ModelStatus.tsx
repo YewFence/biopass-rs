@@ -9,11 +9,7 @@ interface ModelStatusProps {
   size?: "sm" | "default";
 }
 
-export function ModelStatus({
-  status,
-  className,
-  size = "default",
-}: ModelStatusProps) {
+export function ModelStatus({ status, className, size = "default" }: ModelStatusProps) {
   const isSmall = size === "sm";
   const badgeClass = isSmall ? "text-[10px] px-1.5 h-5 gap-1" : "gap-1.5 h-6";
   const iconSize = isSmall ? 12 : 14;

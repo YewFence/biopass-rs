@@ -39,7 +39,7 @@ export function ModelSelect({ label, value, models, error, onChange }: Props) {
       setStatusMap(newStatusMap);
     };
 
-    checkAllModels();
+    void checkAllModels();
   }, [models]);
 
   const isValid = selectedModel && statusMap[selectedModel.path];
@@ -63,14 +63,8 @@ export function ModelSelect({ label, value, models, error, onChange }: Props) {
             models.map((model) => (
               <SelectItem key={model.path} value={model.path}>
                 <div className="flex items-center gap-3 pr-6">
-                  <span className="truncate">
-                    {model.path.split("/").pop()}
-                  </span>
-                  <ModelStatus
-                    status={statusMap[model.path]}
-                    size="sm"
-                    className="h-4"
-                  />
+                  <span className="truncate">{model.path.split("/").pop()}</span>
+                  <ModelStatus status={statusMap[model.path]} size="sm" className="h-4" />
                 </div>
               </SelectItem>
             ))

@@ -63,9 +63,9 @@ rm -rf dist
 '''
 dir = "{{config_root}}/{{vars.app_dir}}"
 
-[tasks.lint-js]
-description = "Check JS/TS code with Biome"
-run = "bun run lint"
+[tasks.check-app]
+description = "Check frontend code with Vite+"
+run = "vp check ."
 dir = "{{config_root}}/{{vars.app_dir}}"
 
 [tasks.lint-rust]
@@ -76,12 +76,31 @@ run = "cargo fmt --all --check"
 description = "Check Rust code compilation"
 run = "cargo check --all"
 
+[tasks.build-rust]
+description = "Build Rust workspace"
+depends = ["check-rust"]
+run = "cargo build --all"
+
 [tasks.check]
 description = "Run all checks"
-depends = ["lint-js", "lint-rust", "check-rust"]
+depends = ["check-app", "lint-rust", "build-rust"]
+
+[tasks.fix-rust]
+description = "Format Rust code"
+run = "cargo fmt --all"
+
+[tasks.fix-app]
+description = "Auto-fix frontend formatting and lint issues with Vite+"
+run = "vp check --fix ."
+dir = "{{config_root}}/{{vars.app_dir}}"
+
+[tasks.fix]
+description = "Auto-fix Rust and frontend formatting where possible"
+depends = ["fix-rust", "fix-app"]
 
 [tools]
-node = "latest"
-rust = "latest"
-bun = "latest"
-lefthook = "latest"
+node = "24"
+rust = "1"
+bun = "1"
+lefthook = "2"
+viteplus = "0"

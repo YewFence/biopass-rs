@@ -3,9 +3,7 @@ import { cmd } from "@/commands";
 import type { BiopassConfig } from "@/types/config";
 
 export async function validateConfig(config: BiopassConfig): Promise<boolean> {
-  const registeredModelPaths = new Set(
-    (config.models || []).map((m) => m.path),
-  );
+  const registeredModelPaths = new Set((config.models || []).map((m) => m.path));
 
   if (config.methods.face.enable) {
     if (
@@ -25,9 +23,7 @@ export async function validateConfig(config: BiopassConfig): Promise<boolean> {
     if (
       config.methods.face.anti_spoofing.ai.enable &&
       (!config.methods.face.anti_spoofing.ai.model.path ||
-        !registeredModelPaths.has(
-          config.methods.face.anti_spoofing.ai.model.path,
-        ))
+        !registeredModelPaths.has(config.methods.face.anti_spoofing.ai.model.path))
     ) {
       toast.error("Valid Anti-Spoofing model is required when enabled");
       return false;
@@ -37,9 +33,7 @@ export async function validateConfig(config: BiopassConfig): Promise<boolean> {
     try {
       const samples = await cmd.face.listImages();
       if (samples.length === 0) {
-        toast.error(
-          "At least one face sample must be captured before enabling Face method",
-        );
+        toast.error("At least one face sample must be captured before enabling Face method");
         return false;
       }
     } catch (err) {
@@ -65,17 +59,13 @@ export async function validateConfig(config: BiopassConfig): Promise<boolean> {
     try {
       const exists = await cmd.file.exists(path);
       if (!exists) {
-        toast.error(
-          `Model file not found: ${path.split(/[\\/]/).pop()}. Please check AI Models.`,
-        );
+        toast.error(`Model file not found: ${path.split(/[\\/]/).pop()}. Please check AI Models.`);
         return false;
       }
     } catch (err) {
       console.error(`Failed to check model file at ${path}:`, err);
       toast.error(
-        err instanceof Error
-          ? err.message
-          : "Unknown error occurred while validating models",
+        err instanceof Error ? err.message : "Unknown error occurred while validating models",
       );
       return false;
     }

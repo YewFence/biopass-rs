@@ -5,15 +5,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { cmd } from "@/commands";
 import { Button } from "@/components/ui/button";
+import { formatError } from "@/lib/utils";
 import { useConfigurationStore } from "../../-stores/configuration-store";
 
 export function FaceCapture() {
   const previewRef = useRef<HTMLImageElement>(null);
   const [capturing, setCapturing] = useState(false);
   const [faceImages, setFaceImages] = useState<string[]>([]);
-  const camera = useConfigurationStore(
-    (state) => state.config?.methods.face.camera ?? null,
-  );
+  const camera = useConfigurationStore((state) => state.config?.methods.face.camera ?? null);
 
   const loadFaceImages = useCallback(async () => {
     try {
@@ -25,7 +24,7 @@ export function FaceCapture() {
   }, []);
 
   useEffect(() => {
-    loadFaceImages();
+    void loadFaceImages();
   }, [loadFaceImages]);
 
   // Subscribe to native preview frames whenever the session is active.
@@ -35,7 +34,7 @@ export function FaceCapture() {
     let unlisten: UnlistenFn | undefined;
     let cancelled = false;
 
-    listen<string>("face-preview-frame", (event) => {
+    void listen<string>("face-preview-frame", (event) => {
       if (previewRef.current) {
         previewRef.current.src = `data:image/jpeg;base64,${event.payload}`;
       }
@@ -64,13 +63,13 @@ export function FaceCapture() {
   useEffect(() => {
     if (!capturing) return;
     let alive = true;
-    (async () => {
+    void (async () => {
       try {
         await cmd.face.stopPreview();
         await cmd.face.startPreview(camera);
       } catch (err) {
         if (alive) {
-          toast.error(`Failed to switch camera: ${err}`);
+          toast.error(`Failed to switch camera: ${formatError(err)}`);
           setCapturing(false);
         }
       }
@@ -85,7 +84,7 @@ export function FaceCapture() {
       await cmd.face.startPreview(camera);
       setCapturing(true);
     } catch (err) {
-      toast.error(`Failed to start camera: ${err}`);
+      toast.error(`Failed to start camera: ${formatError(err)}`);
       console.error(err);
     }
   }
@@ -108,7 +107,7 @@ export function FaceCapture() {
       toast.success("Face image saved!");
       await loadFaceImages();
     } catch (err) {
-      toast.error(`${err}`);
+      toast.error(formatError(err));
     }
   }
 
@@ -118,7 +117,7 @@ export function FaceCapture() {
       toast.success("Face image deleted");
       await loadFaceImages();
     } catch (err) {
-      toast.error(`Failed to delete: ${err}`);
+      toast.error(`Failed to delete: ${formatError(err)}`);
     }
   }
 
@@ -174,9 +173,7 @@ export function FaceCapture() {
         {/* Saved Faces */}
         {faceImages.length > 0 && (
           <div>
-            <p className="text-sm text-muted-foreground mb-2">
-              Saved Faces ({faceImages.length})
-            </p>
+            <p className="text-sm text-muted-foreground mb-2">Saved Faces ({faceImages.length})</p>
             <div className="grid grid-cols-4 gap-2">
               {faceImages.map((path) => (
                 <div key={path} className="relative group">
