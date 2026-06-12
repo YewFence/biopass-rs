@@ -92,12 +92,6 @@ impl FaceAuth {
             ),
         );
 
-        log(LogLevel::Debug, "running anti-spoofing check");
-        if !self.check_anti_spoofing(username, auth_config, cancel_signal, &candidate)? {
-            log(LogLevel::Info, "anti-spoofing check rejected the candidate");
-            return Ok(AuthResult::Failure);
-        }
-
         log(LogLevel::Debug, "loading recognition model");
         let mut recognizer = FaceRecognizer::load(
             &self.config.recognition.model,
@@ -135,6 +129,12 @@ impl FaceAuth {
                 ),
             );
             if face_match.similar {
+                log(LogLevel::Debug, "running anti-spoofing check");
+                if !self.check_anti_spoofing(username, auth_config, cancel_signal, &candidate)? {
+                    log(LogLevel::Info, "anti-spoofing check rejected the candidate");
+                    return Ok(AuthResult::Failure);
+                }
+
                 log(LogLevel::Info, "face matched, authentication successful");
                 return Ok(AuthResult::Success);
             }
