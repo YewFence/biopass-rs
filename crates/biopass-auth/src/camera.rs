@@ -1,5 +1,6 @@
 use crate::{emit_log, LogLevel};
 use jpeg_decoder::{Decoder, PixelFormat as JpegPixelFormat};
+use serde::Serialize;
 use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
@@ -103,11 +104,25 @@ impl Default for CameraRequest {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct VideoDevice {
     pub path: PathBuf,
     pub driver: String,
     pub card: String,
+}
+
+impl VideoDevice {
+    pub fn display_name(&self) -> String {
+        if self.card.is_empty() {
+            self.path.display().to_string()
+        } else {
+            format!("{} ({})", self.card, self.path.display())
+        }
+    }
+
+    pub fn path_str(&self) -> String {
+        self.path.display().to_string()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

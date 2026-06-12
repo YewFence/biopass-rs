@@ -42,16 +42,16 @@ pub use camera::{
 };
 pub use config::{
     config_exists, config_path, list_faces, migrate_config_at_path, migrate_config_schema,
-    read_config, setup_config, user_data_dir, user_exists, AntiSpoofingConfig,
-    AntiSpoofingModelConfig, BiopassConfig, DetectionConfig, FaceMethodConfig, FingerConfig,
-    FingerprintMethodConfig, MethodConfig, MethodsConfig, ModelConfig, RecognitionConfig,
-    StrategyConfig,
+    read_config, read_config_from_path, setup_config, user_data_dir, user_exists,
+    AntiSpoofingConfig, AntiSpoofingModelConfig, BiopassConfig, DetectionConfig, FaceMethodConfig,
+    FingerConfig, FingerprintMethodConfig, MethodConfig, MethodsConfig, ModelConfig,
+    RecognitionConfig, StrategyConfig,
 };
 pub use face_antispoofing::{FaceAntiSpoofing, SpoofResult};
 pub use face_auth::FaceAuth;
 pub use face_detection::{FaceBox, FaceDetection, FaceDetector};
 pub use face_recognition::{FaceMatch, FaceRecognizer};
-pub use fingerprint_auth::FingerprintAuth;
+pub use fingerprint_auth::{EnrollStatusCallback, FingerprintAuth};
 pub use image_io::{decode_jpeg_rgb, encode_jpeg};
 pub use inference::{OrtModel, OrtTensorInfo};
 pub use installer::{check_models_present, download_models, migrate_all_users, run_ldconfig};

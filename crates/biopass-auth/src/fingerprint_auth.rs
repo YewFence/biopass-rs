@@ -13,6 +13,10 @@ const FPRINT_DEVICE_INTERFACE: &str = "net.reactivated.Fprint.Device";
 const CANCEL_POLL_INTERVAL: Duration = Duration::from_millis(50);
 const SIGNAL_LISTENER_SETUP_TIMEOUT: Duration = Duration::from_secs(2);
 
+pub trait EnrollStatusCallback: Send + Sync {
+    fn on_status(&self, status: &str, done: bool);
+}
+
 pub struct FingerprintAuth {
     config: FingerprintMethodConfig,
 }
@@ -20,6 +24,62 @@ pub struct FingerprintAuth {
 impl FingerprintAuth {
     pub fn new(config: FingerprintMethodConfig) -> Self {
         Self { config }
+    }
+
+    pub fn is_available(&self) -> bool {
+        self.config.enable && default_device().is_ok()
+    }
+
+    pub fn list_enrolled_fingers(&self, username: &str) -> Result<Vec<String>, String> {
+        let device = default_device()?;
+        device.list_enrolled_fingers(username)
+    }
+
+    pub fn enroll_with_callback(
+        &self,
+        username: &str,
+        finger_name: &str,
+        callback: Option<&dyn EnrollStatusCallback>,
+    ) -> Result<bool, String> {
+        let device = default_device()?;
+        let mut enroll_status = device
+            .proxy
+            .receive_signal("EnrollStatus")
+            .map_err(|error| format!("Failed to listen for fprintd EnrollStatus: {error}"))?;
+        let _claim = ClaimedDevice::claim(&device, username)?;
+
+        device.call_unit("EnrollStart", &(finger_name,))?;
+
+        let mut completed = false;
+        for message in &mut enroll_status {
+            let (status, done): (String, bool) = message
+                .body()
+                .deserialize()
+                .map_err(|error| format!("Failed to parse enrollment status: {error}"))?;
+
+            if let Some(cb) = callback {
+                cb.on_status(&status, done);
+            }
+
+            if done {
+                completed = status == "enroll-completed";
+                break;
+            }
+        }
+
+        device.call_unit("EnrollStop", &()).ok();
+        Ok(completed)
+    }
+
+    pub fn enroll(&self, username: &str, finger_name: &str) -> Result<bool, String> {
+        self.enroll_with_callback(username, finger_name, None)
+    }
+
+    pub fn remove_finger(&self, username: &str, finger_name: &str) -> Result<bool, String> {
+        let device = default_device()?;
+        let _claim = ClaimedDevice::claim(&device, username)?;
+        device.call_unit("DeleteEnrolledFinger", &(username, finger_name))?;
+        Ok(true)
     }
 
     fn authenticate_fingerprint(

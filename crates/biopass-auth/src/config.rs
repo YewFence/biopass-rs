@@ -456,12 +456,15 @@ pub fn user_exists(username: &str) -> bool {
     home_dir_for_user(username).is_some()
 }
 
-pub fn read_config(username: &str) -> Result<BiopassConfig, String> {
-    let path = config_path(username);
-    let config_text = fs::read_to_string(&path)
-        .map_err(|error| format!("Failed to read config {}: {error}", path.display()))?;
+pub fn read_config_from_path(config_path: &Path) -> Result<BiopassConfig, String> {
+    let config_text = fs::read_to_string(config_path)
+        .map_err(|error| format!("Failed to read config {}: {error}", config_path.display()))?;
     serde_yaml::from_str::<BiopassConfig>(&config_text)
-        .map_err(|error| format!("Failed to parse config {}: {error}", path.display()))
+        .map_err(|error| format!("Failed to parse config {}: {error}", config_path.display()))
+}
+
+pub fn read_config(username: &str) -> Result<BiopassConfig, String> {
+    read_config_from_path(&config_path(username))
 }
 
 pub fn migrate_config_at_path(path: &Path) -> io::Result<bool> {

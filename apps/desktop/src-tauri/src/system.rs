@@ -1,5 +1,4 @@
 use serde::Serialize;
-use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Serialize, Clone)]
@@ -31,44 +30,15 @@ pub fn get_current_username() -> Result<String, String> {
         .map_err(|_| "Could not determine current username".to_string())
 }
 
-fn video_device_sort_key(path: &str) -> i32 {
-    path.trim_start_matches("/dev/video")
-        .parse::<i32>()
-        .unwrap_or(-1)
-}
-
 #[tauri::command]
 pub fn list_video_devices() -> Result<Vec<VideoDeviceInfo>, String> {
-    let mut devices = Vec::new();
-    let entries = fs::read_dir("/dev").map_err(|e| format!("Failed to read /dev: {}", e))?;
-
-    for entry in entries {
-        if let Ok(entry) = entry {
-            let file_name = entry.file_name().to_string_lossy().to_string();
-            if !file_name.starts_with("video") {
-                continue;
-            }
-
-            let path = format!("/dev/{}", file_name);
-            let name = fs::read_to_string(format!("/sys/class/video4linux/{}/name", file_name))
-                .map(|value| value.trim().to_string())
-                .unwrap_or_default();
-            let display_name = if name.is_empty() {
-                path.clone()
-            } else {
-                format!("{} ({})", name, path)
-            };
-
-            devices.push(VideoDeviceInfo {
-                path,
-                name,
-                display_name,
-            });
-        }
-    }
-
-    // Sort naturally video0, video1, video2...
-    devices.sort_by(|a, b| video_device_sort_key(&a.path).cmp(&video_device_sort_key(&b.path)));
-
-    Ok(devices)
+    let devices = biopass_auth::list_video_devices();
+    Ok(devices
+        .into_iter()
+        .map(|dev| VideoDeviceInfo {
+            path: dev.path_str(),
+            name: dev.card.clone(),
+            display_name: dev.display_name(),
+        })
+        .collect())
 }
