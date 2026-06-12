@@ -15,7 +15,7 @@ default-members = [
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/TickLabVN/biopass"
+repository = "https://github.com/YewFence/biopass-rs"
 
 [workspace.dependencies]
 anyhow = "1"
