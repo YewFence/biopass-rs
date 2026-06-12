@@ -1,3 +1,5 @@
+use chrono::Local;
+
 pub mod camera;
 pub mod config;
 pub mod face_antispoofing;
@@ -21,10 +23,10 @@ pub enum LogLevel {
 impl LogLevel {
     pub fn as_prefix(self) -> &'static str {
         match self {
-            LogLevel::Info => "[info]",
-            LogLevel::Debug => "[debug]",
-            LogLevel::Warn => "[warn]",
-            LogLevel::Error => "[error]",
+            LogLevel::Info => "info",
+            LogLevel::Debug => "debug",
+            LogLevel::Warn => "warn",
+            LogLevel::Error => "error",
         }
     }
 }
@@ -33,7 +35,14 @@ pub fn emit_log(level: LogLevel, debug_enabled: bool, scope: &str, message: &str
     if !debug_enabled {
         return;
     }
-    eprintln!("{} [{}] {}", level.as_prefix(), scope, message);
+    let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S%.3f");
+    eprintln!(
+        "[{}] [biopass-rs] [{}] {}: {}",
+        timestamp,
+        level.as_prefix(),
+        scope,
+        message
+    );
 }
 
 pub use camera::{

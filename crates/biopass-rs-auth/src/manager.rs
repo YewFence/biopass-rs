@@ -5,6 +5,8 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
+use crate::{emit_log, LogLevel};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthResult {
     Success,
@@ -108,9 +110,25 @@ impl AuthManager {
                 continue;
             }
 
+            let method_name = auth_method_log_name(method.name()).to_string();
+            emit_log(
+                LogLevel::Debug,
+                self.config.debug,
+                "AuthManager",
+                &format!("Starting {method_name} authentication (sequential)"),
+            );
             method.begin_authentication_session();
             let result = authenticate_with_retries(method.as_mut(), username, &self.config, None);
             method.end_authentication_session();
+            emit_log(
+                LogLevel::Debug,
+                self.config.debug,
+                "AuthManager",
+                &format!(
+                    "{method_name} authentication finished with {:?} (sequential)",
+                    result
+                ),
+            );
 
             match result {
                 AuthResult::Success => {
@@ -150,6 +168,13 @@ impl AuthManager {
             let config = self.config;
             let cancel_signal = Arc::clone(&cancel_signal);
             handles.push(thread::spawn(move || {
+                let method_name = auth_method_log_name(method.name()).to_string();
+                emit_log(
+                    LogLevel::Debug,
+                    config.debug,
+                    "AuthManager",
+                    &format!("Starting {method_name} authentication (parallel)"),
+                );
                 method.begin_authentication_session();
                 let result = authenticate_with_retries(
                     method.as_mut(),
@@ -161,6 +186,15 @@ impl AuthManager {
                 if result == AuthResult::Success {
                     cancel_signal.store(true, Ordering::SeqCst);
                 }
+                emit_log(
+                    LogLevel::Debug,
+                    config.debug,
+                    "AuthManager",
+                    &format!(
+                        "{method_name} authentication finished with {:?} (parallel)",
+                        result
+                    ),
+                );
                 result
             }));
         }
@@ -193,6 +227,14 @@ impl AuthManager {
                 attempted: false,
             }
         }
+    }
+}
+
+fn auth_method_log_name(name: &str) -> &str {
+    match name {
+        "face" => "Face",
+        "fingerprint" => "Fingerprint",
+        other => other,
     }
 }
 
