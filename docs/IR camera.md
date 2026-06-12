@@ -1,5 +1,7 @@
 # IR Camera Guide
 
+[简体中文](IR%20camera.zh-CN.md) | English
+
 Biopass uses infrared (IR) camera for face anti-spoofing, rather than relying only on the RGB anti-spoofing AI model. This is usually configured as a Linux video device path such as `/dev/video2`. If your devices supports IR camera, you can turn on this option by using the configuration UI.
 
 ## Requirements

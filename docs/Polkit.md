@@ -1,5 +1,7 @@
 # Polkit Integration Guide
 
+[简体中文](Polkit.zh-CN.md) | English
+
 In some desktop environments, such as GNOME and KDE, when a user edits some important settings, they are required their password or fingerprint through an interactive dialog.
 
 ![Interactive Auth](./images/interactive-auth.png)

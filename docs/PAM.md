@@ -1,5 +1,7 @@
 # PAM Setup Guide
 
+[简体中文](PAM.zh-CN.md) | English
+
 If you are migrating from upstream Biopass, read [Migrating from upstream Biopass](upstream-migration.md) first. The upstream PAM module and `libbiopass_rs_pam.so` should not both be enabled for the same PAM service.
 
 ## Debian/Ubuntu

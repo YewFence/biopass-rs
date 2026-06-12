@@ -1,5 +1,7 @@
 # `biopass-rs-helper` CLI Reference
 
+[简体中文](biopass-rs-helper.zh-CN.md) | English
+
 `biopass-rs-helper` is the low-level command-line tool that the desktop GUI and the PAM module use to perform authentication, capture and crop face images, install AI models, and more. It is also the primary entry point for scripting and debugging.
 
 The binary is installed to `/usr/bin/biopass-rs-helper` when using the distro package. When developing from this repository, run it via:

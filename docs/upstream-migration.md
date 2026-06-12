@@ -1,5 +1,7 @@
 # Migrating from upstream Biopass
 
+[简体中文](upstream-migration.zh-CN.md) | English
+
 This project is an unofficial Rust rewrite of the upstream [TickLabVN/biopass](https://github.com/TickLabVN/biopass) project. It uses different binary names, PAM module names, and per-user storage paths, so a migration has two separate parts:
 
 1. User configuration and enrolled biometric data.

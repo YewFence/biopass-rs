@@ -1,4 +1,6 @@
-# Biopass-rs - An alternative to Howdy
+# Biopass-rs - Unofficial Rust Rewrite of Upstream Biopass
+
+[简体中文](README.zh-CN.md) | English
 
 <p align="center">
     <img src="https://public-r2.ticklab.site/media/tc1oN21KXhMM1B2jOecRhk=" alt="Biopass Logo" width="120" />
@@ -26,19 +28,19 @@
 
 ## Why Biopass-rs?
 
-While Windows Hello provides a seamless multi-modal biometric experience (Face, Fingerprint, PIN) on Windows 11, Linux has historically lacked a modern, unified equivalent. The most well-known project in this space, [Howdy](https://github.com/boltgolt/howdy), focuses exclusively on facial recognition and has not seen significant updates in recent years.
-
-[Biopass](https://github.com/TickLabVN/biopass) was developed by TickLab to fill this gap, providing a fast, secure, and modern biometric suite that goes beyond just face ID. This Rust rewrite is my personal take on the project — translating the C++ implementation into idiomatic Rust for educational purposes and because I enjoy writing Rust in my spare time.
+[Biopass](https://github.com/TickLabVN/biopass) was developed by TickLab, providing a fast, secure, and modern biometric suite for Linux that goes beyond just face recognition. This Rust rewrite is my personal take on the project — translating the C++ implementation into safer and clear Rust code.
 
 ## Comparison with Upstream
 
-| Area | Improvement | Details |
+| Feature | [Biopass](https://github.com/TickLabVN/biopass) | [Biopass-rs](https://github.com/YewFence/biopass-rs) |
 | :--- | :--- | :--- |
-| **AI model installation** | Pure Rust | Model download and install logic migrated from shell scripts to native Rust code |
-| **Anti-spoofing config** | Modular structure | Refactored into separate `ai` and `ir` modules for clearer configuration |
-| **Retry behavior** | Independent controls | AI and IR anti-spoofing checks now support separate retry configuration |
-| **Camera handling** | Quality optimization | Added image quality controls, dark-frame skipping for V4L2 GREY IR cameras, and an auto-optimize option |
-| **`biopass-rs-helper` ergonomics** | Expanded CLI surface | New subcommands beyond the upstream `auth` and `crop-face`: `migrate`, `install`, `capture-face`, `preview-session`, and `completion`; the `auth` subcommand's `--username` argument is now optional and falls back to environment variable lookup |
+| **AI Model Installation** | Shell script | Native Rust code |
+| **Anti-Spoofing Config Structure** | Flat array, ambiguous `ai` and `ir` switch state | Refactored into separate `ai` and `ir` modules for clearer configuration |
+| **Anti-Spoofing Retry** | Feature explicitly removed [#94](https://github.com/TickLabVN/biopass/pull/94) | AI and IR anti-spoofing checks support independent retry configuration |
+| **Camera Handling** | None | Added image auto-optimization option |
+| **IR Camera Capture Frame Quality Detection** | Under optimization, see [#116](https://github.com/TickLabVN/biopass/issues/116) | Automatically skips dark frames |
+| **Image Processing Path** | GUI uses browser API for image handling, PAM module during authentication uses OpenCV, [#114](https://github.com/TickLabVN/biopass/issues/114) | Both GUI and PAM module use Rust's jpeg crate for image processing, ensuring consistent image quality |
+| **`helper` CLI** | `auth` and `crop-face` commands | Added new subcommands: `migrate`, `install`, `capture-face`, `preview-session`, and `completion`; `auth` subcommand's `--username` automatically looks up from environment variables |
 
 ## Installation
 
@@ -56,9 +58,10 @@ While Windows Hello provides a seamless multi-modal biometric experience (Face, 
       - [x] Recognition
       - [x] Anti-spoofing
         - [x] With AI model
+          - [x] Configurable retry
         - [x] With IR camera
+          - [x] Configurable retry
     - [x] Fingerprint
-- [ ] Local AI model management: User can download, update, and delete AI models for supported authentication methods.
 
 Feel free to request new features or report bugs by opening an issue. For contributing, please read [CONTRIBUTING.md](docs/contributing.md).
 
