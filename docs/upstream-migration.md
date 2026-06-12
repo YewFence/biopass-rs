@@ -23,6 +23,25 @@ The config schema is mostly compatible, but the anti-spoofing section was split 
 
 ## Recommended package migration
 
+**Before starting**, verify if upstream Biopass is installed and active:
+
+```bash
+# Check for installed package
+dpkg -l | grep biopass          # Debian/Ubuntu
+rpm -qa | grep biopass          # Fedora/RHEL
+pacman -Q | grep biopass        # Arch Linux
+
+# Check for upstream PAM module in PAM configs
+grep -r "pam_biopass" /etc/pam.d/
+grep -r "biopass" /usr/share/pam-configs/  # Debian/Ubuntu only
+```
+
+If upstream Biopass is present, you have two choices:
+- **Coexist temporarily**: Install biopass-rs alongside upstream (recommended for testing)
+- **Clean migration**: Remove upstream first, then install biopass-rs
+
+### Step-by-step migration
+
 1. Install `biopass-rs`.
 
    The package post-install script runs:
@@ -64,6 +83,30 @@ The config schema is mostly compatible, but the anti-spoofing section was split 
    ```
 
    Do not close the root shell until this succeeds or until you have reverted the PAM change.
+
+6. (Optional) Remove upstream Biopass package after confirming biopass-rs works:
+
+   **Debian/Ubuntu:**
+   ```bash
+   sudo apt remove biopass
+   sudo apt autoremove
+   ```
+
+   **Fedora/RHEL:**
+   ```bash
+   sudo dnf remove biopass
+   ```
+
+   **Arch Linux:**
+   ```bash
+   sudo pacman -R biopass
+   ```
+
+   After removal, verify no upstream references remain:
+   ```bash
+   grep -r "pam_biopass" /etc/pam.d/
+   ls /usr/lib/security/pam_biopass.so 2>/dev/null
+   ```
 
 ## Manual migration
 
@@ -122,21 +165,112 @@ The upstream Biopass PAM module and `libbiopass_rs_pam.so` should not both be ac
 
 If both are present in the same PAM stack, both modules can try to authenticate the same login. Depending on the service order, that may cause duplicate prompts, camera or fingerprint device contention, inconsistent fall-through behavior, or one module succeeding while the other still runs for a later rule.
 
+### Detecting conflicts
+
+Check if both modules are active:
+
+```bash
+# List all PAM modules in auth stack
+grep "^auth" /etc/pam.d/common-auth 2>/dev/null    # Debian/Ubuntu
+grep "^auth" /etc/pam.d/system-auth 2>/dev/null    # Fedora/RHEL/Arch
+
+# Search for both modules across PAM configs
+grep -r "pam_biopass\|libbiopass_rs_pam" /etc/pam.d/
+```
+
+If you see both `pam_biopass.so` and `libbiopass_rs_pam.so` in the output, you have a conflict.
+
+### Resolving conflicts
+
+### Resolving conflicts
+
+**Debian/Ubuntu:**
+
 On Debian and Ubuntu, prefer `pam-auth-update` and keep only one Biopass profile enabled. The biopass-rs package installs `/usr/share/pam-configs/biopass-rs`, whose auth rule loads:
 
 ```pam
 auth    sufficient    libbiopass_rs_pam.so
 ```
 
-On Arch Linux or any manually edited PAM setup, remove the upstream module line from the services you want to protect and insert the biopass-rs module before the password fallback, for example:
-
-```pam
-auth sufficient libbiopass_rs_pam.so
-auth [success=1 default=ignore] pam_unix.so nullok
-auth requisite pam_deny.so
+To fix conflicts:
+```bash
+sudo pam-auth-update
+# Enable "Biopass" from biopass-rs
+# Disable any upstream Biopass profile
 ```
 
+Verify the fix:
+```bash
+grep "biopass" /etc/pam.d/common-auth
+# Should only show libbiopass_rs_pam.so, not pam_biopass.so
+```
+
+**Fedora/RHEL:**
+
+Edit your authselect custom profile or system-auth directly:
+
+```bash
+# Option 1: Using authselect custom profile
+sudo vi /etc/authselect/custom/biopass-custom/system-auth
+
+# Option 2: Direct edit (after authselect opt-out)
+sudo vi /etc/pam.d/system-auth
+```
+
+Remove or comment the upstream line:
+```pam
+# auth    sufficient    pam_biopass.so     # REMOVED - conflicts with biopass-rs
+auth      sufficient    libbiopass_rs_pam.so
+```
+
+Apply changes if using authselect:
+```bash
+sudo authselect select custom/biopass-custom --force
+```
+
+Verify:
+```bash
+grep "biopass" /etc/pam.d/system-auth
+```
+
+**Arch Linux:**
+
+On Arch Linux or any manually edited PAM setup, remove the upstream module line from the services you want to protect and insert the biopass-rs module before the password fallback, for example:
+
+```bash
+sudo vi /etc/pam.d/system-auth
+```
+
+Remove or comment upstream, add biopass-rs:
+```pam
+# auth    sufficient    pam_biopass.so     # REMOVED - conflicts with biopass-rs
+auth      sufficient    libbiopass_rs_pam.so
+auth      [success=1 default=ignore]    pam_unix.so nullok
+auth      requisite     pam_deny.so
+```
+
+Verify:
+```bash
+grep "biopass" /etc/pam.d/system-auth
+```
+
+### Additional conflicts
+
 If fingerprint is enabled in Biopass, do not also keep a separate `pam_fprintd.so` auth rule for the same service unless you intentionally want a second fingerprint path.
+
+To remove `pam_fprintd` conflicts:
+
+**Debian/Ubuntu:**
+```bash
+sudo pam-auth-update
+# Uncheck "Fingerprint authentication"
+```
+
+**Fedora/RHEL/Arch:**
+```bash
+sudo vi /etc/pam.d/system-auth
+# Remove or comment the pam_fprintd.so line
+```
 
 ## Rollback
 
