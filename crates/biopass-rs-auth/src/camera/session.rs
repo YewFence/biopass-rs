@@ -1,5 +1,5 @@
 use self_cell::self_cell;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use v4l::buffer::Type;
 use v4l::io::mmap::Stream as MmapStream;
 use v4l::prelude::Device;
@@ -9,6 +9,7 @@ use v4l::Format;
 use super::controls::apply_camera_optimizations;
 use super::decode::{decode_frame, unsupported_format_message};
 use super::device::{open_device, select_format};
+use super::ir::{capture_grey_ir_frame, GreyFrameLayout};
 use super::stream::next_frame_before;
 use super::{CameraRequest, FrameFormat, RgbFrame};
 
@@ -19,6 +20,9 @@ struct SessionOwner {
     width: u32,
     height: u32,
     stride: u32,
+    frame_read_timeout: Duration,
+    max_dark_frames: u32,
+    debug: bool,
 }
 
 impl std::fmt::Debug for SessionOwner {
@@ -28,6 +32,9 @@ impl std::fmt::Debug for SessionOwner {
             .field("width", &self.width)
             .field("height", &self.height)
             .field("stride", &self.stride)
+            .field("frame_read_timeout", &self.frame_read_timeout)
+            .field("max_dark_frames", &self.max_dark_frames)
+            .field("debug", &self.debug)
             .finish()
     }
 }
@@ -47,7 +54,6 @@ self_cell!(
 );
 
 const BUFFER_COUNT: u32 = 4;
-const FRAME_READ_TIMEOUT: Duration = Duration::from_millis(1000);
 
 impl CameraSession {
     /// Open the requested device, apply V4L2 format and (optionally) the
@@ -75,6 +81,9 @@ impl CameraSession {
             width: actual.width,
             height: actual.height,
             stride: actual.stride,
+            frame_read_timeout: request.timeout,
+            max_dark_frames: request.max_dark_frames,
+            debug: request.debug,
         };
 
         CameraSession::try_new(owner, |owner| {
@@ -87,8 +96,8 @@ impl CameraSession {
     /// balance can converge before the caller starts using `next_frame`.
     pub fn warmup(&mut self, frames: u32) -> Result<(), String> {
         for _ in 0..frames {
-            self.with_dependent_mut(|_owner, stream| {
-                next_frame_before(stream, FRAME_READ_TIMEOUT)
+            self.with_dependent_mut(|owner, stream| {
+                next_frame_before(stream, owner.frame_read_timeout)
             })?;
         }
         Ok(())
@@ -102,9 +111,29 @@ impl CameraSession {
                 width,
                 height,
                 stride,
+                frame_read_timeout,
+                max_dark_frames,
+                debug,
                 ..
             } = owner;
-            let buffer = next_frame_before(stream, FRAME_READ_TIMEOUT)?;
+            let deadline = Instant::now() + *frame_read_timeout;
+            let buffer = next_frame_before(stream, *frame_read_timeout)?;
+
+            if *format == FrameFormat::Grey {
+                return capture_grey_ir_frame(
+                    stream,
+                    &buffer,
+                    GreyFrameLayout {
+                        width: *width,
+                        height: *height,
+                        stride: *stride,
+                    },
+                    &deadline,
+                    *max_dark_frames,
+                    *debug,
+                );
+            }
+
             decode_frame(*format, *width, *height, *stride, &buffer)
         })
     }

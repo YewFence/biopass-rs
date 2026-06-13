@@ -4,10 +4,16 @@ use super::RgbFrame;
 use crate::{emit_log, LogLevel};
 use std::time::Instant;
 use v4l::io::mmap::Stream as MmapStream;
-use v4l::Format;
 
 const DARK_IR_MEAN_THRESHOLD: f64 = 10.0;
 const DARK_IR_MAX_THRESHOLD: u8 = 80;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) struct GreyFrameLayout {
+    pub(super) width: u32,
+    pub(super) height: u32,
+    pub(super) stride: u32,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 struct GreyFrameStats {
@@ -32,14 +38,16 @@ impl Default for GreyFrameStats {
 pub(super) fn capture_grey_ir_frame(
     stream: &mut MmapStream<'_>,
     warmup: &[u8],
-    actual: &Format,
+    layout: GreyFrameLayout,
     deadline: &Instant,
     max_dark_frames: u32,
     debug: bool,
 ) -> Result<RgbFrame, String> {
-    let width = actual.width;
-    let height = actual.height;
-    let stride = actual.stride;
+    let GreyFrameLayout {
+        width,
+        height,
+        stride,
+    } = layout;
 
     let mut skipped_dark_frames: u32 = 0;
     let mut last_dark: Option<(GreyFrameStats, RgbFrame)>;

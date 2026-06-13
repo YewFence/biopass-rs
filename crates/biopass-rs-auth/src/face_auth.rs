@@ -1,8 +1,7 @@
 use crate::{
-    camera_available, capture_rgb_frame, decode_jpeg_rgb, emit_log, encode_jpeg, list_faces,
-    user_data_dir, AuthConfig, AuthMethod, AuthResult, CameraRequest, CameraSession,
-    FaceAntiSpoofing, FaceBox, FaceDetector, FaceMethodConfig, FaceRecognizer, FrameFormat,
-    LogLevel, RgbFrame,
+    camera_available, decode_jpeg_rgb, emit_log, encode_jpeg, list_faces, user_data_dir,
+    AuthConfig, AuthMethod, AuthResult, CameraRequest, CameraSession, FaceAntiSpoofing, FaceBox,
+    FaceDetector, FaceMethodConfig, FaceRecognizer, FrameFormat, LogLevel, RgbFrame,
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,6 +25,7 @@ struct FaceAuthSession {
     anti_spoofing: Option<FaceAntiSpoofing>,
     ir_anti_spoofing: Option<FaceAntiSpoofing>,
     camera_session: Option<CameraSession>,
+    ir_camera_session: Option<CameraSession>,
 }
 
 impl FaceAuth {
@@ -455,9 +455,49 @@ impl FaceAuth {
         // Retry transient failures like frame capture errors
         let max_attempts = self.config.anti_spoofing.ir.retries.saturating_add(1);
         let retry_delay_ms = self.config.anti_spoofing.ir.retry_delay_ms;
+        if self.session.ir_camera_session.is_none() {
+            let request = ir_camera_request(&camera, debug);
+            let mut ir_session = match CameraSession::open(&request) {
+                Ok(session) => session,
+                Err(error) => {
+                    log(
+                        LogLevel::Warn,
+                        &format!("IR camera session open failed: {error}"),
+                    );
+                    return Ok(false);
+                }
+            };
+
+            if self.config.anti_spoofing.ir.warmup_delay_ms > 0 {
+                log(
+                    LogLevel::Debug,
+                    &format!(
+                        "sleeping {}ms for IR warmup",
+                        self.config.anti_spoofing.ir.warmup_delay_ms
+                    ),
+                );
+                std::thread::sleep(Duration::from_millis(
+                    self.config.anti_spoofing.ir.warmup_delay_ms as u64,
+                ));
+            }
+
+            if let Err(error) = ir_session.warmup(request.warmup_frames) {
+                log(LogLevel::Warn, &format!("IR camera warmup failed: {error}"));
+                return Ok(false);
+            }
+
+            self.session.ir_camera_session = Some(ir_session);
+        }
+
+        let mut ir_session = self
+            .session
+            .ir_camera_session
+            .take()
+            .expect("IR camera session is initialized");
+        let mut passed = false;
         for attempt in 1..=max_attempts {
             if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
-                return Ok(false);
+                break;
             }
             if attempt > 1 {
                 emit_log(
@@ -467,12 +507,27 @@ impl FaceAuth {
                     &format!("attempt {attempt}/{max_attempts}"),
                 );
             }
-            if self.check_ir_liveness(username, auth_config, &camera, rgb_frame, rgb_face_box)? {
-                return Ok(true);
+            let result = self.check_ir_liveness(
+                username,
+                auth_config,
+                &mut ir_session,
+                rgb_frame,
+                rgb_face_box,
+            );
+            match result {
+                Ok(true) => {
+                    passed = true;
+                    break;
+                }
+                Ok(false) => {}
+                Err(error) => {
+                    self.session.ir_camera_session = Some(ir_session);
+                    return Err(error);
+                }
             }
             if attempt < max_attempts {
                 if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
-                    return Ok(false);
+                    break;
                 }
                 if retry_delay_ms > 0 {
                     emit_log(
@@ -485,32 +540,20 @@ impl FaceAuth {
                 }
             }
         }
-        Ok(false)
+        self.session.ir_camera_session = Some(ir_session);
+        Ok(passed)
     }
 
     fn check_ir_liveness(
         &mut self,
         username: &str,
         auth_config: &AuthConfig,
-        camera: &str,
+        ir_session: &mut CameraSession,
         rgb_frame: &RgbFrame,
         rgb_face_box: FaceBox,
     ) -> Result<bool, String> {
         let debug = auth_config.debug;
         let log = |level: LogLevel, msg: &str| emit_log(level, debug, "FaceAntiSpoofingIr", msg);
-
-        if self.config.anti_spoofing.ir.warmup_delay_ms > 0 {
-            log(
-                LogLevel::Debug,
-                &format!(
-                    "sleeping {}ms for IR warmup",
-                    self.config.anti_spoofing.ir.warmup_delay_ms
-                ),
-            );
-            std::thread::sleep(Duration::from_millis(
-                self.config.anti_spoofing.ir.warmup_delay_ms as u64,
-            ));
-        }
 
         let min_face_area_ratio = self.config.anti_spoofing.ir.min_face_area_ratio;
 
@@ -536,7 +579,7 @@ impl FaceAuth {
                     IR_LIVENESS_FRAME_COUNT
                 ),
             );
-            let frame = match capture_rgb_frame(&ir_camera_request(camera, debug)) {
+            let frame = match ir_session.next_frame() {
                 Ok(frame) => frame,
                 Err(error) => {
                     log(LogLevel::Warn, &format!("IR frame capture failed: {error}"));

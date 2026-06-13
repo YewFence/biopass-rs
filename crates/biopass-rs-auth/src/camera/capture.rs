@@ -1,7 +1,7 @@
 use super::controls::apply_camera_optimizations;
 use super::decode::{decode_frame, unsupported_format_message};
 use super::device::{open_device, select_format};
-use super::ir::capture_grey_ir_frame;
+use super::ir::{capture_grey_ir_frame, GreyFrameLayout};
 use super::stream::next_frame_before;
 use super::{CameraRequest, FrameFormat, RgbFrame};
 use std::time::Instant;
@@ -50,7 +50,11 @@ pub fn capture_rgb_frame(request: &CameraRequest) -> Result<RgbFrame, String> {
         return capture_grey_ir_frame(
             &mut stream,
             &latest,
-            &actual,
+            GreyFrameLayout {
+                width: actual.width,
+                height: actual.height,
+                stride: actual.stride,
+            },
             &deadline,
             request.max_dark_frames,
             request.debug,
