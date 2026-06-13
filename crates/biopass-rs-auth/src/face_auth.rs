@@ -20,6 +20,7 @@ struct FaceAuthSession {
     detector: Option<FaceDetector>,
     recognizer: Option<FaceRecognizer>,
     anti_spoofing: Option<FaceAntiSpoofing>,
+    ir_anti_spoofing: Option<FaceAntiSpoofing>,
 }
 
 impl FaceAuth {
@@ -64,6 +65,16 @@ impl FaceAuth {
         }
 
         Ok(self.session.anti_spoofing.as_mut().unwrap())
+    }
+
+    fn ir_anti_spoofing(&mut self) -> Result<&mut FaceAntiSpoofing, String> {
+        if self.session.ir_anti_spoofing.is_none() {
+            let model = &self.config.anti_spoofing.ai.model;
+            self.session.ir_anti_spoofing =
+                Some(FaceAntiSpoofing::load(&model.path, model.threshold)?);
+        }
+
+        Ok(self.session.ir_anti_spoofing.as_mut().unwrap())
     }
 
     fn authenticate_face(
@@ -344,7 +355,7 @@ impl FaceAuth {
         }
 
         if ir_enabled {
-            log(LogLevel::Info, "running IR face presence check");
+            log(LogLevel::Info, "running IR face liveness check");
             if !self.run_ir_check_with_retries(username, auth_config, cancel_signal)? {
                 return Ok(false);
             }
@@ -374,7 +385,7 @@ impl FaceAuth {
                     &format!("attempt {attempt}/{max_attempts}"),
                 );
             }
-            if self.check_ir_face_presence(username, auth_config)? {
+            if self.check_ir_liveness(username, auth_config)? {
                 return Ok(true);
             }
             if attempt < max_attempts {
@@ -395,7 +406,7 @@ impl FaceAuth {
         Ok(false)
     }
 
-    fn check_ir_face_presence(
+    fn check_ir_liveness(
         &mut self,
         username: &str,
         auth_config: &AuthConfig,
@@ -422,6 +433,15 @@ impl FaceAuth {
             log(
                 LogLevel::Warn,
                 "detection model missing, cannot run IR check",
+            );
+            return Ok(false);
+        }
+
+        let model_path = self.config.anti_spoofing.ai.model.path.clone();
+        if model_path.is_empty() || !Path::new(&model_path).is_file() {
+            log(
+                LogLevel::Warn,
+                "IR anti-spoofing model missing, cannot run liveness check",
             );
             return Ok(false);
         }
@@ -460,11 +480,54 @@ impl FaceAuth {
             LogLevel::Debug,
             &format!("IR detection found {} face(s)", detections.len()),
         );
-        let has_face = !detections.is_empty();
-        if !has_face {
+        if detections.is_empty() {
+            log(
+                LogLevel::Info,
+                "no face detected in IR frame, treating as spoof",
+            );
             save_debug_frame_if_enabled(debug, username, &frame, "ir_no_face");
+            return Ok(false);
         }
-        Ok(has_face)
+
+        let best_detection = detections
+            .iter()
+            .max_by(|a, b| a.confidence.total_cmp(&b.confidence))
+            .expect("detections is non-empty");
+        log(
+            LogLevel::Debug,
+            &format!(
+                "selected IR face crop conf={:.4} bbox={}x{}",
+                best_detection.confidence,
+                best_detection.bbox.width(),
+                best_detection.bbox.height()
+            ),
+        );
+
+        let verdict = match self
+            .ir_anti_spoofing()
+            .and_then(|model| model.detect(&best_detection.crop))
+        {
+            Ok(verdict) => verdict,
+            Err(error) => {
+                save_debug_frame_if_enabled(
+                    debug,
+                    username,
+                    &best_detection.crop,
+                    "ir_classifier_error",
+                );
+                return Err(error);
+            }
+        };
+        log(
+            LogLevel::Debug,
+            &format!("IR liveness verdict: spoof={}", verdict.spoof),
+        );
+        if verdict.spoof {
+            save_debug_frame_if_enabled(debug, username, &best_detection.crop, "ir_spoof");
+            return Ok(false);
+        }
+
+        Ok(true)
     }
 }
 
