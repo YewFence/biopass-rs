@@ -1,11 +1,11 @@
 use super::auth::{EXIT_AUTH_ERR, EXIT_SUCCESS};
 use crate::cli::ConfigAction;
-use crate::utils::home_dir_for_username;
 use biopass_rs_auth::{
     bootstrap_config_at, config_path, migrate_config_schema, reset_config, user_exists,
     write_config_to_path, BiopassConfig, BootstrapOutcome,
 };
 use std::path::PathBuf;
+use users::os::unix::UserExt;
 
 pub(crate) fn run(username: &str, action: ConfigAction) -> u8 {
     if !user_exists(username) {
@@ -33,7 +33,7 @@ fn init(username: &str, force: bool) -> u8 {
         return EXIT_SUCCESS;
     }
 
-    let home = home_dir_for_username(username);
+    let home = users::get_user_by_name(username).map(|user| user.home_dir().to_path_buf());
     match bootstrap_config_at(&path, home.as_deref(), BiopassConfig::default) {
         Ok(BootstrapOutcome::AlreadyPresent) => {
             eprintln!(

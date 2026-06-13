@@ -23,6 +23,7 @@ jpeg-encoder.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
 tract-onnx.workspace = true
+users.workspace = true
 v4l.workspace = true
 zbus.workspace = true
 ureq = "3"

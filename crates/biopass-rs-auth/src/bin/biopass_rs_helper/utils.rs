@@ -1,29 +1,11 @@
 use biopass_rs_auth::read_config;
 use std::env;
-use std::path::PathBuf;
 
 pub(crate) fn resolve_username(explicit: Option<&str>) -> Option<String> {
     explicit
         .filter(|name| !name.is_empty())
         .map(str::to_owned)
         .or_else(current_username)
-}
-
-pub(crate) fn home_dir_for_username(username: &str) -> Option<PathBuf> {
-    let passwd = std::fs::read_to_string("/etc/passwd").ok()?;
-    passwd.lines().find_map(|line| {
-        let mut parts = line.split(':');
-        let name = parts.next()?;
-        if name != username {
-            return None;
-        }
-        let home = parts.nth(4)?;
-        if home.is_empty() {
-            None
-        } else {
-            Some(PathBuf::from(home))
-        }
-    })
 }
 
 pub(crate) fn current_username() -> Option<String> {

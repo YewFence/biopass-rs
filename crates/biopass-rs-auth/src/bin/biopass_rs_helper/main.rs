@@ -2,6 +2,7 @@ mod cli;
 mod commands;
 mod utils;
 
+use biopass_rs_auth::{set_config_path_override, set_data_dir_override};
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 use cli::{Cli, Commands};
@@ -12,6 +13,14 @@ use utils::resolve_username;
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+
+    if let Some(path) = cli.config.clone() {
+        set_config_path_override(path);
+    }
+    if let Some(path) = cli.data_dir.clone() {
+        set_data_dir_override(path);
+    }
+
     let username = cli.username;
     let code = match cli.command {
         Commands::Auth { service } => {

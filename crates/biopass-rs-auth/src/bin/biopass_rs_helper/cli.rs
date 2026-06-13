@@ -11,6 +11,17 @@ pub struct Cli {
     #[arg(short, long, global = true)]
     pub username: Option<String>,
 
+    /// Override the config file path. Useful for development and testing
+    /// without touching the user's real `~/.config/biopass-rs/config.yaml`.
+    /// Sets `BIOPASS_CONFIG` for the rest of the helper.
+    #[arg(short, long, global = true, value_name = "PATH")]
+    pub config: Option<PathBuf>,
+
+    /// Override the data directory (faces / debugs). Sets `BIOPASS_DATA_DIR`
+    /// for the rest of the helper.
+    #[arg(short = 'd', long, global = true, value_name = "DIR")]
+    pub data_dir: Option<PathBuf>,
+
     #[command(subcommand)]
     pub command: Commands,
 }
@@ -186,5 +197,66 @@ mod tests {
             Commands::Auth { service } => assert_eq!(service, "sudo"),
             _ => panic!("expected auth command"),
         }
+    }
+
+    #[test]
+    fn config_override_parses_short_and_long_flag() {
+        let cli = Cli::parse_from([
+            "biopass-rs-helper",
+            "-c",
+            "/tmp/dev-config.yaml",
+            "config",
+            "reset",
+        ]);
+        assert_eq!(
+            cli.config.as_deref(),
+            Some(std::path::Path::new("/tmp/dev-config.yaml"))
+        );
+
+        let cli = Cli::parse_from([
+            "biopass-rs-helper",
+            "--config",
+            "/tmp/dev-config.yaml",
+            "auth",
+            "--service",
+            "sudo",
+        ]);
+        assert_eq!(
+            cli.config.as_deref(),
+            Some(std::path::Path::new("/tmp/dev-config.yaml"))
+        );
+    }
+
+    #[test]
+    fn data_dir_override_parses_short_and_long_flag() {
+        let cli = Cli::parse_from([
+            "biopass-rs-helper",
+            "-d",
+            "/tmp/dev-data",
+            "auth",
+            "--service",
+            "sudo",
+        ]);
+        assert_eq!(
+            cli.data_dir.as_deref(),
+            Some(std::path::Path::new("/tmp/dev-data"))
+        );
+    }
+
+    #[test]
+    fn help_documents_config_and_data_dir_flags() {
+        let mut command = Cli::command();
+        let mut help = Vec::new();
+        command.write_long_help(&mut help).unwrap();
+        let help = String::from_utf8(help).unwrap();
+
+        assert!(
+            help.contains("--config"),
+            "missing --config in help: {help}"
+        );
+        assert!(
+            help.contains("--data-dir"),
+            "missing --data-dir in help: {help}"
+        );
     }
 }

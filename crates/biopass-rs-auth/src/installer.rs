@@ -4,6 +4,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
+use users::os::unix::UserExt;
 
 const MODELS: &[(&str, &str)] = &[
     (
@@ -33,20 +34,17 @@ const LEGACY_MODELS: &[&str] = &[
 const NEW_DATA_DIR: &str = ".local/share/biopass-rs";
 
 fn get_home_dir() -> Result<PathBuf, String> {
-    std::env::var("HOME")
-        .or_else(|_| {
-            std::env::var("SUDO_USER").and_then(|user| {
-                Command::new("getent")
-                    .args(["passwd", &user])
-                    .output()
-                    .ok()
-                    .and_then(|out| String::from_utf8(out.stdout).ok())
-                    .and_then(|s| s.split(':').nth(5).map(String::from))
-                    .ok_or(std::env::VarError::NotPresent)
-            })
-        })
-        .map(PathBuf::from)
-        .map_err(|_| "Cannot determine home directory".to_string())
+    if let Some(user) = std::env::var_os("SUDO_USER")
+        .filter(|value| !value.is_empty())
+        .and_then(|value| value.to_str().map(str::to_owned))
+    {
+        if let Some(home) = users::get_user_by_name(&user).map(|u| u.home_dir().to_path_buf()) {
+            return Ok(home);
+        }
+    }
+    users::get_user_by_uid(users::get_current_uid())
+        .map(|user| user.home_dir().to_path_buf())
+        .ok_or_else(|| "Cannot determine home directory".to_string())
 }
 
 fn download_file(

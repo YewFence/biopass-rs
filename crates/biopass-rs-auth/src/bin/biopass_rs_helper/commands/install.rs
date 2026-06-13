@@ -1,8 +1,9 @@
 use super::auth::{EXIT_AUTH_ERR, EXIT_SUCCESS};
-use crate::utils::{current_username, home_dir_for_username};
+use crate::utils::current_username;
 use biopass_rs_auth::{
     bootstrap_config_at, download_models, run_ldconfig, BiopassConfig, BootstrapOutcome,
 };
+use users::os::unix::UserExt;
 
 const NEW_CONFIG_PATH: &str = ".config/biopass-rs/config.yaml";
 const OLD_DATA_DIR: &str = ".local/share/com.ticklab.biopass";
@@ -54,7 +55,8 @@ pub(crate) fn model_download() -> u8 {
 fn bootstrap_current_user() -> Result<Option<String>, String> {
     let username = current_username()
         .ok_or_else(|| "Cannot determine current user (set USER/SUDO_USER)".to_string())?;
-    let home = home_dir_for_username(&username)
+    let home = users::get_user_by_name(&username)
+        .map(|user| user.home_dir().to_path_buf())
         .ok_or_else(|| format!("Cannot determine home directory for user '{username}'"))?;
 
     let new_config = home.join(NEW_CONFIG_PATH);
