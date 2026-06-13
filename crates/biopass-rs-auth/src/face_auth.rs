@@ -456,7 +456,11 @@ impl FaceAuth {
         let max_attempts = self.config.anti_spoofing.ir.retries.saturating_add(1);
         let retry_delay_ms = self.config.anti_spoofing.ir.retry_delay_ms;
         if self.session.ir_camera_session.is_none() {
-            let request = ir_camera_request(&camera, debug);
+            let request = ir_camera_request(
+                &camera,
+                self.config.anti_spoofing.ir.auto_optimize_camera,
+                debug,
+            );
             let mut ir_session = match CameraSession::open(&request) {
                 Ok(session) => session,
                 Err(error) => {
@@ -472,13 +476,16 @@ impl FaceAuth {
                 log(
                     LogLevel::Debug,
                     &format!(
-                        "sleeping {}ms for IR warmup",
+                        "streaming {}ms for IR warmup",
                         self.config.anti_spoofing.ir.warmup_delay_ms
                     ),
                 );
-                std::thread::sleep(Duration::from_millis(
+                if let Err(error) = ir_session.warmup_for(Duration::from_millis(
                     self.config.anti_spoofing.ir.warmup_delay_ms as u64,
-                ));
+                )) {
+                    log(LogLevel::Warn, &format!("IR camera warmup failed: {error}"));
+                    return Ok(false);
+                }
             }
 
             if let Err(error) = ir_session.warmup(request.warmup_frames) {
@@ -556,6 +563,7 @@ impl FaceAuth {
         let log = |level: LogLevel, msg: &str| emit_log(level, debug, "FaceAntiSpoofingIr", msg);
 
         let min_face_area_ratio = self.config.anti_spoofing.ir.min_face_area_ratio;
+        let model_diagnostic = !self.config.anti_spoofing.ir.ir_model_hard_fail;
 
         // Capture a short sequence of IR frames and run the liveness classifier
         // on each. We require a strict majority of accepted frames before the
@@ -701,6 +709,9 @@ impl FaceAuth {
                         &best_detection.crop,
                         "ir_classifier_error",
                     );
+                    if model_diagnostic {
+                        passed_frames += 1;
+                    }
                     continue;
                 }
             };
@@ -714,17 +725,33 @@ impl FaceAuth {
                 ),
             );
             if verdict.spoof {
-                log(
-                    LogLevel::Info,
-                    &format!(
-                        "IR liveness FAILED frame {}/{} (detection conf={:.4}, classifier score={:.4})",
-                        frame_idx + 1,
-                        IR_LIVENESS_FRAME_COUNT,
-                        highest_confidence,
-                        verdict.score
-                    ),
-                );
+                if model_diagnostic {
+                    log(
+                        LogLevel::Debug,
+                        &format!(
+                            "IR liveness classifier failed frame {}/{} as diagnostic (detection conf={:.4}, classifier score={:.4}, ir_model_hard_fail=false)",
+                            frame_idx + 1,
+                            IR_LIVENESS_FRAME_COUNT,
+                            highest_confidence,
+                            verdict.score
+                        ),
+                    );
+                } else {
+                    log(
+                        LogLevel::Info,
+                        &format!(
+                            "IR liveness FAILED frame {}/{} (detection conf={:.4}, classifier score={:.4})",
+                            frame_idx + 1,
+                            IR_LIVENESS_FRAME_COUNT,
+                            highest_confidence,
+                            verdict.score
+                        ),
+                    );
+                }
                 save_debug_frame_if_enabled(debug, username, &best_detection.crop, "ir_spoof");
+                if model_diagnostic {
+                    passed_frames += 1;
+                }
             } else {
                 passed_frames += 1;
             }
@@ -746,12 +773,13 @@ impl FaceAuth {
     }
 }
 
-fn ir_camera_request(camera: &str, debug: bool) -> CameraRequest {
+fn ir_camera_request(camera: &str, auto_optimize_camera: bool, debug: bool) -> CameraRequest {
     CameraRequest {
         device_path: Some(PathBuf::from(camera)),
         preferred_formats: vec![FrameFormat::Grey],
         warmup_frames: IR_CAPTURE_WARMUP_FRAMES,
         timeout: Duration::from_millis(IR_CAPTURE_TIMEOUT_MS),
+        auto_optimize_camera,
         debug,
         ..CameraRequest::default()
     }
@@ -1074,7 +1102,7 @@ mod tests {
 
     #[test]
     fn ir_camera_request_requires_grey_frames() {
-        let request = ir_camera_request("/dev/video2", false);
+        let request = ir_camera_request("/dev/video2", false, false);
 
         assert_eq!(request.device_path, Some(PathBuf::from("/dev/video2")));
         assert_eq!(request.preferred_formats, vec![FrameFormat::Grey]);
@@ -1083,5 +1111,13 @@ mod tests {
             request.timeout,
             Duration::from_millis(IR_CAPTURE_TIMEOUT_MS)
         );
+        assert!(!request.auto_optimize_camera);
+    }
+
+    #[test]
+    fn ir_camera_request_can_enable_auto_optimize() {
+        let request = ir_camera_request("/dev/video2", true, false);
+
+        assert!(request.auto_optimize_camera);
     }
 }

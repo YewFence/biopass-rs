@@ -19,6 +19,13 @@ export async function validateConfig(config: BiopassConfig): Promise<boolean> {
       toast.error("Valid Anti-Spoofing model is required when enabled");
       return false;
     }
+    if (
+      config.methods.face.anti_spoofing.ir.enable &&
+      !config.methods.face.anti_spoofing.ir.model.path
+    ) {
+      toast.error("Valid IR Liveness model is required when IR camera is enabled");
+      return false;
+    }
 
     // Validate face samples
     try {
@@ -44,6 +51,12 @@ export async function validateConfig(config: BiopassConfig): Promise<boolean> {
       config.methods.face.anti_spoofing.rgb.model.path
     ) {
       modelsToCheck.push(config.methods.face.anti_spoofing.rgb.model.path);
+    }
+    if (
+      config.methods.face.anti_spoofing.ir.enable &&
+      config.methods.face.anti_spoofing.ir.model.path
+    ) {
+      modelsToCheck.push(config.methods.face.anti_spoofing.ir.model.path);
     }
   }
   for (const path of modelsToCheck) {

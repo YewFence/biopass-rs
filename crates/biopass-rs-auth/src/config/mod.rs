@@ -400,10 +400,14 @@ methods:
             .ends_with("models/mobilenetv3_antispoof.onnx"));
         assert_eq!(anti["ir"]["retries"], Value::from(3));
         assert_eq!(anti["ir"]["warmup_delay_ms"], Value::from(600));
+        assert_eq!(anti["ir"]["auto_optimize_camera"], Value::Bool(false));
+        assert_eq!(anti["ir"]["ir_model_hard_fail"], Value::Bool(false));
 
         let config = read_config_from_path(&path).unwrap();
         assert!(!config.methods.face.anti_spoofing.rgb.enable);
         assert!(config.methods.face.anti_spoofing.ir.enable);
+        assert!(!config.methods.face.anti_spoofing.ir.auto_optimize_camera);
+        assert!(!config.methods.face.anti_spoofing.ir.ir_model_hard_fail);
     }
 
     #[test]
@@ -429,6 +433,8 @@ methods:
         enable: true
         camera: /dev/video4
         warmup_delay_ms: 400
+        auto_optimize_camera: false
+        ir_model_hard_fail: false
         model:
           path: /absolute/current-ir.onnx
           threshold: 0.8
@@ -447,6 +453,8 @@ methods:
         assert_eq!(config.methods.face.anti_spoofing.rgb.retry_delay_ms, 200);
         assert_eq!(config.methods.face.anti_spoofing.ir.retries, 0);
         assert_eq!(config.methods.face.anti_spoofing.ir.retry_delay_ms, 200);
+        assert!(!config.methods.face.anti_spoofing.ir.auto_optimize_camera);
+        assert!(!config.methods.face.anti_spoofing.ir.ir_model_hard_fail);
     }
 
     #[test]

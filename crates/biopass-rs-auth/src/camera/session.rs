@@ -103,6 +103,24 @@ impl CameraSession {
         Ok(())
     }
 
+    /// Keep the stream active for `duration`, discarding frames while camera
+    /// firmware converges exposure / gain.
+    pub fn warmup_for(&mut self, duration: Duration) -> Result<(), String> {
+        if duration.is_zero() {
+            return Ok(());
+        }
+
+        let deadline = Instant::now() + duration;
+        while Instant::now() < deadline {
+            let timeout = deadline.saturating_duration_since(Instant::now());
+            if timeout.is_zero() {
+                break;
+            }
+            self.with_dependent_mut(|_owner, stream| next_frame_before(stream, timeout))?;
+        }
+        Ok(())
+    }
+
     /// Read and decode the next frame from the open stream.
     pub fn next_frame(&mut self) -> Result<RgbFrame, String> {
         self.with_dependent_mut(|owner, stream| {

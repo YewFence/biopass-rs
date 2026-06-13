@@ -428,6 +428,60 @@ export function FaceSetting() {
                 }
               />
             </div>
+            <div className="flex items-start justify-between gap-4 pt-1">
+              <div className="grid gap-0.5 min-w-0">
+                <Label htmlFor="ir-model-hard-fail" className="text-sm font-medium">
+                  Hard-fail IR Model Score
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  When disabled, the IR model score is diagnostic if RGB AI liveness is enabled. IR
+                  face presence, size, and spatial matching still have to pass.
+                </p>
+              </div>
+              <Switch
+                id="ir-model-hard-fail"
+                checked={config.anti_spoofing.ir.ir_model_hard_fail}
+                onCheckedChange={(checked) =>
+                  setFaceConfig({
+                    ...config,
+                    anti_spoofing: {
+                      ...config.anti_spoofing,
+                      ir: {
+                        ...config.anti_spoofing.ir,
+                        ir_model_hard_fail: checked,
+                      },
+                    },
+                  })
+                }
+              />
+            </div>
+            <div className="flex items-start justify-between gap-4 pt-1">
+              <div className="grid gap-0.5 min-w-0">
+                <Label htmlFor="ir-auto-optimize-camera" className="text-sm font-medium">
+                  Auto-optimize IR Camera
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  Apply the same V4L2 exposure and image controls used by the RGB camera to the IR
+                  camera.
+                </p>
+              </div>
+              <Switch
+                id="ir-auto-optimize-camera"
+                checked={config.anti_spoofing.ir.auto_optimize_camera}
+                onCheckedChange={(checked) =>
+                  setFaceConfig({
+                    ...config,
+                    anti_spoofing: {
+                      ...config.anti_spoofing,
+                      ir: {
+                        ...config.anti_spoofing.ir,
+                        auto_optimize_camera: checked,
+                      },
+                    },
+                  })
+                }
+              />
+            </div>
             <div className="grid gap-2 pt-1">
               <Label htmlFor="ir-warmup-delay" className="text-xs text-muted-foreground">
                 IR Camera Startup Delay (ms)

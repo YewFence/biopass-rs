@@ -25,6 +25,7 @@ fn get_default_config(app: &AppHandle) -> BiopassConfig {
     config.methods.face.detection.model = model_path("yolov8n-face.onnx");
     config.methods.face.recognition.model = model_path("edgeface_s_gamma_05.onnx");
     config.methods.face.anti_spoofing.rgb.model.path = model_path("mobilenetv3_antispoof.onnx");
+    config.methods.face.anti_spoofing.ir.model.path = model_path("mobilenetv3_antispoof.onnx");
 
     config.models = vec![
         ModelConfig {

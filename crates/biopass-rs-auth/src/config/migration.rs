@@ -95,6 +95,8 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
     let mut has_ir_model_value = false;
     let mut ir_camera_path = None;
     let mut warmup_delay = default_ir_warmup_delay();
+    let mut ir_auto_optimize_camera = false;
+    let mut ir_model_hard_fail = false;
     let mut min_face_area_ratio = default_ir_min_face_area_ratio();
     let mut ai_retries = 0;
     let mut ai_retry_delay_ms = default_antispoofing_retry_delay();
@@ -162,6 +164,12 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
             if let Some(value) = extract_i64(ir, "warmup_delay_ms") {
                 warmup_delay = value as i32;
             }
+            if let Some(value) = extract_bool(ir, "auto_optimize_camera") {
+                ir_auto_optimize_camera = value;
+            }
+            if let Some(value) = extract_bool(ir, "ir_model_hard_fail") {
+                ir_model_hard_fail = value;
+            }
             if let Some(value) = extract_f64(ir, "min_face_area_ratio") {
                 min_face_area_ratio = value as f32;
             }
@@ -209,6 +217,14 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
         .and_then(|anti| anti.get(Value::String("ir".to_string())))
         .and_then(Value::as_mapping)
         .is_some_and(|ir| ir.contains_key(Value::String("model".to_string())));
+    let has_new_ir_auto_optimize_camera = anti
+        .and_then(|anti| anti.get(Value::String("ir".to_string())))
+        .and_then(Value::as_mapping)
+        .is_some_and(|ir| ir.contains_key(Value::String("auto_optimize_camera".to_string())));
+    let has_new_ir_model_hard_fail = anti
+        .and_then(|anti| anti.get(Value::String("ir".to_string())))
+        .and_then(Value::as_mapping)
+        .is_some_and(|ir| ir.contains_key(Value::String("ir_model_hard_fail".to_string())));
     let has_legacy_ir_key =
         anti.is_some_and(|anti| anti.contains_key(Value::String("ir_camera".to_string())));
     let has_legacy_ir_warmup =
@@ -222,7 +238,9 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
         || has_new_ai
         || !has_new_rgb
         || !has_new_ir
-        || !has_new_ir_model;
+        || !has_new_ir_model
+        || !has_new_ir_auto_optimize_camera
+        || !has_new_ir_model_hard_fail;
 
     if !has_ir_model_value {
         ir_model = model.clone();
@@ -267,6 +285,14 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
     ir_value.insert(
         Value::String("warmup_delay_ms".to_string()),
         Value::from(warmup_delay),
+    );
+    ir_value.insert(
+        Value::String("auto_optimize_camera".to_string()),
+        Value::Bool(ir_auto_optimize_camera),
+    );
+    ir_value.insert(
+        Value::String("ir_model_hard_fail".to_string()),
+        Value::Bool(ir_model_hard_fail),
     );
     let mut ir_model_value = Mapping::new();
     ir_model_value.insert(

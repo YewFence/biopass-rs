@@ -167,6 +167,10 @@ pub struct IrAntiSpoofingConfig {
     pub retry_delay_ms: u32,
     pub camera: Option<String>,
     pub warmup_delay_ms: i32,
+    #[serde(default)]
+    pub auto_optimize_camera: bool,
+    #[serde(default)]
+    pub ir_model_hard_fail: bool,
     #[serde(default = "default_ir_min_face_area_ratio")]
     pub min_face_area_ratio: f32,
     pub model: AntiSpoofingModelConfig,
@@ -180,6 +184,8 @@ impl Default for IrAntiSpoofingConfig {
             retry_delay_ms: default_antispoofing_retry_delay(),
             camera: None,
             warmup_delay_ms: 300,
+            auto_optimize_camera: false,
+            ir_model_hard_fail: false,
             min_face_area_ratio: default_ir_min_face_area_ratio(),
             model: AntiSpoofingModelConfig::default(),
         }
@@ -203,6 +209,10 @@ impl<'de> Deserialize<'de> for IrAntiSpoofingConfig {
             camera: Option<String>,
             #[serde(default = "default_ir_warmup_delay")]
             warmup_delay_ms: i32,
+            #[serde(default)]
+            auto_optimize_camera: bool,
+            #[serde(default)]
+            ir_model_hard_fail: bool,
             #[serde(default = "default_ir_min_face_area_ratio")]
             min_face_area_ratio: f32,
             #[serde(default)]
@@ -221,6 +231,8 @@ impl<'de> Deserialize<'de> for IrAntiSpoofingConfig {
             retry_delay_ms: raw.retry_delay_ms,
             camera: raw.camera,
             warmup_delay_ms: raw.warmup_delay_ms,
+            auto_optimize_camera: raw.auto_optimize_camera,
+            ir_model_hard_fail: raw.ir_model_hard_fail,
             min_face_area_ratio: raw.min_face_area_ratio,
             model,
         })
