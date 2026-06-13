@@ -41,13 +41,7 @@ pub fn config_path(username: &str) -> PathBuf {
     if let Some(env_path) = env_path(CONFIG_PATH_ENV) {
         return env_path;
     }
-    match users::get_user_by_name(username) {
-        Some(user) => user.home_dir().to_path_buf().join(CONFIG_FILE),
-        None => std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .map(|home| home.join(CONFIG_FILE))
-            .unwrap_or_else(|| PathBuf::from("/etc/biopass-rs/config.yaml")),
-    }
+    resolve_user_home(username, PathBuf::from("/etc/biopass-rs")).join(CONFIG_FILE)
 }
 
 /// Resolve the active data directory for `username` (faces / debugs / ...).
@@ -58,7 +52,7 @@ pub fn config_path(username: &str) -> PathBuf {
 /// 3. The home directory from the system user database joined with
 ///    [`DATA_DIR`].
 /// 4. `$HOME` joined with [`DATA_DIR`].
-/// 5. Empty path as a last resort.
+/// 5. `/etc/biopass-rs` as a last resort.
 pub fn user_data_dir(username: &str) -> PathBuf {
     if let Some(override_dir) = data_dir_override() {
         return override_dir;
@@ -66,12 +60,7 @@ pub fn user_data_dir(username: &str) -> PathBuf {
     if let Some(env_dir) = env_path(DATA_DIR_ENV) {
         return env_dir;
     }
-    let home_from_user =
-        users::get_user_by_name(username).map(|user| user.home_dir().to_path_buf());
-    home_from_user
-        .or_else(|| std::env::var_os("HOME").map(PathBuf::from))
-        .map(|home| home.join(DATA_DIR))
-        .unwrap_or_default()
+    resolve_user_home(username, PathBuf::from("/etc/biopass-rs")).join(DATA_DIR)
 }
 
 /// Set a CLI override for the config path. Subsequent calls to
@@ -110,8 +99,13 @@ fn env_path(key: &str) -> Option<PathBuf> {
     }
 }
 
-pub fn config_exists(username: &str) -> bool {
-    config_path(username).is_file()
+/// Resolve a user's home directory, falling back to $HOME and then a provided
+/// default path.
+fn resolve_user_home(username: &str, fallback: PathBuf) -> PathBuf {
+    users::get_user_by_name(username)
+        .map(|user| user.home_dir().to_path_buf())
+        .or_else(|| std::env::var_os("HOME").map(PathBuf::from))
+        .unwrap_or(fallback)
 }
 
 pub fn user_exists(username: &str) -> bool {
@@ -123,10 +117,6 @@ pub fn read_config_from_path(config_path: &Path) -> Result<BiopassConfig, String
         .map_err(|error| format!("Failed to read config {}: {error}", config_path.display()))?;
     serde_yaml::from_str::<BiopassConfig>(&config_text)
         .map_err(|error| config_parse_error_message(config_path, &error.to_string()))
-}
-
-pub fn read_config(username: &str) -> Result<BiopassConfig, String> {
-    read_config_from_path(&config_path(username))
 }
 
 pub fn list_faces(username: &str) -> Vec<PathBuf> {
@@ -167,10 +157,6 @@ pub fn write_config_to_path(path: &Path, config: &BiopassConfig) -> Result<(), S
 /// overwrites; used by `config reset` and the GUI "Reset to defaults" flow.
 pub fn reset_config_at_path(path: &Path) -> Result<(), String> {
     write_config_to_path(path, &BiopassConfig::default())
-}
-
-pub fn reset_config(username: &str) -> Result<(), String> {
-    reset_config_at_path(&config_path(username))
 }
 
 pub(super) fn is_supported_face_image(path: &Path) -> bool {

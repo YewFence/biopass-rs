@@ -1,4 +1,3 @@
-use super::paths::config_path;
 use super::schema::{read_antispoofing_model, AntiSpoofingModelConfig};
 use super::serde_defaults::{
     default_antispoofing_retry_delay, default_ir_min_face_area_ratio, default_ir_warmup_delay,
@@ -7,6 +6,43 @@ use serde_yaml::{Mapping, Value};
 use std::fs;
 use std::io;
 use std::path::Path;
+
+/// Extract a boolean field from a YAML mapping.
+fn extract_bool(map: &Mapping, key: &str) -> Option<bool> {
+    map.get(Value::String(key.to_string()))
+        .and_then(Value::as_bool)
+}
+
+/// Extract a string field from a YAML mapping.
+fn extract_string(map: &Mapping, key: &str) -> Option<String> {
+    map.get(Value::String(key.to_string()))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+}
+
+/// Extract an i64 field from a YAML mapping.
+fn extract_i64(map: &Mapping, key: &str) -> Option<i64> {
+    map.get(Value::String(key.to_string()))
+        .and_then(Value::as_i64)
+}
+
+/// Extract a u64 field from a YAML mapping.
+fn extract_u64(map: &Mapping, key: &str) -> Option<u64> {
+    map.get(Value::String(key.to_string()))
+        .and_then(Value::as_u64)
+}
+
+/// Extract an f64 field from a YAML mapping.
+fn extract_f64(map: &Mapping, key: &str) -> Option<f64> {
+    map.get(Value::String(key.to_string()))
+        .and_then(Value::as_f64)
+}
+
+/// Extract a nested mapping from a YAML mapping.
+fn extract_mapping<'a>(map: &'a Mapping, key: &str) -> Option<&'a Mapping> {
+    map.get(Value::String(key.to_string()))
+        .and_then(Value::as_mapping)
+}
 
 pub fn migrate_config_at_path(path: &Path) -> io::Result<bool> {
     let Ok(config_text) = fs::read_to_string(path) else {
@@ -36,14 +72,8 @@ pub fn migrate_config_at_path(path: &Path) -> io::Result<bool> {
     Ok(true)
 }
 
-pub fn migrate_config_schema(username: &str) -> io::Result<bool> {
-    migrate_config_at_path(&config_path(username))
-}
-
 pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
-    let anti = face
-        .get(Value::String("anti_spoofing".to_string()))
-        .and_then(Value::as_mapping);
+    let anti = extract_mapping(face, "anti_spoofing");
 
     let mut enable = false;
     let mut model = AntiSpoofingModelConfig::default();
@@ -59,157 +89,85 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
     let mut ir_retry_delay_ms = default_antispoofing_retry_delay();
 
     if let Some(anti) = anti {
-        if let Some(value) = anti
-            .get(Value::String("enable".to_string()))
-            .and_then(Value::as_bool)
-        {
+        if let Some(value) = extract_bool(anti, "enable") {
             enable = value;
         }
         if let Some(value) = anti.get(Value::String("model".to_string())) {
             read_antispoofing_model(value, &mut model);
         }
-        if let Some(value) = anti
-            .get(Value::String("threshold".to_string()))
-            .and_then(Value::as_f64)
-        {
+        if let Some(value) = extract_f64(anti, "threshold") {
             model.threshold = value as f32;
         }
-        if let Some(value) = anti
-            .get(Value::String("ir_camera".to_string()))
-            .and_then(Value::as_str)
-        {
-            ir_camera_path = Some(value.to_string());
+        if let Some(value) = extract_string(anti, "ir_camera") {
+            ir_camera_path = Some(value.clone());
             ir_enable = !value.is_empty();
         }
-        if let Some(value) = anti
-            .get(Value::String("ir_warmup_delay_ms".to_string()))
-            .and_then(Value::as_i64)
-        {
+        if let Some(value) = extract_i64(anti, "ir_warmup_delay_ms") {
             warmup_delay = value as i32;
         }
-        if let Some(rgb) = anti
-            .get(Value::String("rgb".to_string()))
-            .and_then(Value::as_mapping)
-        {
-            if let Some(value) = rgb
-                .get(Value::String("enable".to_string()))
-                .and_then(Value::as_bool)
-            {
+        if let Some(rgb) = extract_mapping(anti, "rgb") {
+            if let Some(value) = extract_bool(rgb, "enable") {
                 enable = value;
             }
             if let Some(value) = rgb.get(Value::String("model".to_string())) {
                 read_antispoofing_model(value, &mut model);
             }
-            if let Some(value) = rgb
-                .get(Value::String("threshold".to_string()))
-                .and_then(Value::as_f64)
-            {
+            if let Some(value) = extract_f64(rgb, "threshold") {
                 model.threshold = value as f32;
             }
-            if let Some(value) = rgb
-                .get(Value::String("retries".to_string()))
-                .and_then(Value::as_u64)
-            {
+            if let Some(value) = extract_u64(rgb, "retries") {
                 ai_retries = value as u32;
             }
-            if let Some(value) = rgb
-                .get(Value::String("retry_delay_ms".to_string()))
-                .and_then(Value::as_u64)
-            {
+            if let Some(value) = extract_u64(rgb, "retry_delay_ms") {
                 ai_retry_delay_ms = value as u32;
             }
-        } else if let Some(ai) = anti
-            .get(Value::String("ai".to_string()))
-            .and_then(Value::as_mapping)
-        {
-            if let Some(value) = ai
-                .get(Value::String("enable".to_string()))
-                .and_then(Value::as_bool)
-            {
+        } else if let Some(ai) = extract_mapping(anti, "ai") {
+            if let Some(value) = extract_bool(ai, "enable") {
                 enable = value;
             }
             if let Some(value) = ai.get(Value::String("model".to_string())) {
                 read_antispoofing_model(value, &mut model);
             }
-            if let Some(value) = ai
-                .get(Value::String("threshold".to_string()))
-                .and_then(Value::as_f64)
-            {
+            if let Some(value) = extract_f64(ai, "threshold") {
                 model.threshold = value as f32;
             }
-            if let Some(value) = ai
-                .get(Value::String("retries".to_string()))
-                .and_then(Value::as_u64)
-            {
+            if let Some(value) = extract_u64(ai, "retries") {
                 ai_retries = value as u32;
             }
-            if let Some(value) = ai
-                .get(Value::String("retry_delay_ms".to_string()))
-                .and_then(Value::as_u64)
-            {
+            if let Some(value) = extract_u64(ai, "retry_delay_ms") {
                 ai_retry_delay_ms = value as u32;
             }
         }
-        if let Some(ir) = anti
-            .get(Value::String("ir".to_string()))
-            .and_then(Value::as_mapping)
-        {
-            if let Some(value) = ir
-                .get(Value::String("enable".to_string()))
-                .and_then(Value::as_bool)
-            {
+        if let Some(ir) = extract_mapping(anti, "ir") {
+            if let Some(value) = extract_bool(ir, "enable") {
                 ir_enable = value;
             }
-            if let Some(value) = ir
-                .get(Value::String("camera".to_string()))
-                .and_then(Value::as_str)
-            {
-                ir_camera_path = Some(value.to_string());
+            if let Some(value) = extract_string(ir, "camera") {
+                ir_camera_path = Some(value);
             }
-            if let Some(value) = ir
-                .get(Value::String("warmup_delay_ms".to_string()))
-                .and_then(Value::as_i64)
-            {
+            if let Some(value) = extract_i64(ir, "warmup_delay_ms") {
                 warmup_delay = value as i32;
             }
-            if let Some(value) = ir
-                .get(Value::String("min_face_area_ratio".to_string()))
-                .and_then(Value::as_f64)
-            {
+            if let Some(value) = extract_f64(ir, "min_face_area_ratio") {
                 min_face_area_ratio = value as f32;
             }
             if let Some(value) = ir.get(Value::String("model".to_string())) {
                 read_antispoofing_model(value, &mut ir_model);
                 has_ir_model_value = true;
             }
-            if let Some(value) = ir
-                .get(Value::String("retries".to_string()))
-                .and_then(Value::as_u64)
-            {
+            if let Some(value) = extract_u64(ir, "retries") {
                 ir_retries = value as u32;
             }
-            if let Some(value) = ir
-                .get(Value::String("retry_delay_ms".to_string()))
-                .and_then(Value::as_u64)
-            {
+            if let Some(value) = extract_u64(ir, "retry_delay_ms") {
                 ir_retry_delay_ms = value as u32;
             }
         }
     }
 
     if ir_camera_path.as_deref().unwrap_or_default().is_empty() {
-        if let Some(legacy_ir) = face
-            .get(Value::String("ir_camera".to_string()))
-            .and_then(Value::as_mapping)
-        {
-            let enabled = legacy_ir
-                .get(Value::String("enable".to_string()))
-                .and_then(Value::as_bool)
-                .unwrap_or(false);
-            let device_id = legacy_ir
-                .get(Value::String("device_id".to_string()))
-                .and_then(Value::as_i64)
-                .unwrap_or(0);
+        if let Some(legacy_ir) = extract_mapping(face, "ir_camera") {
+            let enabled = extract_bool(legacy_ir, "enable").unwrap_or(false);
+            let device_id = extract_i64(legacy_ir, "device_id").unwrap_or(0);
             if enabled {
                 ir_camera_path = Some(format!("/dev/video{}", device_id));
                 ir_enable = true;

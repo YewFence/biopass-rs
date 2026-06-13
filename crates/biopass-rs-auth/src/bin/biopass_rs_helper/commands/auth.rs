@@ -1,5 +1,6 @@
 use biopass_rs_auth::{
-    config_exists, read_config, user_exists, AuthManager, FaceAuth, FingerprintAuth, PamCode,
+    config_path, read_config_from_path, user_exists, AuthManager, FaceAuth, FingerprintAuth,
+    PamCode,
 };
 
 pub(crate) const EXIT_SUCCESS: u8 = 0;
@@ -16,11 +17,12 @@ pub(crate) fn authenticate(_username: Option<&str>, service: Option<&str>) -> u8
         return EXIT_IGNORE;
     }
 
-    if !config_exists(&username) {
+    let config_path = config_path(&username);
+    if !config_path.is_file() {
         return EXIT_IGNORE;
     }
 
-    let config = match read_config(&username) {
+    let config = match read_config_from_path(&config_path) {
         Ok(config) => config,
         Err(error) => {
             eprintln!("auth: {error}");

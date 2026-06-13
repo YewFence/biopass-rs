@@ -1,10 +1,9 @@
 use super::auth::{EXIT_AUTH_ERR, EXIT_SUCCESS};
 use crate::cli::ConfigAction;
 use biopass_rs_auth::{
-    bootstrap_config_at, config_path, migrate_config_schema, reset_config, user_exists,
+    bootstrap_config_at, config_path, migrate_config_at_path, reset_config_at_path, user_exists,
     write_config_to_path, BiopassConfig, BootstrapOutcome,
 };
-use std::path::PathBuf;
 use users::os::unix::UserExt;
 
 pub(crate) fn run(username: &str, action: ConfigAction) -> u8 {
@@ -64,8 +63,8 @@ fn init(username: &str, force: bool) -> u8 {
 }
 
 fn reset(username: &str) -> u8 {
-    let path: PathBuf = config_path(username);
-    match reset_config(username) {
+    let path = config_path(username);
+    match reset_config_at_path(&path) {
         Ok(()) => {
             eprintln!(
                 "Reset config for user '{username}' to defaults at {}",
@@ -90,7 +89,7 @@ fn migrate(username: &str) -> u8 {
         return EXIT_SUCCESS;
     }
 
-    match migrate_config_schema(username) {
+    match migrate_config_at_path(&path) {
         Ok(true) => {
             eprintln!(
                 "Migrated config schema for user '{username}' at {}",

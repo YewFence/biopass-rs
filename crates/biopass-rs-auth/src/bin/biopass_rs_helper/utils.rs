@@ -1,4 +1,4 @@
-use biopass_rs_auth::read_config;
+use biopass_rs_auth::{config_path, read_config_from_path};
 use std::env;
 
 pub(crate) fn resolve_username(explicit: Option<&str>) -> Option<String> {
@@ -32,7 +32,7 @@ pub(crate) fn helper_auto_optimize_camera(username: Option<&str>) -> bool {
     let Some(user) = user else {
         return true;
     };
-    read_config(&user)
+    read_config_from_path(&config_path(&user))
         .map(|config| config.methods.face.auto_optimize_camera)
         .unwrap_or(true)
 }
