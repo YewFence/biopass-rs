@@ -81,6 +81,8 @@ pub enum Commands {
         #[arg(value_enum)]
         shell: Shell,
     },
+    /// Remove cached debug frames written by failed face-auth attempts
+    Clean,
 }
 
 #[derive(Args)]
@@ -295,5 +297,13 @@ mod tests {
             help.contains("--data-dir"),
             "missing --data-dir in help: {help}"
         );
+    }
+
+    #[test]
+    fn clean_parses_with_global_username() {
+        let cli = Cli::parse_from(["biopass-rs-helper", "--username", "yewfence", "clean"]);
+
+        assert_eq!(cli.username.as_deref(), Some("yewfence"));
+        assert!(matches!(cli.command, Commands::Clean));
     }
 }

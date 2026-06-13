@@ -70,6 +70,15 @@ fn main() -> ExitCode {
             );
             return ExitCode::SUCCESS;
         }
+        Commands::Clean => match resolve_username(username.as_deref()) {
+            Some(name) => commands::clean::run(&name),
+            None => {
+                eprintln!(
+                    "clean: no target user provided and none could be inferred from the environment"
+                );
+                EXIT_AUTH_ERR
+            }
+        },
     };
     ExitCode::from(code)
 }
