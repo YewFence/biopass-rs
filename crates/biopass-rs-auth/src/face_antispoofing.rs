@@ -52,7 +52,18 @@ impl FaceAntiSpoofing {
                 output.shape
             ));
         }
+        if let Some(last_dim) = output.shape.last() {
+            if *last_dim != 2 {
+                return Err(format!(
+                    "Expected anti-spoofing output with last dim = 2, got shape {:?}",
+                    output.shape
+                ));
+            }
+        }
 
+        // The model emits post-softmax probabilities in [0, 1].
+        // Index 0 = REAL, index 1 = SPOOF. Fail-closed: a frame is considered
+        // spoof unless the SPOOF class is the lower-scoring class.
         Ok(spoof_result_from_logits(
             &output.values[0..2],
             self.threshold,
@@ -61,11 +72,15 @@ impl FaceAntiSpoofing {
 }
 
 fn spoof_result_from_logits(logits: &[f32], threshold: f32) -> SpoofResult {
+    // logits[0] = REAL, logits[1] = SPOOF. A frame is a spoof only when the
+    // SPOOF class wins and meets the threshold; previously this was inverted
+    // and treated the REAL class as spoof, which silently rejected real faces
+    // and let spoofs through.
     let class = argmax(logits);
     let score = logits[class];
     SpoofResult {
         score,
-        spoof: class == 0 && score >= threshold,
+        spoof: class == 1 && score >= threshold,
     }
 }
 
@@ -156,18 +171,28 @@ mod tests {
     }
 
     #[test]
-    fn spoof_result_uses_real_class_threshold() {
+    fn spoof_result_flags_spoof_only_when_spoof_class_wins() {
+        // SPOOF (class 1) wins with high confidence -> spoof=true.
         assert_eq!(
-            spoof_result_from_logits(&[0.8, 0.2], 0.8),
+            spoof_result_from_logits(&[0.2, 0.8], 0.8),
             SpoofResult {
                 score: 0.8,
                 spoof: true
             }
         );
+        // REAL (class 0) wins -> never a spoof, regardless of threshold.
         assert_eq!(
-            spoof_result_from_logits(&[0.7, 0.9], 0.8),
+            spoof_result_from_logits(&[0.8, 0.2], 0.8),
             SpoofResult {
-                score: 0.9,
+                score: 0.8,
+                spoof: false
+            }
+        );
+        // SPOOF wins but below threshold -> not a high-confidence spoof.
+        assert_eq!(
+            spoof_result_from_logits(&[0.5, 0.6], 0.8),
+            SpoofResult {
+                score: 0.6,
                 spoof: false
             }
         );
