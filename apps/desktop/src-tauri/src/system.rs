@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(Debug, Serialize, Clone)]
 pub struct VideoDeviceInfo {
@@ -41,4 +41,9 @@ pub fn list_video_devices() -> Result<Vec<VideoDeviceInfo>, String> {
             display_name: dev.display_name(),
         })
         .collect())
+}
+
+#[tauri::command]
+pub fn path_exists(path: String) -> Result<bool, String> {
+    Ok(Path::new(&path).exists())
 }

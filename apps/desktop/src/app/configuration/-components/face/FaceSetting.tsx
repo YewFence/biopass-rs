@@ -18,7 +18,6 @@ import { FaceCapture } from "./FaceCapture";
 
 export function FaceSetting() {
   const config = useConfigurationStore((state) => state.config?.methods.face);
-  const models = useConfigurationStore((state) => state.config?.models ?? []);
   const setFaceConfig = useConfigurationStore((state) => state.setFaceConfig);
   const [videoDevices, setVideoDevices] = useState<VideoDeviceInfo[]>([]);
 
@@ -46,27 +45,17 @@ export function FaceSetting() {
     if (!irCameraPath) return null;
     return videoDevices.find((device) => device.path === irCameraPath) ?? null;
   }, [config, videoDevices]);
-  const antiSpoofModels = useMemo(() => models.filter((m) => m.type === "anti-spoofing"), [models]);
 
   if (!config) return null;
 
   const disabledOption = "__disabled__";
-  const unavailableAiModelOption = "__unavailable_ai_model__";
   const unavailableIrDeviceOption = "__unavailable_ir_device__";
-  const selectedAiModelExists = antiSpoofModels.some(
-    (model) => model.path === config.anti_spoofing.rgb.model.path,
-  );
   const unavailableCameraDeviceOption = "__unavailable_camera_device__";
   const cameraValue = config.camera
     ? (selectedCamera?.path ?? unavailableCameraDeviceOption)
     : disabledOption;
   const irCameraValue = config.anti_spoofing.ir.camera
     ? (selectedIrCamera?.path ?? unavailableIrDeviceOption)
-    : disabledOption;
-  const aiModelValue = config.anti_spoofing.rgb.enable
-    ? selectedAiModelExists
-      ? config.anti_spoofing.rgb.model.path
-      : unavailableAiModelOption
     : disabledOption;
 
   return (
@@ -195,7 +184,6 @@ export function FaceSetting() {
             <ModelSelect
               label="Model"
               value={config.detection.model}
-              models={models.filter((m) => m.type === "detection")}
               error={config.enable}
               onChange={(model) =>
                 setFaceConfig({
@@ -224,7 +212,6 @@ export function FaceSetting() {
             <ModelSelect
               label="Model"
               value={config.recognition.model}
-              models={models.filter((m) => m.type === "recognition")}
               error={config.enable}
               onChange={(model) =>
                 setFaceConfig({
@@ -251,64 +238,47 @@ export function FaceSetting() {
 
       <div className="p-4 rounded-lg bg-muted/50 border border-border/50 space-y-3">
         <h4 className="font-medium text-sm">Anti-Spoofing</h4>
-        <div className="grid gap-2">
-          <Label htmlFor="anti-spoofing-method" className="text-xs text-muted-foreground">
+        <div className="flex items-center justify-between gap-4">
+          <Label htmlFor="anti-spoofing-ai" className="text-sm font-medium">
             AI Model
           </Label>
-          <Select
-            value={aiModelValue}
-            onValueChange={(value) => {
-              if (value === disabledOption) {
-                setFaceConfig({
-                  ...config,
-                  anti_spoofing: {
-                    ...config.anti_spoofing,
-                    rgb: { ...config.anti_spoofing.rgb, enable: false },
-                  },
-                });
-                return;
-              }
-
+          <Switch
+            id="anti-spoofing-ai"
+            checked={config.anti_spoofing.rgb.enable}
+            onCheckedChange={(enable) =>
               setFaceConfig({
                 ...config,
                 anti_spoofing: {
                   ...config.anti_spoofing,
                   rgb: {
                     ...config.anti_spoofing.rgb,
-                    enable: true,
-                    model: { ...config.anti_spoofing.rgb.model, path: value },
+                    enable,
                   },
                 },
-              });
-            }}
-          >
-            <SelectTrigger id="anti-spoofing-method" className="h-10 w-full">
-              <SelectValue placeholder="Select AI anti-spoofing method" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={disabledOption}>Disable</SelectItem>
-              {aiModelValue === unavailableAiModelOption && (
-                <SelectItem value={unavailableAiModelOption} disabled>
-                  Selected anti-spoofing model unavailable
-                </SelectItem>
-              )}
-              {antiSpoofModels.length > 0 ? (
-                antiSpoofModels.map((model) => (
-                  <SelectItem key={model.path} value={model.path}>
-                    {model.path.split("/").pop()}
-                  </SelectItem>
-                ))
-              ) : (
-                <SelectItem value="__no_ai_models__" disabled>
-                  No anti-spoofing models available
-                </SelectItem>
-              )}
-            </SelectContent>
-          </Select>
+              })
+            }
+          />
         </div>
 
         {config.anti_spoofing.rgb.enable && (
           <>
+            <ModelSelect
+              label="Model Path"
+              value={config.anti_spoofing.rgb.model.path}
+              error
+              onChange={(model) =>
+                setFaceConfig({
+                  ...config,
+                  anti_spoofing: {
+                    ...config.anti_spoofing,
+                    rgb: {
+                      ...config.anti_spoofing.rgb,
+                      model: { ...config.anti_spoofing.rgb.model, path: model },
+                    },
+                  },
+                })
+              }
+            />
             <div className="w-48">
               <Threshold
                 label="Threshold"
@@ -422,7 +392,6 @@ export function FaceSetting() {
               <ModelSelect
                 label=""
                 value={config.anti_spoofing.ir.model.path}
-                models={antiSpoofModels}
                 error={false}
                 onChange={(model) =>
                   setFaceConfig({

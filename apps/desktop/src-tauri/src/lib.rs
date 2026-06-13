@@ -14,7 +14,7 @@ use fingerprint::{
     add_fingerprint, delete_fingerprint, enroll_fingerprint, fingerprint_is_available,
     list_enrolled_fingerprints, list_fingerprint_devices, remove_fingerprint,
 };
-use system::{get_current_username, list_video_devices};
+use system::{get_current_username, list_video_devices, path_exists};
 
 use tauri::Manager;
 
@@ -68,7 +68,8 @@ pub fn run() {
             remove_fingerprint,
             fingerprint_is_available,
             list_enrolled_fingerprints,
-            list_fingerprint_devices
+            list_fingerprint_devices,
+            path_exists
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

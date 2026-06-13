@@ -3,27 +3,18 @@ import { cmd } from "@/commands";
 import type { BiopassConfig } from "@/types/config";
 
 export async function validateConfig(config: BiopassConfig): Promise<boolean> {
-  const registeredModelPaths = new Set((config.models || []).map((m) => m.path));
-
   if (config.methods.face.enable) {
-    if (
-      !config.methods.face.detection.model ||
-      !registeredModelPaths.has(config.methods.face.detection.model)
-    ) {
+    if (!config.methods.face.detection.model) {
       toast.error("Valid Face Detection model is required");
       return false;
     }
-    if (
-      !config.methods.face.recognition.model ||
-      !registeredModelPaths.has(config.methods.face.recognition.model)
-    ) {
+    if (!config.methods.face.recognition.model) {
       toast.error("Valid Face Recognition model is required");
       return false;
     }
     if (
       config.methods.face.anti_spoofing.rgb.enable &&
-      (!config.methods.face.anti_spoofing.rgb.model.path ||
-        !registeredModelPaths.has(config.methods.face.anti_spoofing.rgb.model.path))
+      !config.methods.face.anti_spoofing.rgb.model.path
     ) {
       toast.error("Valid Anti-Spoofing model is required when enabled");
       return false;
