@@ -15,7 +15,7 @@
 //! depending on Tauri.
 
 use super::migration::migrate_config_at_path;
-use super::paths::{read_config_from_path, write_config_to_path};
+use super::paths::{normalize_config_paths_at_path, read_config_from_path, write_config_to_path};
 use super::schema::BiopassConfig;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -77,6 +77,10 @@ pub fn bootstrap_config_at(
     }
 
     write_config_to_path(destination, &default_factory())?;
+    // Resolve relative model paths against DATA_DIR so the freshly-written
+    // config is self-contained regardless of which reader (CLI / PAM / GUI)
+    // loads it.
+    let _ = normalize_config_paths_at_path(destination)?;
     Ok(BootstrapOutcome::WroteDefaults)
 }
 

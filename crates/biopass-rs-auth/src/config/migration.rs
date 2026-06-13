@@ -45,6 +45,20 @@ fn extract_mapping<'a>(map: &'a Mapping, key: &str) -> Option<&'a Mapping> {
 }
 
 pub fn migrate_config_at_path(path: &Path) -> io::Result<bool> {
+    let schema_migrated = migrate_schema_at_path(path)?;
+    // Always re-normalize model paths: a config that is already on the current
+    // schema may still carry relative model paths that need to be resolved
+    // against DATA_DIR so the PAM module / desktop GUI / CLI all agree on the
+    // model location.
+    let paths_normalized =
+        super::paths::normalize_config_paths_at_path(path).map_err(io::Error::other)?;
+    Ok(schema_migrated || paths_normalized)
+}
+
+/// Migrate the on-disk config to the current anti-spoofing schema. Returns
+/// `true` if the schema was rewritten. Path normalization is handled
+/// separately by [`migrate_config_at_path`].
+fn migrate_schema_at_path(path: &Path) -> io::Result<bool> {
     let Ok(config_text) = fs::read_to_string(path) else {
         return Ok(false);
     };

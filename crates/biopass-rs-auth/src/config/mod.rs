@@ -27,7 +27,9 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn normalizes_relative_model_paths_to_data_dir() {
+    fn normalize_config_paths_persists_absolute_model_paths() {
+        use crate::config::paths::normalize_config_paths_at_path;
+
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("testuser");
         let config_path = home.join(".config/biopass-rs/config.yaml");
@@ -57,74 +59,67 @@ models:
         )
         .unwrap();
 
-        // 读取配置，应该自动规范化路径
-        let config = read_config_from_path(&config_path).unwrap();
-
-        // 验证路径已被规范化为绝对路径（包含 models/ 前缀）
+        // 读取时路径保持相对（read 不做规范化）
+        let before = read_config_from_path(&config_path).unwrap();
         assert!(
-            config
-                .methods
-                .face
-                .detection
-                .model
-                .contains("models/yolov8n-face.onnx"),
-            "detection model path should contain models/yolov8n-face.onnx: {}",
-            config.methods.face.detection.model
-        );
-        assert!(
-            config
-                .methods
-                .face
-                .recognition
-                .model
-                .contains("models/edgeface_s_gamma_05.onnx"),
-            "recognition model path should contain models/edgeface_s_gamma_05.onnx: {}",
-            config.methods.face.recognition.model
-        );
-        assert!(
-            config
-                .methods
-                .face
-                .anti_spoofing
-                .rgb
-                .model
-                .path
-                .contains("models/mobilenetv3_antispoof.onnx"),
-            "rgb antispoof model path should contain models/mobilenetv3_antispoof.onnx: {}",
-            config.methods.face.anti_spoofing.rgb.model.path
-        );
-        assert!(
-            config
-                .methods
-                .face
-                .anti_spoofing
-                .ir
-                .model
-                .path
-                .contains("models/ir_antispoof.onnx"),
-            "ir antispoof model path should contain models/ir_antispoof.onnx: {}",
-            config.methods.face.anti_spoofing.ir.model.path
-        );
-        assert!(
-            config.models[0].path.contains("models/yolov8n-face.onnx"),
-            "models array path should contain models/yolov8n-face.onnx: {}",
-            config.models[0].path
+            before.methods.face.detection.model.starts_with("models/"),
+            "read should preserve the relative path as written"
         );
 
-        // 验证相对路径已经被转换为绝对路径（不再以 models/ 开头）
+        // normalize 把相对路径解析成基于 DATA_DIR 的绝对路径并写回磁盘
+        let changed = normalize_config_paths_at_path(&config_path).unwrap();
+        assert!(changed, "normalize should rewrite the file");
+
+        // 再次读取，路径已是绝对路径
+        let after = read_config_from_path(&config_path).unwrap();
         assert!(
-            !config.methods.face.detection.model.starts_with("models/"),
-            "detection model path should not start with models/: {}",
-            config.methods.face.detection.model
+            !after.methods.face.detection.model.starts_with("models/"),
+            "detection model path should be absolute after normalize: {}",
+            after.methods.face.detection.model
         );
+        assert!(after
+            .methods
+            .face
+            .detection
+            .model
+            .ends_with("models/yolov8n-face.onnx"));
+        assert!(after
+            .methods
+            .face
+            .recognition
+            .model
+            .ends_with("models/edgeface_s_gamma_05.onnx"));
+        assert!(after
+            .methods
+            .face
+            .anti_spoofing
+            .rgb
+            .model
+            .path
+            .ends_with("models/mobilenetv3_antispoof.onnx"));
+        assert!(after
+            .methods
+            .face
+            .anti_spoofing
+            .ir
+            .model
+            .path
+            .ends_with("models/ir_antispoof.onnx"));
+        assert!(after.models[0].path.ends_with("models/yolov8n-face.onnx"));
+
+        // 幂等：再次 normalize 不应改动
+        let changed_again = normalize_config_paths_at_path(&config_path).unwrap();
+        assert!(!changed_again, "normalize should be idempotent");
     }
 
     #[test]
-    fn leaves_absolute_model_paths_unchanged() {
+    fn normalize_config_paths_leaves_absolute_paths_unchanged() {
+        use crate::config::paths::normalize_config_paths_at_path;
+
         let dir = tempfile::tempdir().unwrap();
         let config_path = dir.path().join("config.yaml");
 
-        // 写入包含绝对路径的配置
+        // 所有模型路径都用绝对路径，normalize 不应改写任何字段。
         fs::write(
             &config_path,
             r#"
@@ -134,13 +129,22 @@ methods:
       model: /absolute/path/to/model.onnx
     recognition:
       model: /another/absolute/model.onnx
+    anti_spoofing:
+      rgb:
+        model:
+          path: /absolute/rgb.onnx
+      ir:
+        model:
+          path: /absolute/ir.onnx
 "#,
         )
         .unwrap();
 
-        let config = read_config_from_path(&config_path).unwrap();
+        // 绝对路径不需要规范化，normalize 应返回 false 且不写回
+        let changed = normalize_config_paths_at_path(&config_path).unwrap();
+        assert!(!changed, "absolute paths should not trigger a rewrite");
 
-        // 绝对路径应该保持不变
+        let config = read_config_from_path(&config_path).unwrap();
         assert_eq!(
             config.methods.face.detection.model,
             "/absolute/path/to/model.onnx"
@@ -384,14 +388,16 @@ methods:
         let anti = &yaml["methods"]["face"]["anti_spoofing"];
 
         assert!(anti.get("ai").is_none());
-        assert_eq!(
-            anti["rgb"]["model"]["path"],
-            Value::String("models/mobilenetv3_antispoof.onnx".to_string())
-        );
-        assert_eq!(
-            anti["ir"]["model"]["path"],
-            Value::String("models/mobilenetv3_antispoof.onnx".to_string())
-        );
+        // migrate 会把相对模型路径解析成基于 DATA_DIR 的绝对路径，所以只
+        // 校验文件名部分保留下来。
+        assert!(anti["rgb"]["model"]["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("models/mobilenetv3_antispoof.onnx"));
+        assert!(anti["ir"]["model"]["path"]
+            .as_str()
+            .unwrap()
+            .ends_with("models/mobilenetv3_antispoof.onnx"));
         assert_eq!(anti["ir"]["retries"], Value::from(3));
         assert_eq!(anti["ir"]["warmup_delay_ms"], Value::from(600));
 
@@ -404,21 +410,27 @@ methods:
     fn migrate_config_at_path_leaves_current_schema_untouched() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("config.yaml");
+        // 所有模型路径都用绝对路径，这样 migrate 既不需要迁移 schema，也
+        // 不需要规范化路径，因此不会写回文件。
         let yaml = r#"
 methods:
   face:
+    detection:
+      model: /absolute/det.onnx
+    recognition:
+      model: /absolute/rec.onnx
     anti_spoofing:
       rgb:
         enable: true
         model:
-          path: current.onnx
+          path: /absolute/current.onnx
           threshold: 0.7
       ir:
         enable: true
         camera: /dev/video4
         warmup_delay_ms: 400
         model:
-          path: current-ir.onnx
+          path: /absolute/current-ir.onnx
           threshold: 0.8
 "#;
         fs::write(&path, yaml).unwrap();

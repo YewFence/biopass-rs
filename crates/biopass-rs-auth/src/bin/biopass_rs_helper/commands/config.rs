@@ -2,7 +2,7 @@ use super::auth::{EXIT_AUTH_ERR, EXIT_SUCCESS};
 use crate::cli::ConfigAction;
 use biopass_rs_auth::{
     bootstrap_config_at, config_path, migrate_config_at_path, reset_config_at_path, user_exists,
-    write_config_to_path, BiopassConfig, BootstrapOutcome,
+    BiopassConfig, BootstrapOutcome,
 };
 use users::os::unix::UserExt;
 
@@ -24,7 +24,9 @@ pub(crate) fn run(username: &str, action: ConfigAction) -> u8 {
 fn init(username: &str, force: bool, skip_upstream: bool) -> u8 {
     let path = config_path(username);
     if force {
-        if let Err(error) = write_config_to_path(&path, &BiopassConfig::default()) {
+        // reset_config_at_path writes the defaults AND resolves relative model
+        // paths against DATA_DIR, so the forced config is immediately usable.
+        if let Err(error) = reset_config_at_path(&path) {
             eprintln!("Failed to initialize config: {error}");
             return EXIT_AUTH_ERR;
         }

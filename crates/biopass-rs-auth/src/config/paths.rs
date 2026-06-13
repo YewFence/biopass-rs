@@ -69,7 +69,7 @@ pub fn user_data_dir(username: &str) -> PathBuf {
 /// First writer wins — calling this more than once is a no-op so that
 /// downstream code (e.g. tests) can layer overrides safely.
 pub fn set_config_path_override(path: PathBuf) {
-    let _ = CONFIG_PATH_OVERRIDE.set(path);
+    let _ = CONFIG_PATH_OVERRIDE.set(absolutize_configured_path(path));
 }
 
 /// Set a CLI override for the data directory. Subsequent calls to
@@ -77,7 +77,7 @@ pub fn set_config_path_override(path: PathBuf) {
 ///
 /// First writer wins.
 pub fn set_data_dir_override(path: PathBuf) {
-    let _ = DATA_DIR_OVERRIDE.set(path);
+    let _ = DATA_DIR_OVERRIDE.set(absolutize_configured_path(path));
 }
 
 fn config_path_override() -> Option<PathBuf> {
@@ -95,8 +95,18 @@ fn env_path(key: &str) -> Option<PathBuf> {
     if trimmed.is_empty() {
         None
     } else {
-        Some(PathBuf::from(trimmed))
+        Some(absolutize_configured_path(PathBuf::from(trimmed)))
     }
+}
+
+fn absolutize_configured_path(path: PathBuf) -> PathBuf {
+    if path.is_absolute() {
+        return path;
+    }
+
+    std::env::current_dir()
+        .map(|cwd| cwd.join(&path))
+        .unwrap_or(path)
 }
 
 /// Resolve a user's home directory, falling back to $HOME and then a provided
@@ -140,26 +150,40 @@ pub fn user_exists(username: &str) -> bool {
 pub fn read_config_from_path(config_path: &Path) -> Result<BiopassConfig, String> {
     let config_text = fs::read_to_string(config_path)
         .map_err(|error| format!("Failed to read config {}: {error}", config_path.display()))?;
-    let mut config = serde_yaml::from_str::<BiopassConfig>(&config_text)
-        .map_err(|error| config_parse_error_message(config_path, &error.to_string()))?;
-
-    // Normalize relative model paths to be relative to DATA_DIR
-    normalize_model_paths(&mut config, config_path);
-
-    Ok(config)
+    serde_yaml::from_str::<BiopassConfig>(&config_text)
+        .map_err(|error| config_parse_error_message(config_path, &error.to_string()))
 }
 
-/// Resolve relative model paths against DATA_DIR.
+/// Rewrite any relative model paths in the config file at `config_path` as
+/// absolute paths rooted at DATA_DIR, persisting the result to disk.
 ///
-/// Model paths in the config can be:
-/// - Absolute paths (start with `/`) — left unchanged.
-/// - Relative paths — resolved against DATA_DIR for the target user.
+/// Model paths may be written as bare relative values like
+/// `models/yolov8n-face.onnx`. Such paths are ambiguous at runtime because
+/// they resolve against the process's current working directory, which differs
+/// between the helper CLI, the PAM module, and the desktop GUI. This function
+/// resolves them once, against the target user's DATA_DIR, and writes the
+/// absolute paths back so every reader sees the same location.
 ///
-/// This allows users to write `models/yolov8n-face.onnx` in the config and
-/// have it automatically resolve to `$DATA_DIR/models/yolov8n-face.onnx`,
-/// regardless of the application's CWD.
+/// Absolute paths and empty strings are left untouched. Returns `true` if the
+/// on-disk file was rewritten.
+pub fn normalize_config_paths_at_path(config_path: &Path) -> Result<bool, String> {
+    let mut config = read_config_from_path(config_path)?;
+    let before = config.clone();
+    normalize_model_paths(&mut config, config_path);
+    if config == before {
+        return Ok(false);
+    }
+    write_config_to_path(config_path, &config)?;
+    Ok(true)
+}
+
+/// Resolve relative model paths in `config` against DATA_DIR.
+///
+/// - Absolute paths (start with `/`) and empty strings are left unchanged.
+/// - Relative paths are joined onto the DATA_DIR resolved for the user that
+///   owns `config_path` (inferred from the path, falling back to the current
+///   process user).
 fn normalize_model_paths(config: &mut BiopassConfig, config_path: &Path) {
-    // Infer username from config path to resolve DATA_DIR
     let username = infer_username_from_config_path(config_path);
     let data_dir = user_data_dir(&username);
 
@@ -185,11 +209,11 @@ fn normalize_model_paths(config: &mut BiopassConfig, config_path: &Path) {
 
 /// Best-effort extraction of the username from a config path.
 ///
-/// Looks for `.config/biopass-rs` or `.local/share/biopass-rs` in the path
-/// and extracts the username from the parent directory. Falls back to
-/// [`current_username`] if extraction fails.
+/// Standard layout is `/home/<user>/.config/biopass-rs/config.yaml`; we walk
+/// the path looking for the `.config` (or `.local`) segment and take the
+/// preceding component as the username. Falls back to the current process
+/// user when the path does not match the standard layout.
 fn infer_username_from_config_path(config_path: &Path) -> String {
-    // Try to extract username from path like /home/username/.config/biopass-rs/config.yaml
     for ancestor in config_path.ancestors() {
         if let Some(name) = ancestor.file_name().and_then(|n| n.to_str()) {
             if name == ".config" || name == ".local" {
@@ -202,7 +226,6 @@ fn infer_username_from_config_path(config_path: &Path) -> String {
         }
     }
 
-    // Fallback to current username
     current_username().unwrap_or_else(|| "current".to_string())
 }
 
@@ -243,7 +266,11 @@ pub fn write_config_to_path(path: &Path, config: &BiopassConfig) -> Result<(), S
 /// Force-rewrite the config at `path` with built-in defaults. Always
 /// overwrites; used by `config reset` and the GUI "Reset to defaults" flow.
 pub fn reset_config_at_path(path: &Path) -> Result<(), String> {
-    write_config_to_path(path, &BiopassConfig::default())
+    write_config_to_path(path, &BiopassConfig::default())?;
+    // Resolve relative model paths against DATA_DIR so the reset config is
+    // immediately usable by every reader (CLI / PAM / GUI).
+    let _ = normalize_config_paths_at_path(path)?;
+    Ok(())
 }
 
 pub(super) fn is_supported_face_image(path: &Path) -> bool {
@@ -256,4 +283,25 @@ pub(super) fn is_supported_face_image(path: &Path) -> bool {
             )
         })
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::absolutize_configured_path;
+    use std::path::PathBuf;
+
+    #[test]
+    fn configured_relative_paths_are_rooted_at_current_dir() {
+        let path = absolutize_configured_path(PathBuf::from("dev-data"));
+
+        assert!(path.is_absolute());
+        assert!(path.ends_with("dev-data"));
+    }
+
+    #[test]
+    fn configured_absolute_paths_are_kept() {
+        let path = PathBuf::from("/tmp/biopass-rs-dev-data");
+
+        assert_eq!(absolutize_configured_path(path.clone()), path);
+    }
 }
