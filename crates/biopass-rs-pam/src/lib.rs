@@ -15,6 +15,13 @@ extern "C" {
     fn pam_get_item(pamh: *mut PamHandle, item_type: c_int, item: *mut *const c_void) -> c_int;
 }
 
+/// PAM authentication module entry point.
+///
+/// # Safety
+///
+/// This function is called by the PAM framework with raw C pointers.
+/// The caller must ensure that `pamh` is a valid PAM handle and that
+/// `_argv` (if non-null) points to a valid array of C strings.
 #[no_mangle]
 pub unsafe extern "C" fn pam_sm_authenticate(
     pamh: *mut PamHandle,

@@ -216,19 +216,10 @@ impl<'de> Deserialize<'de> for IrAntiSpoofingConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Default)]
 pub struct AntiSpoofingConfig {
     pub ai: AiAntiSpoofingConfig,
     pub ir: IrAntiSpoofingConfig,
-}
-
-impl Default for AntiSpoofingConfig {
-    fn default() -> Self {
-        Self {
-            ai: AiAntiSpoofingConfig::default(),
-            ir: IrAntiSpoofingConfig::default(),
-        }
-    }
 }
 
 impl<'de> Deserialize<'de> for AntiSpoofingConfig {
@@ -406,21 +397,12 @@ impl Default for FingerprintMethodConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 pub struct MethodsConfig {
     #[serde(default)]
     pub face: FaceMethodConfig,
     #[serde(default)]
     pub fingerprint: FingerprintMethodConfig,
-}
-
-impl Default for MethodsConfig {
-    fn default() -> Self {
-        Self {
-            face: FaceMethodConfig::default(),
-            fingerprint: FingerprintMethodConfig::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

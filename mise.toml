@@ -72,6 +72,10 @@ dir = "{{config_root}}/{{vars.app_dir}}"
 description = "Check Rust code formatting"
 run = "cargo fmt --all --check"
 
+[tasks.clippy-rust]
+description = "Run Clippy lints on Rust code"
+run = "cargo clippy --all --all-targets --all-features -- -D warnings"
+
 [tasks.check-rust]
 description = "Check Rust code compilation"
 run = "cargo check --all"
@@ -83,12 +87,15 @@ run = "cargo build --all"
 
 [tasks.check]
 description = "Run all checks"
-depends = ["check-app", "lint-rust"]
+depends = ["check-app", "lint-rust", "clippy-rust"]
 run = { task = "build-rust"}
 
 [tasks.fix-rust]
-description = "Format Rust code"
-run = "cargo fmt --all"
+description = "Format Rust code and auto-fix Clippy issues"
+run = """
+cargo fmt --all
+cargo clippy --fix --all --all-targets --all-features --allow-dirty --allow-staged
+"""
 
 [tasks.fix-app]
 description = "Auto-fix frontend formatting and lint issues with Vite+"

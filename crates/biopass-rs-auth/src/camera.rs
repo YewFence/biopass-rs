@@ -186,7 +186,7 @@ pub fn capture_rgb_frame(request: &CameraRequest) -> Result<RgbFrame, String> {
         apply_camera_optimizations(&mut device, request.debug)?;
     }
 
-    let mut stream = MmapStream::with_buffers(&mut device, Type::VideoCapture, 4)
+    let mut stream = MmapStream::with_buffers(&device, Type::VideoCapture, 4)
         .map_err(|error| format!("Failed to create V4L2 mmap stream: {error}"))?;
 
     let deadline = Instant::now() + request.timeout;
@@ -395,6 +395,7 @@ fn open_device(request: &CameraRequest) -> Result<Device, String> {
 /// - 防闪烁 (50Hz)
 /// - 宽动态范围 (背光补偿)
 /// - 曝光优先 (动态帧率)
+///
 /// Apply camera control parameters to improve image quality.
 ///
 /// Controls are best-effort: when the device does not expose a particular

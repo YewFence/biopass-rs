@@ -156,10 +156,8 @@ fn detections_from_yolov8_output(
         ));
     }
 
-    let pred_dim = usize::try_from(shape[1])
-        .map_err(|_| format!("Invalid YOLOv8-face prediction dimension {}", shape[1]))?;
-    let num_preds = usize::try_from(shape[2])
-        .map_err(|_| format!("Invalid YOLOv8-face prediction count {}", shape[2]))?;
+    let pred_dim = shape[1];
+    let num_preds = shape[2];
     if pred_dim < 5 {
         return Err(format!(
             "Expected at least 5 YOLOv8-face channels, got {pred_dim}"

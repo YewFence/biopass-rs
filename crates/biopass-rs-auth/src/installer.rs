@@ -45,7 +45,7 @@ fn get_home_dir() -> Result<PathBuf, String> {
                     .ok()
                     .and_then(|out| String::from_utf8(out.stdout).ok())
                     .and_then(|s| s.split(':').nth(5).map(String::from))
-                    .ok_or_else(|| std::env::VarError::NotPresent)
+                    .ok_or(std::env::VarError::NotPresent)
             })
         })
         .map(PathBuf::from)

@@ -122,9 +122,20 @@ impl FaceAuth {
             ),
         );
         log(LogLevel::Debug, "running face detection");
-        let Some(candidate) = self.detector()?.crop_largest_face(&frame)? else {
-            log(LogLevel::Info, "no face detected in frame");
-            return Ok(AuthResult::Retry);
+        let candidate = match self
+            .detector()
+            .and_then(|detector| detector.crop_largest_face(&frame))
+        {
+            Ok(Some(candidate)) => candidate,
+            Ok(None) => {
+                log(LogLevel::Info, "no face detected in frame");
+                save_debug_frame_if_enabled(debug, username, &frame, "no_face_detected");
+                return Ok(AuthResult::Retry);
+            }
+            Err(error) => {
+                save_debug_frame_if_enabled(debug, username, &frame, "detection_error");
+                return Err(error);
+            }
         };
         log(
             LogLevel::Debug,
@@ -137,8 +148,20 @@ impl FaceAuth {
         log(LogLevel::Debug, "loading recognition model");
         let recognition_threshold = self.config.recognition.threshold;
         let candidate_embedding = {
-            let recognizer = self.recognizer()?;
-            recognizer.embedding(&candidate)?
+            let recognizer = match self.recognizer() {
+                Ok(recognizer) => recognizer,
+                Err(error) => {
+                    save_debug_frame_if_enabled(debug, username, &candidate, "recognition_error");
+                    return Err(error);
+                }
+            };
+            match recognizer.embedding(&candidate) {
+                Ok(embedding) => embedding,
+                Err(error) => {
+                    save_debug_frame_if_enabled(debug, username, &candidate, "recognition_error");
+                    return Err(error);
+                }
+            }
         };
         log(
             LogLevel::Debug,
@@ -161,9 +184,42 @@ impl FaceAuth {
                 continue;
             };
             let face_match = {
-                let recognizer = self.recognizer()?;
-                let enrolled_embedding = recognizer.embedding(&enrolled_face)?;
-                recognizer.match_embeddings(&enrolled_embedding, &candidate_embedding)?
+                let recognizer = match self.recognizer() {
+                    Ok(recognizer) => recognizer,
+                    Err(error) => {
+                        save_debug_frame_if_enabled(
+                            debug,
+                            username,
+                            &candidate,
+                            "recognition_error",
+                        );
+                        return Err(error);
+                    }
+                };
+                let enrolled_embedding = match recognizer.embedding(&enrolled_face) {
+                    Ok(embedding) => embedding,
+                    Err(error) => {
+                        save_debug_frame_if_enabled(
+                            debug,
+                            username,
+                            &candidate,
+                            "recognition_error",
+                        );
+                        return Err(error);
+                    }
+                };
+                match recognizer.match_embeddings(&enrolled_embedding, &candidate_embedding) {
+                    Ok(face_match) => face_match,
+                    Err(error) => {
+                        save_debug_frame_if_enabled(
+                            debug,
+                            username,
+                            &candidate,
+                            "recognition_error",
+                        );
+                        return Err(error);
+                    }
+                }
             };
             log(
                 LogLevel::Debug,
@@ -177,9 +233,22 @@ impl FaceAuth {
             );
             if face_match.similar {
                 log(LogLevel::Debug, "running anti-spoofing check");
-                if !self.check_anti_spoofing(username, auth_config, cancel_signal, &candidate)? {
-                    log(LogLevel::Info, "anti-spoofing check rejected the candidate");
-                    return Ok(AuthResult::Failure);
+                match self.check_anti_spoofing(username, auth_config, cancel_signal, &candidate) {
+                    Ok(true) => {}
+                    Ok(false) => {
+                        log(LogLevel::Info, "anti-spoofing check rejected the candidate");
+                        save_debug_frame_if_enabled(
+                            debug,
+                            username,
+                            &candidate,
+                            "antispoof_rejected",
+                        );
+                        return Ok(AuthResult::Failure);
+                    }
+                    Err(error) => {
+                        save_debug_frame_if_enabled(debug, username, &candidate, "antispoof_error");
+                        return Err(error);
+                    }
                 }
 
                 log(LogLevel::Info, "face matched, authentication successful");
@@ -188,9 +257,7 @@ impl FaceAuth {
         }
 
         log(LogLevel::Info, "no enrolled face matched, will retry");
-        if auth_config.debug {
-            save_debug_frame(username, &candidate, "not_similar");
-        }
+        save_debug_frame_if_enabled(debug, username, &candidate, "not_similar");
         Ok(AuthResult::Retry)
     }
 
@@ -230,9 +297,7 @@ impl FaceAuth {
                     LogLevel::Warn,
                     "ai model not configured or missing on disk, treating as spoof",
                 );
-                if auth_config.debug {
-                    save_debug_frame(username, face, "ai_spoof_detected");
-                }
+                save_debug_frame_if_enabled(debug, username, face, "ai_model_missing");
                 return Ok(false);
             }
 
@@ -243,7 +308,13 @@ impl FaceAuth {
                     LogLevel::Debug,
                     &format!("ai attempt {attempt}/{max_attempts}"),
                 );
-                let verdict = self.anti_spoofing()?.detect(face)?;
+                let verdict = match self.anti_spoofing().and_then(|model| model.detect(face)) {
+                    Ok(verdict) => verdict,
+                    Err(error) => {
+                        save_debug_frame_if_enabled(debug, username, face, "ai_error");
+                        return Err(error);
+                    }
+                };
                 log(
                     LogLevel::Debug,
                     &format!("ai model verdict: spoof={}", verdict.spoof),
@@ -267,9 +338,7 @@ impl FaceAuth {
                 }
             };
             if verdict.spoof {
-                if auth_config.debug {
-                    save_debug_frame(username, face, "ai_spoof_detected");
-                }
+                save_debug_frame_if_enabled(debug, username, face, "ai_spoof_detected");
                 return Ok(false);
             }
         }
@@ -380,14 +449,20 @@ impl FaceAuth {
             &format!("IR frame captured: {}x{}", frame.width, frame.height),
         );
 
-        let detections = self.detector()?.detect(&frame)?;
+        let detections = match self.detector().and_then(|detector| detector.detect(&frame)) {
+            Ok(detections) => detections,
+            Err(error) => {
+                save_debug_frame_if_enabled(debug, username, &frame, "ir_detection_error");
+                return Err(error);
+            }
+        };
         log(
             LogLevel::Debug,
             &format!("IR detection found {} face(s)", detections.len()),
         );
         let has_face = !detections.is_empty();
-        if !has_face && auth_config.debug {
-            save_debug_frame(username, &frame, "ir_no_face");
+        if !has_face {
+            save_debug_frame_if_enabled(debug, username, &frame, "ir_no_face");
         }
         Ok(has_face)
     }
@@ -470,7 +545,28 @@ impl AuthMethod for FaceAuth {
     }
 }
 
-fn save_debug_frame(username: &str, frame: &RgbFrame, reason: &str) {
+fn save_debug_frame_if_enabled(debug: bool, username: &str, frame: &RgbFrame, reason: &str) {
+    if !debug {
+        return;
+    }
+
+    match save_debug_frame(username, frame, reason) {
+        Ok(path) => emit_log(
+            LogLevel::Debug,
+            debug,
+            "FaceAuth",
+            &format!("saved debug frame to {}", path.display()),
+        ),
+        Err(error) => emit_log(
+            LogLevel::Warn,
+            debug,
+            "FaceAuth",
+            &format!("failed to save debug frame: {error}"),
+        ),
+    }
+}
+
+fn save_debug_frame(username: &str, frame: &RgbFrame, reason: &str) -> Result<PathBuf, String> {
     use std::time::SystemTime;
 
     let timestamp = SystemTime::now()
@@ -481,9 +577,16 @@ fn save_debug_frame(username: &str, frame: &RgbFrame, reason: &str) {
     let debug_dir = user_data_dir(username).join("debugs");
     let path = debug_dir.join(filename);
 
-    if let Ok(jpeg) = encode_jpeg(frame, 85) {
-        let _ = std::fs::write(&path, jpeg);
-    }
+    std::fs::create_dir_all(&debug_dir).map_err(|error| {
+        format!(
+            "Failed to create debug directory {}: {error}",
+            debug_dir.display()
+        )
+    })?;
+    let jpeg = encode_jpeg(frame, 85)?;
+    std::fs::write(&path, jpeg)
+        .map_err(|error| format!("Failed to write debug frame {}: {error}", path.display()))?;
+    Ok(path)
 }
 
 fn read_enrolled_face(path: &Path) -> Result<RgbFrame, String> {
@@ -554,7 +657,7 @@ mod tests {
     fn face_camera_request_disables_auto_optimize() {
         let request = face_camera_request(None, false, false);
 
-        assert!(request.auto_optimize_camera == false);
+        assert!(!request.auto_optimize_camera);
     }
 
     #[test]
@@ -569,6 +672,29 @@ mod tests {
         assert_eq!(loaded.width, 1);
         assert_eq!(loaded.height, 1);
         assert_eq!(loaded.data.len(), 3);
+    }
+
+    #[test]
+    fn save_debug_frame_creates_debug_directory() {
+        let home = tempfile::tempdir().unwrap();
+        let previous_home = std::env::var_os("HOME");
+        std::env::set_var("HOME", home.path());
+        let frame = RgbFrame::new(1, 1, vec![255, 0, 0]).unwrap();
+
+        let path = save_debug_frame("biopass-rs-missing-user", &frame, "test_failure").unwrap();
+
+        assert!(path.is_file());
+        assert!(path
+            .parent()
+            .is_some_and(|parent| parent.ends_with(".local/share/biopass-rs/debugs")));
+        let data = std::fs::read(path).unwrap();
+        assert!(data.starts_with(&[0xff, 0xd8]));
+
+        if let Some(home) = previous_home {
+            std::env::set_var("HOME", home);
+        } else {
+            std::env::remove_var("HOME");
+        }
     }
 
     #[test]

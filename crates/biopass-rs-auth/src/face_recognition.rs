@@ -71,7 +71,7 @@ impl FaceRecognizer {
         enrolled_embedding: &[f32],
         candidate_embedding: &[f32],
     ) -> Result<FaceMatch, String> {
-        let similarity = cosine_similarity(&enrolled_embedding, &candidate_embedding)?;
+        let similarity = cosine_similarity(enrolled_embedding, candidate_embedding)?;
         Ok(FaceMatch {
             similarity,
             similar: similarity > self.threshold,
