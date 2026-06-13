@@ -527,6 +527,7 @@ impl FaceAuth {
                 LogLevel::Debug,
                 &format!("IR frame captured: {}x{}", frame.width, frame.height),
             );
+            save_debug_frame_if_enabled(debug, username, &frame, "ir_raw_frame");
 
             let detections = match self.detector().and_then(|detector| detector.detect(&frame)) {
                 Ok(detections) => detections,
@@ -541,13 +542,21 @@ impl FaceAuth {
                 &format!("IR detection found {} face(s)", detections.len()),
             );
             if detections.is_empty() {
-                log(LogLevel::Info, "no face detected in IR frame");
+                log(
+                    LogLevel::Info,
+                    "no face detected in IR frame (highest confidence is 0.0 — nothing above detector threshold)",
+                );
                 save_debug_frame_if_enabled(debug, username, &frame, "ir_no_face");
                 if frame_idx + 1 < IR_LIVENESS_FRAME_COUNT {
                     std::thread::sleep(Duration::from_millis(IR_LIVENESS_FRAME_INTERVAL_MS));
                 }
                 continue;
             }
+
+            let highest_confidence = detections
+                .iter()
+                .map(|detection| detection.confidence)
+                .fold(0.0_f32, f32::max);
 
             // Discard IR faces that are too small to give a reliable liveness
             // reading. The classifier runs on a 128x128 crop, so a face that
@@ -568,7 +577,10 @@ impl FaceAuth {
             if usable.is_empty() {
                 log(
                     LogLevel::Info,
-                    "IR face too small for reliable liveness, treating as spoof",
+                    &format!(
+                        "IR face too small for reliable liveness (highest conf={:.4}, ratio threshold={:.4}), treating as spoof",
+                        highest_confidence, min_face_area_ratio
+                    ),
                 );
                 save_debug_frame_if_enabled(debug, username, &frame, "ir_face_too_small");
                 if frame_idx + 1 < IR_LIVENESS_FRAME_COUNT {
@@ -589,7 +601,10 @@ impl FaceAuth {
                 None => {
                     log(
                         LogLevel::Info,
-                        "no IR face matches the RGB face spatially, treating as spoof",
+                        &format!(
+                            "no IR face matches the RGB face spatially (highest conf={:.4}), treating as spoof",
+                            highest_confidence
+                        ),
                     );
                     save_debug_frame_if_enabled(debug, username, &frame, "ir_face_mismatch");
                     if frame_idx + 1 < IR_LIVENESS_FRAME_COUNT {
@@ -636,6 +651,16 @@ impl FaceAuth {
                 ),
             );
             if verdict.spoof {
+                log(
+                    LogLevel::Info,
+                    &format!(
+                        "IR liveness FAILED frame {}/{} (detection conf={:.4}, classifier score={:.4})",
+                        frame_idx + 1,
+                        IR_LIVENESS_FRAME_COUNT,
+                        highest_confidence,
+                        verdict.score
+                    ),
+                );
                 save_debug_frame_if_enabled(debug, username, &best_detection.crop, "ir_spoof");
             } else {
                 passed_frames += 1;
