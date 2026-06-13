@@ -3,6 +3,8 @@ app_dir = "apps/desktop"
 
 [env]
 _.path = "./target/release"
+BIOPASS_DATA_DIR = "./dev-data"
+BIOPASS_CONFIG = "./dev-data/config.yaml"
 
 [tasks.install-app]
 description = "Install JS dependencies for the Tauri app"

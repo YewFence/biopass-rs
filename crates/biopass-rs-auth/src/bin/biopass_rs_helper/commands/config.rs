@@ -12,13 +12,16 @@ pub(crate) fn run(username: &str, action: ConfigAction) -> u8 {
         return EXIT_AUTH_ERR;
     }
     match action {
-        ConfigAction::Init { force } => init(username, force),
+        ConfigAction::Init {
+            force,
+            skip_upstream,
+        } => init(username, force, skip_upstream),
         ConfigAction::Reset => reset(username),
         ConfigAction::Migrate => migrate(username),
     }
 }
 
-fn init(username: &str, force: bool) -> u8 {
+fn init(username: &str, force: bool, skip_upstream: bool) -> u8 {
     let path = config_path(username);
     if force {
         if let Err(error) = write_config_to_path(&path, &BiopassConfig::default()) {
@@ -32,7 +35,11 @@ fn init(username: &str, force: bool) -> u8 {
         return EXIT_SUCCESS;
     }
 
-    let home = users::get_user_by_name(username).map(|user| user.home_dir().to_path_buf());
+    let home = if skip_upstream {
+        None
+    } else {
+        users::get_user_by_name(username).map(|user| user.home_dir().to_path_buf())
+    };
     match bootstrap_config_at(&path, home.as_deref(), BiopassConfig::default) {
         Ok(BootstrapOutcome::AlreadyPresent) => {
             eprintln!(
