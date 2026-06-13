@@ -12,6 +12,31 @@ biopass-rs 使用红外（IR）相机进行面部反欺骗，而不是仅依赖 
 
 biopass-rs 仅从配置的 IR 视频设备读取数据。它不管理笔记本电脑或摄像头的硬件 IR 发射器。
 
+## 工作原理
+
+IR 反欺骗管线是一个分层活体检查：
+
+1. **LED / 曝光预热** — IR 相机最初可能返回暗帧，因此 biopass-rs 在采集前等待 `ir.warmup_delay_ms`（默认 300ms）。
+2. **帧采集** — 连续采集 3 帧 IR 图像。
+3. **人脸检测** — YOLO 模型（`yolov8n-face.onnx`）在每帧 IR 图像中定位人脸。
+4. **RGB / IR 空间匹配** — 通过边框 IoU 将 IR 检测结果与 RGB 认证的人脸匹配。如果没有任何 IR 人脸与 RGB 人脸重叠，则跳过该 IR 帧。
+5. **最小人脸尺寸检查** — 检测到的 IR 人脸必须至少占帧面积的 `ir.min_face_area_ratio`（默认 0.08）。过小 / 偏远的人脸被跳过，而不是被归类为 spoof。
+6. **活体分类** — MobileNetV3 模型（`mobilenetv3_antispoof.onnx`）将每个被接受的人脸裁切分类为 **real** 或 **spoof**。由于模型期望 RGB 输入，单通道灰度 IR 数据被复制到 3 个颜色通道中。
+
+当且仅当 SPOOF 类没有胜出、real 分数达到 `anti_spoofing.ai.model.threshold`、且 real 分数严格大于 spoof 分数时，该帧才被接受为真。
+
+每次认证尝试，biopass-rs 收集 3 张可用的 IR 人脸裁切图，要求其中至少 2 张通过活体检查 — 严格的多数投票。检查是 fail-closed：任何失败（模型缺失、帧不可读、人脸过小、空间不匹配、分类器判定 spoof）都被视为 spoof。
+
+当 IR 管线与 RGB AI 模型同时启用时，**两者都必须独立通过**才会授予认证。RGB AI 反欺骗任务与 IR 活体任务串行执行。
+
+启用调试模式后，biopass-rs 会在 `~/.local/share/biopass-rs/<user>/debugs/` 下保存额外的 IR 诊断信息，包括：
+
+- `ir_raw_frame.*.jpg` — 每张原始 IR 帧
+- `ir_spoof.*.jpg` — 活体分类器拒绝的人脸裁切
+- `ir_face_too_small.*.jpg` / `ir_face_mismatch.*.jpg` / `ir_no_face.*.jpg` — 失败原因标签
+
+这些信息有助于区分真正的模型不匹配和由于距离、模糊或裁切尺寸不足导致的输入细节不足。
+
 ## 1. 查找 IR 相机设备
 
 列出视频设备：

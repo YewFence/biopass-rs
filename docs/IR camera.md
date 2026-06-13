@@ -12,6 +12,31 @@ biopass-rs uses an infrared (IR) camera for face anti-spoofing, rather than rely
 
 biopass-rs only reads from the configured IR video device. It does not manage the hardware IR emitter for your laptop or webcam.
 
+## How It Works
+
+The IR anti-spoofing pipeline runs as a layered liveness check:
+
+1. **LED / exposure warm-up** — the IR camera may initially return a dark frame, so biopass-rs waits `ir.warmup_delay_ms` (default 300ms) before capturing.
+2. **Frame capture** — three IR frames are captured in sequence.
+3. **Face detection** — a YOLO model (`yolov8n-face.onnx`) locates a face in each IR frame.
+4. **RGB / IR spatial match** — the IR detection is matched to the RGB-authenticated face by bounding-box IoU. If no IR face overlaps the RGB face, the IR frame is skipped.
+5. **Minimum face scale check** — the detected IR face must occupy at least `ir.min_face_area_ratio` (default 0.08) of the frame area. Tiny / distant faces are skipped, not classified as spoof.
+6. **Liveness classification** — a MobileNetV3 model (`mobilenetv3_antispoof.onnx`) classifies each accepted crop as **real** or **spoof**. Since the model expects RGB, the single grayscale IR channel is cloned into all 3 color channels.
+
+A frame is accepted as real only when the SPOOF class does not win, the real score meets `anti_spoofing.ai.model.threshold`, and the real score is strictly greater than the spoof score.
+
+For each authentication attempt, biopass-rs collects 3 usable IR face crops and requires at least 2 of them to pass liveness — a strict majority vote. The check is fail-closed: any failure (model missing, frame unreadable, face too small, no spatial match, classifier says spoof) is treated as a spoof.
+
+When the IR pipeline is enabled alongside the RGB AI model, **both** must independently pass before authentication is granted. The RGB AI anti-spoofing task and IR liveness task run in sequence.
+
+When debug mode is enabled, biopass-rs saves additional IR diagnostics under `~/.local/share/biopass-rs/<user>/debugs/`, including:
+
+- `ir_raw_frame.*.jpg` — every raw IR frame
+- `ir_spoof.*.jpg` — the cropped face the liveness classifier rejected
+- `ir_face_too_small.*.jpg` / `ir_face_mismatch.*.jpg` / `ir_no_face.*.jpg` — the upstream failure labels
+
+These help distinguish between a real model mismatch and insufficient input detail caused by distance, blur, or poor crop scale.
+
 ## 1. Find the IR Camera Device
 
 List video devices:
