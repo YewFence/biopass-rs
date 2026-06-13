@@ -992,17 +992,16 @@ mod tests {
 
     #[test]
     fn save_debug_frame_creates_debug_directory() {
-        let home = tempfile::tempdir().unwrap();
-        let previous_home = std::env::var_os("HOME");
-        std::env::set_var("HOME", home.path());
+        let username = "biopass-rs-missing-user";
         let frame = RgbFrame::new(1, 1, vec![255, 0, 0]).unwrap();
 
-        let path = save_debug_frame("biopass-rs-missing-user", &frame, "test_failure").unwrap();
+        let path = save_debug_frame(username, &frame, "test_failure").unwrap();
 
         assert!(path.is_file());
-        assert!(path
-            .parent()
-            .is_some_and(|parent| parent.ends_with(".local/share/biopass-rs/debugs")));
+        assert_eq!(
+            path.parent(),
+            Some(user_data_dir(username).join("debugs").as_path())
+        );
         let data = std::fs::read(path).unwrap();
         assert!(data.starts_with(&[0xff, 0xd8]));
 
