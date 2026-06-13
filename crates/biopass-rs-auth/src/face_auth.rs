@@ -9,6 +9,9 @@ use std::time::Duration;
 
 const IR_CAPTURE_WARMUP_FRAMES: u32 = 5;
 const IR_CAPTURE_TIMEOUT_MS: u64 = 3000;
+const IR_LIVENESS_FRAME_COUNT: usize = 3;
+const IR_LIVENESS_REQUIRED_PASSES: usize = 2;
+const IR_LIVENESS_FRAME_INTERVAL_MS: u64 = 80;
 
 pub struct FaceAuth {
     config: FaceMethodConfig,
@@ -421,6 +424,7 @@ impl FaceAuth {
             .camera
             .as_deref()
             .filter(|camera| !camera.is_empty())
+            .map(str::to_owned)
         else {
             log(
                 LogLevel::Warn,
@@ -459,75 +463,120 @@ impl FaceAuth {
             ));
         }
 
+        // Capture a short sequence of IR frames and run the liveness classifier
+        // on each. We require a strict majority of accepted frames before the
+        // IR check counts as passed; the first non-empty frame is reused as
+        // the warmup sample so the LED/exposure has at least one chance to
+        // settle before we start voting.
         log(
-            LogLevel::Debug,
-            &format!("capturing IR frame from {camera}"),
-        );
-        let frame = capture_rgb_frame(&ir_camera_request(camera, debug))?;
-        log(
-            LogLevel::Debug,
-            &format!("IR frame captured: {}x{}", frame.width, frame.height),
-        );
-
-        let detections = match self.detector().and_then(|detector| detector.detect(&frame)) {
-            Ok(detections) => detections,
-            Err(error) => {
-                save_debug_frame_if_enabled(debug, username, &frame, "ir_detection_error");
-                return Err(error);
-            }
-        };
-        log(
-            LogLevel::Debug,
-            &format!("IR detection found {} face(s)", detections.len()),
-        );
-        if detections.is_empty() {
-            log(
-                LogLevel::Info,
-                "no face detected in IR frame, treating as spoof",
-            );
-            save_debug_frame_if_enabled(debug, username, &frame, "ir_no_face");
-            return Ok(false);
-        }
-
-        let best_detection = detections
-            .iter()
-            .max_by(|a, b| a.confidence.total_cmp(&b.confidence))
-            .expect("detections is non-empty");
-        log(
-            LogLevel::Debug,
+            LogLevel::Info,
             &format!(
-                "selected IR face crop conf={:.4} bbox={}x{}",
-                best_detection.confidence,
-                best_detection.bbox.width(),
-                best_detection.bbox.height()
+                "collecting {IR_LIVENESS_FRAME_COUNT} IR frame(s), requiring >= {IR_LIVENESS_REQUIRED_PASSES} liveness pass(es)"
             ),
         );
 
-        let verdict = match self
-            .ir_anti_spoofing()
-            .and_then(|model| model.detect(&best_detection.crop))
-        {
-            Ok(verdict) => verdict,
-            Err(error) => {
-                save_debug_frame_if_enabled(
-                    debug,
-                    username,
-                    &best_detection.crop,
-                    "ir_classifier_error",
-                );
-                return Err(error);
+        let mut passed_frames: usize = 0;
+        for frame_idx in 0..IR_LIVENESS_FRAME_COUNT {
+            log(
+                LogLevel::Debug,
+                &format!(
+                    "capturing IR frame {}/{}",
+                    frame_idx + 1,
+                    IR_LIVENESS_FRAME_COUNT
+                ),
+            );
+            let frame = match capture_rgb_frame(&ir_camera_request(&camera, debug)) {
+                Ok(frame) => frame,
+                Err(error) => {
+                    log(LogLevel::Warn, &format!("IR frame capture failed: {error}"));
+                    continue;
+                }
+            };
+            log(
+                LogLevel::Debug,
+                &format!("IR frame captured: {}x{}", frame.width, frame.height),
+            );
+
+            let detections = match self.detector().and_then(|detector| detector.detect(&frame)) {
+                Ok(detections) => detections,
+                Err(error) => {
+                    log(LogLevel::Warn, &format!("IR detection error: {error}"));
+                    save_debug_frame_if_enabled(debug, username, &frame, "ir_detection_error");
+                    continue;
+                }
+            };
+            log(
+                LogLevel::Debug,
+                &format!("IR detection found {} face(s)", detections.len()),
+            );
+            if detections.is_empty() {
+                log(LogLevel::Info, "no face detected in IR frame");
+                save_debug_frame_if_enabled(debug, username, &frame, "ir_no_face");
+                if frame_idx + 1 < IR_LIVENESS_FRAME_COUNT {
+                    std::thread::sleep(Duration::from_millis(IR_LIVENESS_FRAME_INTERVAL_MS));
+                }
+                continue;
             }
-        };
-        log(
-            LogLevel::Debug,
-            &format!("IR liveness verdict: spoof={}", verdict.spoof),
-        );
-        if verdict.spoof {
-            save_debug_frame_if_enabled(debug, username, &best_detection.crop, "ir_spoof");
-            return Ok(false);
+
+            let best_detection = detections
+                .iter()
+                .max_by(|a, b| a.confidence.total_cmp(&b.confidence))
+                .expect("detections is non-empty");
+            log(
+                LogLevel::Debug,
+                &format!(
+                    "selected IR face crop conf={:.4} bbox={}x{}",
+                    best_detection.confidence,
+                    best_detection.bbox.width(),
+                    best_detection.bbox.height()
+                ),
+            );
+
+            let verdict = match self
+                .ir_anti_spoofing()
+                .and_then(|model| model.detect(&best_detection.crop))
+            {
+                Ok(verdict) => verdict,
+                Err(error) => {
+                    log(LogLevel::Warn, &format!("IR classifier error: {error}"));
+                    save_debug_frame_if_enabled(
+                        debug,
+                        username,
+                        &best_detection.crop,
+                        "ir_classifier_error",
+                    );
+                    continue;
+                }
+            };
+            log(
+                LogLevel::Debug,
+                &format!(
+                    "IR liveness verdict frame {}/{}: spoof={}",
+                    frame_idx + 1,
+                    IR_LIVENESS_FRAME_COUNT,
+                    verdict.spoof
+                ),
+            );
+            if verdict.spoof {
+                save_debug_frame_if_enabled(debug, username, &best_detection.crop, "ir_spoof");
+            } else {
+                passed_frames += 1;
+            }
+
+            if frame_idx + 1 < IR_LIVENESS_FRAME_COUNT {
+                std::thread::sleep(Duration::from_millis(IR_LIVENESS_FRAME_INTERVAL_MS));
+            }
         }
 
-        Ok(true)
+        let required = IR_LIVENESS_REQUIRED_PASSES.min(IR_LIVENESS_FRAME_COUNT);
+        let passed = passed_frames >= required;
+        log(
+            LogLevel::Info,
+            &format!(
+                "IR liveness aggregate: {passed_frames}/{IR_LIVENESS_FRAME_COUNT} frame(s) passed, required >= {required}, verdict={passed}"
+            ),
+        );
+        Ok(passed)
     }
 }
 
