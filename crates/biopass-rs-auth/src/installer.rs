@@ -5,9 +5,6 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
-use crate::config::{bootstrap_config_at, BootstrapOutcome};
-use crate::BiopassConfig;
-
 const MODELS: &[(&str, &str)] = &[
     (
         "yolov8n-face.onnx",
@@ -33,8 +30,6 @@ const LEGACY_MODELS: &[&str] = &[
     "mobilenetv3_antispoof_ts.pt",
 ];
 
-const NEW_CONFIG_PATH: &str = ".config/biopass-rs/config.yaml";
-const OLD_DATA_DIR: &str = ".local/share/com.ticklab.biopass";
 const NEW_DATA_DIR: &str = ".local/share/biopass-rs";
 
 fn get_home_dir() -> Result<PathBuf, String> {
@@ -165,72 +160,6 @@ pub fn run_ldconfig() -> Result<(), String> {
     Command::new("ldconfig")
         .status()
         .map_err(|e| format!("Failed to run ldconfig: {}", e))?;
-    Ok(())
-}
-
-pub fn migrate_all_users() -> Result<(), String> {
-    let passwd = fs::read_to_string("/etc/passwd")
-        .map_err(|e| format!("Failed to read /etc/passwd: {}", e))?;
-
-    for line in passwd.lines() {
-        let parts: Vec<&str> = line.split(':').collect();
-        if parts.len() < 6 {
-            continue;
-        }
-        let username = parts[0];
-        let home = parts[5];
-
-        if home.is_empty() || home == "/nonexistent" {
-            continue;
-        }
-
-        let home_path = PathBuf::from(home);
-        let new_config = home_path.join(NEW_CONFIG_PATH);
-
-        match bootstrap_config_at(&new_config, Some(&home_path), BiopassConfig::default) {
-            Ok(BootstrapOutcome::AlreadyPresent) => {
-                eprintln!(
-                    "Skipping config bootstrap for user '{}': config already exists at {}",
-                    username,
-                    new_config.display()
-                );
-            }
-            Ok(BootstrapOutcome::ImportedFromUpstream) => {
-                eprintln!(
-                    "Imported upstream config for user '{}' into {}",
-                    username,
-                    new_config.display()
-                );
-            }
-            Ok(BootstrapOutcome::WroteDefaults) => {
-                eprintln!(
-                    "Wrote default config for user '{}' at {}",
-                    username,
-                    new_config.display()
-                );
-            }
-            Err(e) => {
-                eprintln!(
-                    "Warning: Failed to bootstrap config for '{}': {}",
-                    username, e
-                );
-            }
-        }
-
-        // Migrate old data dir to new location
-        let old_data = home_path.join(OLD_DATA_DIR);
-        let new_data = home_path.join(NEW_DATA_DIR);
-        if old_data.exists() && !new_data.exists() {
-            eprintln!("Migrating data directory for user '{}'...", username);
-            if let Err(e) = fs::rename(&old_data, &new_data) {
-                eprintln!(
-                    "Warning: Failed to migrate data dir for '{}': {}",
-                    username, e
-                );
-            }
-        }
-    }
-
     Ok(())
 }
 

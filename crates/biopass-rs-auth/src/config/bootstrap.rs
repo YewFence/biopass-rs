@@ -1,13 +1,11 @@
 //! Shared "make sure a config file exists at this path" bootstrap logic.
 //!
-//! Three call sites need the same three-step fallback chain:
+//! Two call sites need the same three-step fallback chain:
 //!
-//! 1. **`installer::migrate_all_users`** — invoked by `biopass-rs-helper install`,
-//!    runs once per system user and only triggers when the destination does
-//!    not already exist.
-//! 2. **`config init`** (helper CLI) — invoked by a single user from the
-//!    terminal; same chain but for one target user.
-//! 3. **Desktop GUI** — invoked on startup when the GUI cannot find a config
+//! 1. **`config init`** (helper CLI) — invoked by a single user from the
+//!    terminal; same chain but for one target user. Also invoked by
+//!    `biopass-rs-helper install` for the current user.
+//! 2. **Desktop GUI** — invoked on startup when the GUI cannot find a config
 //!    file at its expected location.
 //!
 //! The chain is: (a) try to import the upstream TickLabVN `biopass` config

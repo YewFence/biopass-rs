@@ -1,8 +1,8 @@
 use biopass_rs_auth::{
     bootstrap_config_at, capture_rgb_frame, config_exists, config_path, decode_jpeg_rgb,
-    download_models, encode_jpeg, migrate_all_users, migrate_config_schema, read_config,
-    reset_config, run_ldconfig, user_exists, AuthManager, BiopassConfig, BootstrapOutcome,
-    CameraRequest, FaceAuth, FaceDetector, FingerprintAuth, PamCode, RgbFrame,
+    download_models, encode_jpeg, migrate_config_schema, read_config, reset_config, run_ldconfig,
+    user_exists, AuthManager, BiopassConfig, BootstrapOutcome, CameraRequest, FaceAuth,
+    FaceDetector, FingerprintAuth, PamCode, RgbFrame,
 };
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
@@ -336,9 +336,14 @@ fn install() -> u8 {
         eprintln!("Warning: {error}");
     }
 
-    eprintln!("Migrating configurations...");
-    if let Err(error) = migrate_all_users() {
-        eprintln!("Warning: {error}");
+    eprintln!("Bootstrapping config for the current user...");
+    match bootstrap_current_user() {
+        Ok(message) => {
+            if let Some(message) = message {
+                eprintln!("{message}");
+            }
+        }
+        Err(error) => eprintln!("Warning: {error}"),
     }
 
     eprintln!("Downloading models...");
@@ -352,6 +357,50 @@ fn install() -> u8 {
             EXIT_AUTH_ERR
         }
     }
+}
+
+const NEW_CONFIG_PATH: &str = ".config/biopass-rs/config.yaml";
+const OLD_DATA_DIR: &str = ".local/share/com.ticklab.biopass";
+const NEW_DATA_DIR: &str = ".local/share/biopass-rs";
+
+fn bootstrap_current_user() -> Result<Option<String>, String> {
+    let username = current_username()
+        .ok_or_else(|| "Cannot determine current user (set USER/SUDO_USER)".to_string())?;
+    let home = home_dir_for_username(&username)
+        .ok_or_else(|| format!("Cannot determine home directory for user '{username}'"))?;
+
+    let new_config = home.join(NEW_CONFIG_PATH);
+    let outcome_message =
+        match bootstrap_config_at(&new_config, Some(&home), BiopassConfig::default) {
+            Ok(BootstrapOutcome::AlreadyPresent) => format!(
+                "Skipping config bootstrap for user '{username}': config already exists at {}",
+                new_config.display()
+            ),
+            Ok(BootstrapOutcome::ImportedFromUpstream) => format!(
+                "Imported upstream config for user '{username}' into {}",
+                new_config.display()
+            ),
+            Ok(BootstrapOutcome::WroteDefaults) => format!(
+                "Wrote default config for user '{username}' at {}",
+                new_config.display()
+            ),
+            Err(error) => {
+                return Err(format!(
+                    "failed to bootstrap config for '{username}': {error}"
+                ))
+            }
+        };
+
+    let old_data = home.join(OLD_DATA_DIR);
+    let new_data = home.join(NEW_DATA_DIR);
+    if old_data.exists() && !new_data.exists() {
+        eprintln!("Migrating data directory for user '{username}'...");
+        if let Err(error) = std::fs::rename(&old_data, &new_data) {
+            eprintln!("Warning: Failed to migrate data dir for '{username}': {error}");
+        }
+    }
+
+    Ok(Some(outcome_message))
 }
 
 fn crop_face(input: &PathBuf, output: &PathBuf, model: &str, quality: u8) -> u8 {

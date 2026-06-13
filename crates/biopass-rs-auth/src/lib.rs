@@ -64,7 +64,7 @@ pub use face_recognition::{FaceMatch, FaceRecognizer};
 pub use fingerprint_auth::{EnrollStatusCallback, FingerprintAuth};
 pub use image_io::{decode_jpeg_rgb, encode_jpeg};
 pub use inference::{F32TensorOutput, InferenceModel, TensorInfo};
-pub use installer::{check_models_present, download_models, migrate_all_users, run_ldconfig};
+pub use installer::{check_models_present, download_models, run_ldconfig};
 pub use manager::{
     AuthConfig, AuthManager, AuthMethod, AuthOutcome, AuthResult, ExecutionMode, PamCode,
 };
