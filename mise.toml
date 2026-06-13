@@ -38,6 +38,13 @@ depends = ["dev-helper-build"]
 raw_args = true
 run = "cargo run --package biopass-rs-auth --bin biopass-rs-helper --"
 
+[tasks.auth-test]
+description = "Run the sudo auth flow through the debug helper"
+run = [
+    { task = "dev-helper", args = ["clean"] },
+    { task = "dev-helper", args = ["auth", "-s", "sudo"] },
+]
+
 [tasks.dev-app]
 description = "Run the Tauri app in development mode"
 depends = ["dev-helper-build"]
