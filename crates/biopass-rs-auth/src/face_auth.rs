@@ -915,6 +915,26 @@ fn read_enrolled_face(path: &Path) -> Result<RgbFrame, String> {
 mod tests {
     use super::*;
 
+    fn with_data_dir_override<T>(
+        path: &std::path::Path,
+        f: impl FnOnce() -> T + std::panic::UnwindSafe,
+    ) -> T {
+        let previous = std::env::var_os(crate::DATA_DIR_ENV);
+        std::env::set_var(crate::DATA_DIR_ENV, path);
+        let result = std::panic::catch_unwind(f);
+
+        if let Some(value) = previous {
+            std::env::set_var(crate::DATA_DIR_ENV, value);
+        } else {
+            std::env::remove_var(crate::DATA_DIR_ENV);
+        }
+
+        match result {
+            Ok(value) => value,
+            Err(panic) => std::panic::resume_unwind(panic),
+        }
+    }
+
     fn face_config() -> FaceMethodConfig {
         FaceMethodConfig {
             detection: crate::DetectionConfig {
@@ -992,24 +1012,21 @@ mod tests {
 
     #[test]
     fn save_debug_frame_creates_debug_directory() {
-        let username = "biopass-rs-missing-user";
-        let frame = RgbFrame::new(1, 1, vec![255, 0, 0]).unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        with_data_dir_override(directory.path(), || {
+            let username = "biopass-rs-missing-user";
+            let frame = RgbFrame::new(1, 1, vec![255, 0, 0]).unwrap();
 
-        let path = save_debug_frame(username, &frame, "test_failure").unwrap();
+            let path = save_debug_frame(username, &frame, "test_failure").unwrap();
 
-        assert!(path.is_file());
-        assert_eq!(
-            path.parent(),
-            Some(user_data_dir(username).join("debugs").as_path())
-        );
-        let data = std::fs::read(path).unwrap();
-        assert!(data.starts_with(&[0xff, 0xd8]));
-
-        if let Some(home) = previous_home {
-            std::env::set_var("HOME", home);
-        } else {
-            std::env::remove_var("HOME");
-        }
+            assert!(path.is_file());
+            assert_eq!(
+                path.parent(),
+                Some(user_data_dir(username).join("debugs").as_path())
+            );
+            let data = std::fs::read(path).unwrap();
+            assert!(data.starts_with(&[0xff, 0xd8]));
+        });
     }
 
     #[test]
