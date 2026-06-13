@@ -492,6 +492,8 @@ impl FaceAuth {
             ));
         }
 
+        let min_face_area_ratio = self.config.anti_spoofing.ir.min_face_area_ratio;
+
         // Capture a short sequence of IR frames and run the liveness classifier
         // on each. We require a strict majority of accepted frames before the
         // IR check counts as passed; the first non-empty frame is reused as
@@ -547,13 +549,41 @@ impl FaceAuth {
                 continue;
             }
 
+            // Discard IR faces that are too small to give a reliable liveness
+            // reading. The classifier runs on a 128x128 crop, so a face that
+            // already starts out below the configured ratio of the frame
+            // carries too little texture to discriminate real vs spoof.
+            let frame_area = (frame.width as f32) * (frame.height as f32);
+            let usable: Vec<_> = detections
+                .into_iter()
+                .filter(|detection| {
+                    if frame_area <= 0.0 || min_face_area_ratio <= 0.0 {
+                        return true;
+                    }
+                    let bbox_area =
+                        (detection.bbox.width() as f32) * (detection.bbox.height() as f32);
+                    bbox_area / frame_area >= min_face_area_ratio
+                })
+                .collect();
+            if usable.is_empty() {
+                log(
+                    LogLevel::Info,
+                    "IR face too small for reliable liveness, treating as spoof",
+                );
+                save_debug_frame_if_enabled(debug, username, &frame, "ir_face_too_small");
+                if frame_idx + 1 < IR_LIVENESS_FRAME_COUNT {
+                    std::thread::sleep(Duration::from_millis(IR_LIVENESS_FRAME_INTERVAL_MS));
+                }
+                continue;
+            }
+
             let best_detection = match pick_ir_face_match(
                 rgb_frame.width,
                 rgb_frame.height,
                 rgb_face_box,
                 frame.width,
                 frame.height,
-                &detections,
+                &usable,
             ) {
                 Some(detection) => detection,
                 None => {

@@ -167,6 +167,8 @@ pub struct IrAntiSpoofingConfig {
     pub retry_delay_ms: u32,
     pub camera: Option<String>,
     pub warmup_delay_ms: i32,
+    #[serde(default = "default_ir_min_face_area_ratio")]
+    pub min_face_area_ratio: f32,
 }
 
 impl Default for IrAntiSpoofingConfig {
@@ -177,6 +179,7 @@ impl Default for IrAntiSpoofingConfig {
             retry_delay_ms: default_antispoofing_retry_delay(),
             camera: None,
             warmup_delay_ms: 300,
+            min_face_area_ratio: default_ir_min_face_area_ratio(),
         }
     }
 }
@@ -198,6 +201,8 @@ impl<'de> Deserialize<'de> for IrAntiSpoofingConfig {
             camera: Option<String>,
             #[serde(default = "default_ir_warmup_delay")]
             warmup_delay_ms: i32,
+            #[serde(default = "default_ir_min_face_area_ratio")]
+            min_face_area_ratio: f32,
         }
 
         let raw = Raw::deserialize(deserializer)?;
@@ -207,6 +212,7 @@ impl<'de> Deserialize<'de> for IrAntiSpoofingConfig {
             retry_delay_ms: raw.retry_delay_ms,
             camera: raw.camera,
             warmup_delay_ms: raw.warmup_delay_ms,
+            min_face_area_ratio: raw.min_face_area_ratio,
         })
     }
 }

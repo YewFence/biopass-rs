@@ -24,6 +24,10 @@ pub(super) fn default_ir_warmup_delay() -> i32 {
     300
 }
 
+pub(super) fn default_ir_min_face_area_ratio() -> f32 {
+    0.08
+}
+
 pub(super) fn default_antispoofing_retry_delay() -> u32 {
     200
 }
