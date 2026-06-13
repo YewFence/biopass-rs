@@ -38,7 +38,7 @@ Biopass 认证 helper
 
 ## `auth`
 
-针对 Biopass 认证用户。这是 PAM 模块在系统登录期间调用的子命令。
+针对 biopass-rs 认证用户。这是 PAM 模块在系统登录期间调用的子命令。
 
 ```bash
 biopass-rs-helper auth --service <SERVICE> [--username <USERNAME>]
@@ -55,7 +55,7 @@ biopass-rs-helper auth --service <SERVICE> [--username <USERNAME>]
 | :--- | :------ |
 | `0`  | 认证成功。 |
 | `1`  | 认证失败，或发生内部错误。 |
-| `2`  | Biopass 对此用户无事可做（无配置、无启用的方法，或服务被忽略）。PAM 应穿透到下一个模块。 |
+| `2`  | biopass-rs 对此用户无事可做（无配置、无启用的方法，或服务被忽略）。PAM 应穿透到下一个模块。 |
 
 ### 示例
 
@@ -79,9 +79,9 @@ biopass-rs-helper migrate --username <USERNAME>
 | :----------- | :------- | :------------------------- |
 | `--username` | 是 | 要迁移配置的用户。 |
 
-此命令仅触及当前 biopass-rs 配置路径 `~/.config/biopass-rs/config.yaml`。它不会从 `~/.config/com.ticklab.biopass/config.yaml` 复制上游配置、移动上游数据目录、编辑 PAM 或禁用上游 Biopass PAM 模块。
+此命令仅触及当前 biopass-rs 配置路径 `~/.config/biopass-rs/config.yaml`。它不会从 `~/.config/com.ticklab.biopass/config.yaml` 复制上游配置、移动上游数据目录、编辑 PAM 或禁用上游 biopass PAM 模块。
 
-如果用户不存在或迁移失败，则以非零状态退出。当新配置不存在时，`install` 子命令在将上游配置复制到新路径后对**所有**用户运行迁移。有关完整迁移流程，请参阅[从上游 Biopass 迁移](upstream-migration.zh-CN.md)。
+如果用户不存在或迁移失败，则以非零状态退出。当新配置不存在时，`install` 子命令在将上游配置复制到新路径后对**所有**用户运行迁移。有关完整迁移流程，请参阅[从上游 biopass 迁移](upstream-migration.zh-CN.md)。
 
 ## `install`
 

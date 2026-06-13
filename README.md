@@ -1,9 +1,9 @@
-# Biopass-rs - Unofficial Rust Rewrite of Upstream Biopass
+# biopass-rs - Unofficial Rust Rewrite of Upstream Biopass
 
 [简体中文](README.zh-CN.md) | English
 
 <p align="center">
-    <img src="https://public-r2.ticklab.site/media/tc1oN21KXhMM1B2jOecRhk=" alt="Biopass Logo" width="120" />
+    <img src="https://public-r2.ticklab.site/media/tc1oN21KXhMM1B2jOecRhk=" alt="biopass logo" width="120" />
 </p>
 
 <p align="center">
@@ -18,19 +18,19 @@
     </a>
 </p>
 
-<h2 align="center">Biopass-rs</h2>
-<p align="center"><b>An unofficial Rust rewrite of <a href="https://github.com/TickLabVN/biopass">Biopass</a> for Linux</b></p>
+<h2 align="center">biopass-rs</h2>
+<p align="center"><b>An unofficial Rust rewrite of upstream <a href="https://github.com/TickLabVN/biopass">biopass</a> for Linux</b></p>
 <p align="center">A fast, secure, and privacy-focused biometric recognition module for Linux desktops supporting face and fingerprint.</p>
 
-> **Note**: This is a personal, unofficial Rust rewrite of the original [Biopass](https://github.com/TickLabVN/biopass) project developed by [@phucvinh57](https://github.com/phucvinh57) and [@thaitran24](https://github.com/thaitran24) at TickLab. The original C++ implementation has been fully replaced with Rust, and the project is maintained on a best-effort basis. For the official version, please visit the [upstream repository](https://github.com/TickLabVN/biopass).
+> **Note**: biopass-rs is a personal, unofficial Rust rewrite of upstream [biopass](https://github.com/TickLabVN/biopass), developed by [@phucvinh57](https://github.com/phucvinh57) and [@thaitran24](https://github.com/thaitran24) at TickLab. The original C++ implementation has been fully replaced with Rust in this repository, and biopass-rs is maintained on a best-effort basis. For the official project, please visit the [upstream biopass repository](https://github.com/TickLabVN/biopass).
 
 ---
 
-## Why Biopass-rs?
+## Why biopass-rs?
 
-[Biopass](https://github.com/TickLabVN/biopass) was developed by TickLab, providing a fast, secure, and modern biometric suite for Linux that goes beyond just face recognition. This Rust rewrite is my personal take on the project — translating the C++ implementation into safer and clear Rust code.
+[biopass](https://github.com/TickLabVN/biopass) was developed by TickLab to fill this gap, providing a fast, secure, and modern biometric suite that goes beyond just face ID. biopass-rs is my personal take on the project — translating the C++ implementation into idiomatic Rust for educational purposes and because I enjoy writing Rust in my spare time.
 
-## Comparison with Upstream
+## Comparison with upstream biopass
 
 | Feature | [Biopass](https://github.com/TickLabVN/biopass) | [Biopass-rs](https://github.com/YewFence/biopass-rs) |
 | :--- | :--- | :--- |
@@ -44,9 +44,9 @@
 
 ## Installation
 
-- Please refer to the [upstream Biopass releases](https://github.com/TickLabVN/biopass/releases) for prebuilt Debian and RPM packages, or the [AUR package](https://aur.archlinux.org/packages/biopass-bin) for Arch-based distributions.
+- Download prebuilt packages from the [biopass-rs releases](https://github.com/YewFence/biopass-rs/releases). Debian and RPM packages are published there when available.
 - System sign-in setup uses distro-managed PAM configuration when available (for example `pam-auth-update` on Debian/Ubuntu): [docs/PAM.md](docs/PAM.md)
-- Migrating from upstream Biopass requires both per-user config/data migration and a PAM review so the upstream and Rust rewrite PAM modules are not enabled for the same service: [docs/upstream-migration.md](docs/upstream-migration.md)
+- Migrating from upstream biopass requires both per-user config/data migration and a PAM review so the upstream and biopass-rs PAM modules are not enabled for the same service: [docs/upstream-migration.md](docs/upstream-migration.md)
 - Interactive `polkit` authentication setup: [docs/Polkit.md](docs/Polkit.md)
 - [IR camera setup guide](docs/IR%20camera.md)
 - [`biopass-rs-helper` CLI reference](docs/biopass-rs-helper.md) — authentication, face capture, model install, and shell completion.
@@ -73,12 +73,12 @@ Models used in this project (sourced from the upstream project):
 
 ## Credits
 
-This project is an unofficial Rust rewrite of [TickLabVN/biopass](https://github.com/TickLabVN/biopass).
+biopass-rs is an unofficial Rust rewrite of upstream [biopass](https://github.com/TickLabVN/biopass).
 
 - **Original design and architecture**: [@phucvinh57](https://github.com/phucvinh57) and [@thaitran24](https://github.com/thaitran24) at TickLab
-- **AI models**: EdgeFace and YOLO-Face, as used in the upstream project
+- **AI models**: EdgeFace and YOLO-Face, as used in upstream biopass
 - **C++ → Rust translation**: Maintained on a best-effort basis; updates may lag behind the upstream project
 
-Special thanks to the TickLab team for creating Biopass and releasing it as open source. Without their original work, this rewrite would not exist.
+Special thanks to the TickLab team for creating biopass and releasing it as open source. Without their original work, biopass-rs would not exist.
 
-If you find Biopass useful, please consider supporting the [upstream project](https://github.com/TickLabVN/biopass) first.
+If you find biopass-rs useful, please consider supporting the [upstream biopass project](https://github.com/TickLabVN/biopass) first.

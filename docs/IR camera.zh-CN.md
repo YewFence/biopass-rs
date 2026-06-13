@@ -2,15 +2,15 @@
 
 简体中文 | [English](IR%20camera.md)
 
-Biopass 使用红外（IR）相机进行面部反欺骗，而不是仅依赖 RGB 反欺骗 AI 模型。通常将其配置为 Linux 视频设备路径，例如 `/dev/video2`。如果您的设备支持 IR 相机，可以通过配置 UI 启用此选项。
+biopass-rs 使用红外（IR）相机进行面部反欺骗，而不是仅依赖 RGB 反欺骗 AI 模型。通常将其配置为 Linux 视频设备路径，例如 `/dev/video2`。如果您的设备支持 IR 相机，可以通过配置 UI 启用此选项。
 
 ## 要求
 
 - IR 传感器暴露为 `/dev/video*` 设备的 Linux 系统。
-- 在 Biopass 中已设置好面部识别。
+- 在 biopass-rs 中已设置好面部识别。
 - 访问相机设备的权限。
 
-Biopass 仅从配置的 IR 视频设备读取数据。它不管理笔记本电脑或摄像头的硬件 IR 发射器。
+biopass-rs 仅从配置的 IR 视频设备读取数据。它不管理笔记本电脑或摄像头的硬件 IR 发射器。
 
 ## 1. 查找 IR 相机设备
 
@@ -28,9 +28,9 @@ v4l2-ctl --list-devices
 
 查找属于您的 IR 传感器的设备节点，例如 `/dev/video2`。
 
-## 2. 在 Biopass 中启用它
+## 2. 在 biopass-rs 中启用它
 
-打开 Biopass 桌面应用并进入面部设置。
+打开 biopass-rs 桌面应用并进入面部设置。
 
 在反欺骗部分：
 

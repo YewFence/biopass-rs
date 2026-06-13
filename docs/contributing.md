@@ -1,10 +1,10 @@
 # Contributing guidelines
 
-Welcome to Biopass! We appreciate your interest in contributing. This guide outlines how to get the project running locally, explains the core architecture, and provides important debugging guidelines.
+Welcome to biopass-rs! We appreciate your interest in contributing. This guide outlines how to get the project running locally, explains the core architecture, and provides important debugging guidelines.
 
 ## 1. How to Run
 
-Biopass consists of Rust workspace crates and a frontend Tauri desktop application. You will need to install dependencies for both.
+biopass-rs consists of Rust workspace crates and a frontend Tauri desktop application. You will need to install dependencies for both.
 
 ### Install Dependencies
 
@@ -62,7 +62,7 @@ bun run tauri dev
 
 ## 2. Tech Stack
 
-Biopass is built using modern and reliable technologies across both the backend logic and the desktop management application.
+biopass-rs is built using modern and reliable technologies across both the backend logic and the desktop management application.
 
 ### Backend Authentication Crates (`crates/`)
 - **Rust**: System-level PAM, helper and authentication orchestration.
@@ -81,7 +81,7 @@ Biopass is built using modern and reliable technologies across both the backend 
 
 ## 3. Architecture and Flow
 
-The Biopass system is split into two primary layers: **The Backend Authentication Module** and the **Desktop UI Engine**.
+The biopass-rs system is split into two primary layers: **The Backend Authentication Module** and the **Desktop UI Engine**.
 
 ```mermaid
 sequenceDiagram

@@ -38,7 +38,7 @@ Subcommands:
 
 ## `auth`
 
-Authenticate a user against Biopass. This is the subcommand invoked by the PAM module during system sign-in.
+Authenticate a user against biopass-rs. This is the subcommand invoked by the PAM module during system sign-in.
 
 ```bash
 biopass-rs-helper auth --service <SERVICE> [--username <USERNAME>]
@@ -55,7 +55,7 @@ biopass-rs-helper auth --service <SERVICE> [--username <USERNAME>]
 | :--- | :------ |
 | `0`  | Authentication succeeded. |
 | `1`  | Authentication failed, or an internal error occurred. |
-| `2`  | Biopass has nothing to do for this user (no config, no enabled methods, or service is ignored). PAM should fall through to the next module. |
+| `2`  | biopass-rs has nothing to do for this user (no config, no enabled methods, or service is ignored). PAM should fall through to the next module. |
 
 ### Examples
 
@@ -79,9 +79,9 @@ biopass-rs-helper migrate --username <USERNAME>
 | :----------- | :------- | :------------------------- |
 | `--username` | Yes      | User whose config to migrate. |
 
-This command only touches the current biopass-rs config path, `~/.config/biopass-rs/config.yaml`. It does not copy the upstream config from `~/.config/com.ticklab.biopass/config.yaml`, move the upstream data directory, edit PAM, or disable the upstream Biopass PAM module.
+This command only touches the current biopass-rs config path, `~/.config/biopass-rs/config.yaml`. It does not copy the upstream config from `~/.config/com.ticklab.biopass/config.yaml`, move the upstream data directory, edit PAM, or disable the upstream biopass PAM module.
 
-Exits with a non-zero status if the user does not exist or if the migration fails. The `install` subcommand runs migration across **all** users after copying upstream configs into the new path when the new config is absent. See [Migrating from upstream Biopass](upstream-migration.md) for the full migration flow.
+Exits with a non-zero status if the user does not exist or if the migration fails. The `install` subcommand runs migration across **all** users after copying upstream configs into the new path when the new config is absent. See [Migrating from upstream biopass](upstream-migration.md) for the full migration flow.
 
 ## `install`
 
