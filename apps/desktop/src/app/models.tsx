@@ -98,10 +98,16 @@ function ModelsRouteComponent() {
         inUsePaths.add(config.methods.face.recognition.model);
       }
       if (
-        config.methods.face.anti_spoofing.ai.enable &&
-        config.methods.face.anti_spoofing.ai.model.path
+        config.methods.face.anti_spoofing.rgb.enable &&
+        config.methods.face.anti_spoofing.rgb.model.path
       ) {
-        inUsePaths.add(config.methods.face.anti_spoofing.ai.model.path);
+        inUsePaths.add(config.methods.face.anti_spoofing.rgb.model.path);
+      }
+      if (
+        config.methods.face.anti_spoofing.ir.enable &&
+        config.methods.face.anti_spoofing.ir.model.path
+      ) {
+        inUsePaths.add(config.methods.face.anti_spoofing.ir.model.path);
       }
       const checks = modelList.map(async (model) => {
         try {

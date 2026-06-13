@@ -62,7 +62,7 @@ impl FaceAuth {
 
     fn anti_spoofing(&mut self) -> Result<&mut FaceAntiSpoofing, String> {
         if self.session.anti_spoofing.is_none() {
-            let model = &self.config.anti_spoofing.ai.model;
+            let model = &self.config.anti_spoofing.rgb.model;
             self.session.anti_spoofing =
                 Some(FaceAntiSpoofing::load(&model.path, model.threshold)?);
         }
@@ -72,7 +72,7 @@ impl FaceAuth {
 
     fn ir_anti_spoofing(&mut self) -> Result<&mut FaceAntiSpoofing, String> {
         if self.session.ir_anti_spoofing.is_none() {
-            let model = &self.config.anti_spoofing.ai.model;
+            let model = &self.config.anti_spoofing.ir.model;
             self.session.ir_anti_spoofing =
                 Some(FaceAntiSpoofing::load(&model.path, model.threshold)?);
         }
@@ -309,7 +309,7 @@ impl FaceAuth {
             return Ok(true);
         }
 
-        let ai_enabled = self.config.anti_spoofing.ai.enable;
+        let ai_enabled = self.config.anti_spoofing.rgb.enable;
         let ir_enabled = self.config.anti_spoofing.ir.enable;
         if !ai_enabled && !ir_enabled {
             log(LogLevel::Info, "skipped (no ai or ir sub-check enabled)");
@@ -322,9 +322,9 @@ impl FaceAuth {
         );
 
         if ai_enabled {
-            let model_path = self.config.anti_spoofing.ai.model.path.clone();
-            let max_attempts = self.config.anti_spoofing.ai.retries.saturating_add(1);
-            let retry_delay_ms = self.config.anti_spoofing.ai.retry_delay_ms;
+            let model_path = self.config.anti_spoofing.rgb.model.path.clone();
+            let max_attempts = self.config.anti_spoofing.rgb.retries.saturating_add(1);
+            let retry_delay_ms = self.config.anti_spoofing.rgb.retry_delay_ms;
             if model_path.is_empty() || !Path::new(&model_path).is_file() {
                 log(
                     LogLevel::Warn,
@@ -470,7 +470,7 @@ impl FaceAuth {
             return Ok(false);
         }
 
-        let model_path = self.config.anti_spoofing.ai.model.path.clone();
+        let model_path = self.config.anti_spoofing.rgb.model.path.clone();
         if model_path.is_empty() || !Path::new(&model_path).is_file() {
             log(
                 LogLevel::Warn,

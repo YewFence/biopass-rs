@@ -101,7 +101,7 @@ impl Default for AntiSpoofingModelConfig {
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
-pub struct AiAntiSpoofingConfig {
+pub struct RgbAntiSpoofingConfig {
     pub enable: bool,
     #[serde(default)]
     pub retries: u32,
@@ -110,7 +110,7 @@ pub struct AiAntiSpoofingConfig {
     pub model: AntiSpoofingModelConfig,
 }
 
-impl Default for AiAntiSpoofingConfig {
+impl Default for RgbAntiSpoofingConfig {
     fn default() -> Self {
         Self {
             enable: false,
@@ -121,7 +121,7 @@ impl Default for AiAntiSpoofingConfig {
     }
 }
 
-impl<'de> Deserialize<'de> for AiAntiSpoofingConfig {
+impl<'de> Deserialize<'de> for RgbAntiSpoofingConfig {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -169,6 +169,7 @@ pub struct IrAntiSpoofingConfig {
     pub warmup_delay_ms: i32,
     #[serde(default = "default_ir_min_face_area_ratio")]
     pub min_face_area_ratio: f32,
+    pub model: AntiSpoofingModelConfig,
 }
 
 impl Default for IrAntiSpoofingConfig {
@@ -180,6 +181,7 @@ impl Default for IrAntiSpoofingConfig {
             camera: None,
             warmup_delay_ms: 300,
             min_face_area_ratio: default_ir_min_face_area_ratio(),
+            model: AntiSpoofingModelConfig::default(),
         }
     }
 }
@@ -203,9 +205,16 @@ impl<'de> Deserialize<'de> for IrAntiSpoofingConfig {
             warmup_delay_ms: i32,
             #[serde(default = "default_ir_min_face_area_ratio")]
             min_face_area_ratio: f32,
+            #[serde(default)]
+            model: Option<Value>,
         }
 
         let raw = Raw::deserialize(deserializer)?;
+        let mut model = AntiSpoofingModelConfig::default();
+        if let Some(model_value) = raw.model {
+            read_antispoofing_model(&model_value, &mut model);
+        }
+
         Ok(Self {
             enable: raw.enable,
             retries: raw.retries,
@@ -213,13 +222,14 @@ impl<'de> Deserialize<'de> for IrAntiSpoofingConfig {
             camera: raw.camera,
             warmup_delay_ms: raw.warmup_delay_ms,
             min_face_area_ratio: raw.min_face_area_ratio,
+            model,
         })
     }
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Default)]
 pub struct AntiSpoofingConfig {
-    pub ai: AiAntiSpoofingConfig,
+    pub rgb: RgbAntiSpoofingConfig,
     pub ir: IrAntiSpoofingConfig,
 }
 
@@ -232,7 +242,7 @@ impl<'de> Deserialize<'de> for AntiSpoofingConfig {
         #[serde(deny_unknown_fields)]
         struct Raw {
             #[serde(default)]
-            ai: Option<AiAntiSpoofingConfig>,
+            rgb: Option<RgbAntiSpoofingConfig>,
             #[serde(default)]
             ir: Option<IrAntiSpoofingConfig>,
         }
@@ -247,29 +257,35 @@ impl<'de> Deserialize<'de> for AntiSpoofingConfig {
             || content.contains_key("model")
             || content.contains_key("threshold")
             || content.contains_key("ir_camera")
-            || content.contains_key("ir_warmup_delay_ms");
+            || content.contains_key("ir_warmup_delay_ms")
+            || content.contains_key("ai"); // old 'ai' key
 
         if has_legacy_field {
             return Err(serde::de::Error::custom(
-                "the `anti_spoofing` schema changed: it no longer has a top-level \
-                 `enable` / `model` / `ir_camera` / `ir_warmup_delay_ms`. \
-                 Update your config to:\n\
+                "the `anti_spoofing` schema changed: `ai` was renamed to `rgb` and `ir` now requires a `model` field. \
+                 Run the migration:\n\
+                 \n\
+                 biopass-rs-helper migrate-config <username>\n\
+                 \n\
+                 Or update your config manually to:\n\
                  \n\
                  anti_spoofing:\n  \
-                   ai:\n    \
+                   rgb:\n    \
                      enable: <bool>\n    \
                      model: { path: <path>, threshold: <0..1> }\n  \
                    ir:\n    \
                      enable: <bool>\n    \
                      camera: <path, e.g. /dev/video2>\n    \
+                     model: { path: <path>, threshold: <0..1> }\n    \
                      warmup_delay_ms: 300",
             ));
         }
 
         let raw = Raw::deserialize(Value::Mapping(content))
             .map_err(|error| serde::de::Error::custom(format!("{error}")))?;
+
         Ok(Self {
-            ai: raw.ai.unwrap_or_default(),
+            rgb: raw.rgb.unwrap_or_default(),
             ir: raw.ir.unwrap_or_default(),
         })
     }
@@ -418,7 +434,7 @@ impl BiopassConfig {
     pub fn runtime_auth_config(&self) -> crate::manager::AuthConfig {
         crate::manager::AuthConfig {
             debug: self.strategy.debug,
-            antispoof: self.methods.face.anti_spoofing.ai.enable
+            antispoof: self.methods.face.anti_spoofing.rgb.enable
                 || self.methods.face.anti_spoofing.ir.enable,
         }
     }

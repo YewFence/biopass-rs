@@ -21,9 +21,9 @@ export async function validateConfig(config: BiopassConfig): Promise<boolean> {
       return false;
     }
     if (
-      config.methods.face.anti_spoofing.ai.enable &&
-      (!config.methods.face.anti_spoofing.ai.model.path ||
-        !registeredModelPaths.has(config.methods.face.anti_spoofing.ai.model.path))
+      config.methods.face.anti_spoofing.rgb.enable &&
+      (!config.methods.face.anti_spoofing.rgb.model.path ||
+        !registeredModelPaths.has(config.methods.face.anti_spoofing.rgb.model.path))
     ) {
       toast.error("Valid Anti-Spoofing model is required when enabled");
       return false;
@@ -49,10 +49,10 @@ export async function validateConfig(config: BiopassConfig): Promise<boolean> {
     if (config.methods.face.recognition.model)
       modelsToCheck.push(config.methods.face.recognition.model);
     if (
-      config.methods.face.anti_spoofing.ai.enable &&
-      config.methods.face.anti_spoofing.ai.model.path
+      config.methods.face.anti_spoofing.rgb.enable &&
+      config.methods.face.anti_spoofing.rgb.model.path
     ) {
-      modelsToCheck.push(config.methods.face.anti_spoofing.ai.model.path);
+      modelsToCheck.push(config.methods.face.anti_spoofing.rgb.model.path);
     }
   }
   for (const path of modelsToCheck) {

@@ -54,7 +54,7 @@ export function FaceSetting() {
   const unavailableAiModelOption = "__unavailable_ai_model__";
   const unavailableIrDeviceOption = "__unavailable_ir_device__";
   const selectedAiModelExists = antiSpoofModels.some(
-    (model) => model.path === config.anti_spoofing.ai.model.path,
+    (model) => model.path === config.anti_spoofing.rgb.model.path,
   );
   const unavailableCameraDeviceOption = "__unavailable_camera_device__";
   const cameraValue = config.camera
@@ -63,9 +63,9 @@ export function FaceSetting() {
   const irCameraValue = config.anti_spoofing.ir.camera
     ? (selectedIrCamera?.path ?? unavailableIrDeviceOption)
     : disabledOption;
-  const aiModelValue = config.anti_spoofing.ai.enable
+  const aiModelValue = config.anti_spoofing.rgb.enable
     ? selectedAiModelExists
-      ? config.anti_spoofing.ai.model.path
+      ? config.anti_spoofing.rgb.model.path
       : unavailableAiModelOption
     : disabledOption;
 
@@ -263,7 +263,7 @@ export function FaceSetting() {
                   ...config,
                   anti_spoofing: {
                     ...config.anti_spoofing,
-                    ai: { ...config.anti_spoofing.ai, enable: false },
+                    rgb: { ...config.anti_spoofing.rgb, enable: false },
                   },
                 });
                 return;
@@ -273,10 +273,10 @@ export function FaceSetting() {
                 ...config,
                 anti_spoofing: {
                   ...config.anti_spoofing,
-                  ai: {
-                    ...config.anti_spoofing.ai,
+                  rgb: {
+                    ...config.anti_spoofing.rgb,
                     enable: true,
-                    model: { ...config.anti_spoofing.ai.model, path: value },
+                    model: { ...config.anti_spoofing.rgb.model, path: value },
                   },
                 },
               });
@@ -307,20 +307,20 @@ export function FaceSetting() {
           </Select>
         </div>
 
-        {config.anti_spoofing.ai.enable && (
+        {config.anti_spoofing.rgb.enable && (
           <>
             <div className="w-48">
               <Threshold
                 label="Threshold"
-                value={config.anti_spoofing.ai.model.threshold}
+                value={config.anti_spoofing.rgb.model.threshold}
                 onChange={(threshold) =>
                   setFaceConfig({
                     ...config,
                     anti_spoofing: {
                       ...config.anti_spoofing,
-                      ai: {
-                        ...config.anti_spoofing.ai,
-                        model: { ...config.anti_spoofing.ai.model, threshold },
+                      rgb: {
+                        ...config.anti_spoofing.rgb,
+                        model: { ...config.anti_spoofing.rgb.model, threshold },
                       },
                     },
                   })
@@ -329,14 +329,14 @@ export function FaceSetting() {
             </div>
             <SubcheckRetries
               idPrefix="ai-anti-spoofing"
-              retries={config.anti_spoofing.ai.retries}
-              retryDelayMs={config.anti_spoofing.ai.retry_delay_ms}
+              retries={config.anti_spoofing.rgb.retries}
+              retryDelayMs={config.anti_spoofing.rgb.retry_delay_ms}
               onRetriesChange={(retries) =>
                 setFaceConfig({
                   ...config,
                   anti_spoofing: {
                     ...config.anti_spoofing,
-                    ai: { ...config.anti_spoofing.ai, retries },
+                    rgb: { ...config.anti_spoofing.rgb, retries },
                   },
                 })
               }
@@ -345,7 +345,7 @@ export function FaceSetting() {
                   ...config,
                   anti_spoofing: {
                     ...config.anti_spoofing,
-                    ai: { ...config.anti_spoofing.ai, retry_delay_ms },
+                    rgb: { ...config.anti_spoofing.rgb, retry_delay_ms },
                   },
                 })
               }
@@ -415,6 +415,50 @@ export function FaceSetting() {
 
         {config.anti_spoofing.ir.enable && (
           <>
+            <div className="grid gap-2 pt-1">
+              <Label htmlFor="ir-model" className="text-xs text-muted-foreground">
+                IR Liveness Model
+              </Label>
+              <ModelSelect
+                label=""
+                value={config.anti_spoofing.ir.model.path}
+                models={antiSpoofModels}
+                error={false}
+                onChange={(model) =>
+                  setFaceConfig({
+                    ...config,
+                    anti_spoofing: {
+                      ...config.anti_spoofing,
+                      ir: {
+                        ...config.anti_spoofing.ir,
+                        model: { ...config.anti_spoofing.ir.model, path: model },
+                      },
+                    },
+                  })
+                }
+              />
+            </div>
+            <div className="grid gap-2 pt-1">
+              <Label htmlFor="ir-threshold" className="text-xs text-muted-foreground">
+                IR Liveness Threshold
+              </Label>
+              <Threshold
+                label=""
+                value={config.anti_spoofing.ir.model.threshold}
+                onChange={(threshold) =>
+                  setFaceConfig({
+                    ...config,
+                    anti_spoofing: {
+                      ...config.anti_spoofing,
+                      ir: {
+                        ...config.anti_spoofing.ir,
+                        model: { ...config.anti_spoofing.ir.model, threshold },
+                      },
+                    },
+                  })
+                }
+              />
+            </div>
             <div className="grid gap-2 pt-1">
               <Label htmlFor="ir-warmup-delay" className="text-xs text-muted-foreground">
                 IR Camera Startup Delay (ms)

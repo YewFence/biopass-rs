@@ -218,7 +218,7 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
     );
     ai_value.insert(
         Value::String("model".to_string()),
-        Value::Mapping(model_value),
+        Value::Mapping(model_value.clone()),
     );
 
     let mut ir_value = Mapping::new();
@@ -239,9 +239,14 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
         Value::String("warmup_delay_ms".to_string()),
         Value::from(warmup_delay),
     );
+    // IR now has its own model field, initialized from the same model as RGB
+    ir_value.insert(
+        Value::String("model".to_string()),
+        Value::Mapping(model_value),
+    );
 
     let mut anti_value = Mapping::new();
-    anti_value.insert(Value::String("ai".to_string()), Value::Mapping(ai_value));
+    anti_value.insert(Value::String("rgb".to_string()), Value::Mapping(ai_value));
     anti_value.insert(Value::String("ir".to_string()), Value::Mapping(ir_value));
 
     (Value::Mapping(anti_value), needs_migration)

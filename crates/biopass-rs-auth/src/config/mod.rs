@@ -65,8 +65,8 @@ methods:
             config.methods.face.anti_spoofing.ir.camera.as_deref(),
             Some("/dev/video3")
         );
-        assert_eq!(config.methods.face.anti_spoofing.ai.model.path, "old.onnx");
-        assert_eq!(config.methods.face.anti_spoofing.ai.model.threshold, 0.42);
+        assert_eq!(config.methods.face.anti_spoofing.rgb.model.path, "old.onnx");
+        assert_eq!(config.methods.face.anti_spoofing.rgb.model.threshold, 0.42);
         assert_eq!(config.methods.fingerprint.timeout, 9000);
     }
 
@@ -193,12 +193,12 @@ methods:
         assert!(migrate_config_at_path(&path).unwrap());
         let config = read_config_from_path(&path).unwrap();
 
-        assert!(config.methods.face.anti_spoofing.ai.enable);
+        assert!(config.methods.face.anti_spoofing.rgb.enable);
         assert_eq!(
-            config.methods.face.anti_spoofing.ai.model.path,
+            config.methods.face.anti_spoofing.rgb.model.path,
             "legacy.onnx"
         );
-        assert_eq!(config.methods.face.anti_spoofing.ai.model.threshold, 0.67);
+        assert_eq!(config.methods.face.anti_spoofing.rgb.model.threshold, 0.67);
         assert!(config.methods.face.anti_spoofing.ir.enable);
         assert_eq!(
             config.methods.face.anti_spoofing.ir.camera.as_deref(),
@@ -235,8 +235,8 @@ methods:
     #[test]
     fn antispoofing_subchecks_have_independent_retry_defaults() {
         let config = serde_yaml::from_str::<BiopassConfig>("").unwrap();
-        assert_eq!(config.methods.face.anti_spoofing.ai.retries, 0);
-        assert_eq!(config.methods.face.anti_spoofing.ai.retry_delay_ms, 200);
+        assert_eq!(config.methods.face.anti_spoofing.rgb.retries, 0);
+        assert_eq!(config.methods.face.anti_spoofing.rgb.retry_delay_ms, 200);
         assert_eq!(config.methods.face.anti_spoofing.ir.retries, 0);
         assert_eq!(config.methods.face.anti_spoofing.ir.retry_delay_ms, 200);
     }
@@ -247,20 +247,27 @@ methods:
 methods:
   face:
     anti_spoofing:
-      ai:
+      rgb:
         enable: true
         retries: 2
         retry_delay_ms: 350
+        model:
+          path: /test/model.onnx
+          threshold: 0.9
       ir:
         enable: true
         retries: 5
         retry_delay_ms: 750
+        camera: /dev/video2
+        model:
+          path: /test/model.onnx
+          threshold: 0.9
 "#;
 
         let config = serde_yaml::from_str::<BiopassConfig>(yaml).unwrap();
         let anti = &config.methods.face.anti_spoofing;
-        assert_eq!(anti.ai.retries, 2);
-        assert_eq!(anti.ai.retry_delay_ms, 350);
+        assert_eq!(anti.rgb.retries, 2);
+        assert_eq!(anti.rgb.retry_delay_ms, 350);
         assert_eq!(anti.ir.retries, 5);
         assert_eq!(anti.ir.retry_delay_ms, 750);
     }

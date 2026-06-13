@@ -8,6 +8,10 @@ Use `biopass` to refer to the upstream TickLabVN project, its packages, its conf
 
 Use `biopass-rs` to refer to this repository, its Rust crates, its helper binary, its package artifacts, its configuration paths, and its PAM module.
 
+### Config schema
+
+When config schema changes , update `crates/biopass-rs-auth/src/config/migration.rs` to support migration from old config to new config. The other code should always read **the newest** config schema, and the migration code should be the only place that reads the old config schema.
+
 ## Code check and lint
 
 when modifying code in this repository, please run the following commands to check and lint your code:
