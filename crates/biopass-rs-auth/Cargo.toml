@@ -11,7 +11,7 @@ path = "src/lib.rs"
 
 [[bin]]
 name = "biopass-rs-helper"
-path = "src/bin/biopass-rs-helper.rs"
+path = "src/bin/biopass_rs_helper/main.rs"
 
 [dependencies]
 anyhow.workspace = true
