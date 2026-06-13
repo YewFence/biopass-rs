@@ -66,6 +66,11 @@ function App() {
 
       try {
         const result = await cmd.config.load();
+        if (result.status === "broken") {
+          // The configuration page renders the recovery overlay; no extra
+          // toast here so we don't double-notify the user.
+          return;
+        }
         if (result.migrated && !sessionStorage.getItem(MIGRATION_NOTICE_KEY)) {
           sessionStorage.setItem(MIGRATION_NOTICE_KEY, "1");
           toast.info(
@@ -89,7 +94,9 @@ function App() {
   useEffect(() => {
     const updateConfigTheme = async () => {
       try {
-        const { config } = await cmd.config.load();
+        const result = await cmd.config.load();
+        if (result.status !== "loaded") return;
+        const { config } = result;
         if (config.appearance !== theme) {
           config.appearance = theme ?? "dark";
           await cmd.config.save(config);

@@ -1,16 +1,16 @@
-use biopass_rs_auth::{migrate_config_at_path, read_config_from_path};
+use biopass_rs_auth::{
+    bootstrap_config_at, read_config_from_path, write_config_to_path, BootstrapOutcome,
+};
 pub use biopass_rs_auth::{
     BiopassConfig, DetectionConfig, FaceMethodConfig, FingerConfig, FingerprintMethodConfig,
     MethodsConfig, ModelConfig, RecognitionConfig, StrategyConfig,
 };
 use serde::Serialize;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
 use crate::paths::{get_config_dir, get_config_path, get_data_dir};
-
-const UPSTREAM_CONFIG_PATH: &str = ".config/com.ticklab.biopass/config.yaml";
 
 fn get_default_config(app: &AppHandle) -> BiopassConfig {
     let models_dir = get_data_dir(app)
@@ -44,81 +44,100 @@ fn get_default_config(app: &AppHandle) -> BiopassConfig {
     config
 }
 
-/// Returned by `load_config` so the frontend can show a one-time
-/// notice when the on-disk schema was migrated automatically.
+/// Returned by `load_config`. The variants distinguish the three GUI-relevant
+/// outcomes so the frontend can react appropriately: loaded (optionally with a
+/// migration / initialization notice) or broken (let the user fix or reset).
 #[derive(Debug, Serialize, Clone)]
-pub struct LoadConfigResult {
-    pub config: BiopassConfig,
-    /// True if the on-disk config was rewritten to the current schema.
-    /// The frontend should surface a one-time confirmation.
-    pub migrated: bool,
+#[serde(tag = "status", rename_all = "snake_case")]
+pub enum LoadConfigResult {
+    Loaded {
+        path: String,
+        config: Box<BiopassConfig>,
+        /// True if the on-disk file was rewritten to the current schema.
+        migrated: bool,
+        /// True if the file was just created from built-in defaults or
+        /// imported from an upstream `biopass` install.
+        initialized: bool,
+    },
+    Broken {
+        path: String,
+        message: String,
+    },
 }
 
-/// Tauri command — exposed to the frontend. Returns the loaded config plus
-/// a flag indicating whether the on-disk file was migrated to the current
-/// schema. The frontend uses the flag to show a one-time confirmation.
+/// Tauri command — returns the loaded config plus state flags so the GUI can
+/// surface a one-time migration notice, an "initialized from defaults"
+/// notice, or a recovery overlay when the file is unparsable.
 #[tauri::command]
 pub fn load_config(app: AppHandle) -> Result<LoadConfigResult, String> {
-    let result = load_config_internal(&app)?;
-    Ok(LoadConfigResult {
-        config: result.config,
-        migrated: result.migrated,
-    })
+    load_config_internal(&app)
 }
 
-/// Internal helper that runs the same load/migrate logic but discards the
-/// `migrated` flag. Used by other Tauri commands that only need the config.
+/// Internal helper. Other Tauri commands that need the active config
+/// should use [`require_loaded_config`] instead so they reject the broken
+/// case with a helpful error.
 pub fn load_config_internal(app: &AppHandle) -> Result<LoadConfigResult, String> {
     let config_path = get_config_path(app)?;
 
     if !config_path.exists() {
-        let config_dir = get_config_dir(app)?;
-        if let Some(upstream_config_path) = std::env::var_os("HOME")
-            .map(PathBuf::from)
-            .map(|home| home.join(UPSTREAM_CONFIG_PATH))
-        {
-            if upstream_config_path.exists() {
-                if let Err(e) = fs::create_dir_all(&config_dir) {
-                    eprintln!("Warning: failed to create config directory: {e}");
-                } else if let Err(e) = fs::copy(&upstream_config_path, &config_path) {
-                    eprintln!("Warning: failed to copy upstream config: {e}");
-                } else {
-                    match migrate_config_at_path(&config_path)
-                        .map_err(|e| format!("Failed to migrate config: {}", e))
-                        .and_then(|_| read_config_from_path(&config_path))
-                    {
-                        Ok(config) => {
-                            return Ok(LoadConfigResult {
-                                config,
-                                migrated: true,
-                            });
-                        }
-                        Err(e) => {
-                            eprintln!("Warning: failed to load copied upstream config: {e}");
-                            if let Err(e) = fs::remove_file(&config_path) {
-                                eprintln!("Warning: failed to remove invalid copied config: {e}");
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        let config = get_default_config(app);
-        if let Err(e) = save_config(app.clone(), config.clone()) {
-            eprintln!("Warning: failed to write default config: {e}");
-        }
-        return Ok(LoadConfigResult {
-            config,
-            migrated: false,
-        });
+        return initialize_missing_config(app, &config_path);
     }
 
-    let config = read_config_from_path(&config_path)?;
+    match read_config_from_path(&config_path) {
+        Ok(config) => Ok(LoadConfigResult::Loaded {
+            path: path_to_string(&config_path),
+            config: Box::new(config),
+            migrated: false,
+            initialized: false,
+        }),
+        Err(message) => Ok(LoadConfigResult::Broken {
+            path: path_to_string(&config_path),
+            message,
+        }),
+    }
+}
 
-    Ok(LoadConfigResult {
-        config,
-        migrated: false,
+/// Resolve a usable config or return an error suitable for use by Tauri
+/// commands that cannot proceed when the config is missing/broken.
+pub fn require_loaded_config(app: &AppHandle) -> Result<BiopassConfig, String> {
+    match load_config_internal(app)? {
+        LoadConfigResult::Loaded { config, .. } => Ok(*config),
+        LoadConfigResult::Broken { path, message } => Err(format!(
+            "Config at {path} is unreadable, fix or reset it before continuing: {message}"
+        )),
+    }
+}
+
+fn initialize_missing_config(
+    app: &AppHandle,
+    config_path: &Path,
+) -> Result<LoadConfigResult, String> {
+    let upstream_home = std::env::var_os("HOME").map(PathBuf::from);
+    let defaults = get_default_config(app);
+    let defaults_for_read = defaults.clone();
+
+    let outcome = bootstrap_config_at(config_path, upstream_home.as_deref(), move || defaults)
+        .map_err(|e| format!("Failed to bootstrap config: {e}"))?;
+
+    let (config, migrated, initialized) = match outcome {
+        BootstrapOutcome::AlreadyPresent => {
+            // bootstrap should not return AlreadyPresent because we only
+            // call it when the file is missing, but be defensive.
+            let config = read_config_from_path(config_path)?;
+            (config, false, false)
+        }
+        BootstrapOutcome::ImportedFromUpstream => {
+            let config = read_config_from_path(config_path)?;
+            (config, true, true)
+        }
+        BootstrapOutcome::WroteDefaults => (defaults_for_read, false, true),
+    };
+
+    Ok(LoadConfigResult::Loaded {
+        path: path_to_string(config_path),
+        config: Box::new(config),
+        migrated,
+        initialized,
     })
 }
 
@@ -127,13 +146,39 @@ pub fn save_config(app: AppHandle, config: BiopassConfig) -> Result<(), String> 
     let config_dir = get_config_dir(&app)?;
     let config_path = get_config_path(&app)?;
 
-    let yaml_content =
-        serde_yaml::to_string(&config).map_err(|e| format!("Failed to serialize config: {}", e))?;
-
     if !config_dir.exists() {
         fs::create_dir_all(&config_dir)
             .map_err(|e| format!("Failed to create config directory: {}", e))?;
     }
 
-    fs::write(&config_path, yaml_content).map_err(|e| format!("Failed to write config file: {}", e))
+    write_config_to_path(&config_path, &config)
+}
+
+/// Tauri command — reset the on-disk config to GUI defaults and return the
+/// loaded value. Used by the GUI's "Reset to defaults" recovery button.
+#[tauri::command]
+pub fn reset_config(app: AppHandle) -> Result<LoadConfigResult, String> {
+    let config_path = get_config_path(&app)?;
+    let defaults = get_default_config(&app);
+    // Write the GUI-flavoured defaults (with absolute model paths) rather
+    // than the bare library defaults so the user does not lose their model
+    // wiring.
+    write_config_to_path(&config_path, &defaults)?;
+    Ok(LoadConfigResult::Loaded {
+        path: path_to_string(&config_path),
+        config: Box::new(defaults),
+        migrated: false,
+        initialized: true,
+    })
+}
+
+/// Tauri command — return the path of the active config file (used by the
+/// GUI when it offers a "copy path / open in editor" recovery action).
+#[tauri::command]
+pub fn config_file_path(app: AppHandle) -> Result<String, String> {
+    Ok(path_to_string(&get_config_path(&app)?))
+}
+
+fn path_to_string(path: &Path) -> String {
+    path.to_string_lossy().to_string()
 }

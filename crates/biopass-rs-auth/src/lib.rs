@@ -50,11 +50,12 @@ pub use camera::{
     VideoDevice,
 };
 pub use config::{
-    config_exists, config_path, list_faces, migrate_config_at_path, migrate_config_schema,
-    read_config, read_config_from_path, setup_config, user_data_dir, user_exists,
-    AntiSpoofingConfig, AntiSpoofingModelConfig, BiopassConfig, DetectionConfig, FaceMethodConfig,
-    FingerConfig, FingerprintMethodConfig, MethodConfig, MethodsConfig, ModelConfig,
-    RecognitionConfig, StrategyConfig,
+    bootstrap_config_at, config_exists, config_parse_error_message, config_path, list_faces,
+    migrate_config_at_path, migrate_config_schema, read_config, read_config_from_path,
+    reset_config, reset_config_at_path, setup_config, upstream_config_path_relative, user_data_dir,
+    user_exists, write_config_to_path, AntiSpoofingConfig, AntiSpoofingModelConfig, BiopassConfig,
+    BootstrapOutcome, DetectionConfig, FaceMethodConfig, FingerConfig, FingerprintMethodConfig,
+    MethodConfig, MethodsConfig, ModelConfig, RecognitionConfig, StrategyConfig,
 };
 pub use face_antispoofing::{FaceAntiSpoofing, SpoofResult};
 pub use face_auth::FaceAuth;

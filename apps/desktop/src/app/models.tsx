@@ -88,7 +88,24 @@ function ModelsRouteComponent() {
     setStatusMap({ ...newStatuses });
 
     try {
-      const { config } = await cmd.config.load();
+      const result = await cmd.config.load();
+      if (result.status !== "loaded") {
+        // Config is broken; the configuration page handles recovery.
+        // For the models page, treat every model as available so users can
+        // still inspect them.
+        const checks = modelList.map(async (model) => {
+          try {
+            const exists = await cmd.file.exists(model.path);
+            newStatuses[model.path] = exists ? "available" : "missing";
+          } catch {
+            newStatuses[model.path] = "missing";
+          }
+        });
+        await Promise.all(checks);
+        setStatusMap({ ...newStatuses });
+        return;
+      }
+      const { config } = result;
       const inUsePaths = new Set<string>();
 
       if (config.methods.face.detection.model) {
@@ -135,8 +152,15 @@ function ModelsRouteComponent() {
   const loadModels = useCallback(async () => {
     try {
       setLoading(true);
-      const { config } = await cmd.config.load();
-      const loadedModels = config.models || [];
+      const result = await cmd.config.load();
+      if (result.status !== "loaded") {
+        // Config is broken; surface a hint and stop. The configuration page
+        // will let the user fix or reset it.
+        toast.error("Configuration file is unreadable. Fix or reset it on the Configuration page.");
+        setModels([]);
+        return;
+      }
+      const loadedModels = result.config.models || [];
       setModels(loadedModels);
       await checkModelsStatus(loadedModels);
     } catch (err) {

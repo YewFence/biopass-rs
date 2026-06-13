@@ -1,12 +1,15 @@
+mod bootstrap;
 mod migration;
 mod paths;
 mod schema;
 mod serde_defaults;
 
+pub use bootstrap::{bootstrap_config_at, upstream_config_path_relative, BootstrapOutcome};
 pub use migration::{migrate_config_at_path, migrate_config_schema};
 pub use paths::{
-    config_exists, config_path, list_faces, read_config, read_config_from_path, setup_config,
-    user_data_dir, user_exists,
+    config_exists, config_parse_error_message, config_path, list_faces, read_config,
+    read_config_from_path, reset_config, reset_config_at_path, setup_config, user_data_dir,
+    user_exists, write_config_to_path,
 };
 pub use schema::{
     AntiSpoofingConfig, AntiSpoofingModelConfig, BiopassConfig, DetectionConfig, FaceMethodConfig,

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { RotateCcw, Save } from "lucide-react";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { BrokenConfigOverlay } from "./-components/BrokenConfigOverlay";
 import { MethodConfig } from "./-components/MethodConfig";
 import { StrategyConfig } from "./-components/StrategyConfig";
 import { useConfigurationStore } from "./-stores/configuration-store";
@@ -10,20 +11,36 @@ function ConfigurationRouteComponent() {
   const config = useConfigurationStore((state) => state.config);
   const loading = useConfigurationStore((state) => state.loading);
   const saving = useConfigurationStore((state) => state.saving);
+  const brokenConfig = useConfigurationStore((state) => state.brokenConfig);
   const initializeConfig = useConfigurationStore((state) => state.initializeConfig);
   const saveConfig = useConfigurationStore((state) => state.saveConfig);
   const resetConfig = useConfigurationStore((state) => state.resetConfig);
+  const resetToDefaults = useConfigurationStore((state) => state.resetToDefaults);
 
   useEffect(() => {
     void initializeConfig();
   }, [initializeConfig]);
 
-  if (loading || !config) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
       </div>
     );
+  }
+
+  if (brokenConfig) {
+    return (
+      <BrokenConfigOverlay
+        path={brokenConfig.path}
+        message={brokenConfig.message}
+        onReset={resetToDefaults}
+      />
+    );
+  }
+
+  if (!config) {
+    return null;
   }
 
   return (

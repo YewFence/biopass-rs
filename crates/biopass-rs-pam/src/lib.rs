@@ -118,7 +118,7 @@ unsafe fn c_string_to_string(value: *const c_char) -> Option<String> {
 
 fn run_helper(username: &str, service: Option<&str>) -> c_int {
     let mut command = Command::new("/usr/bin/biopass-rs-helper");
-    command.args(["auth", "--username", username]);
+    command.args(["--username", username, "auth"]);
     if let Some(service) = service.filter(|service| !service.is_empty()) {
         command.args(["--service", service]);
     }

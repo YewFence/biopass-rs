@@ -5,6 +5,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
+use crate::config::{bootstrap_config_at, BootstrapOutcome};
+use crate::BiopassConfig;
+
 const MODELS: &[(&str, &str)] = &[
     (
         "yolov8n-face.onnx",
@@ -30,7 +33,6 @@ const LEGACY_MODELS: &[&str] = &[
     "mobilenetv3_antispoof_ts.pt",
 ];
 
-const OLD_CONFIG_PATH: &str = ".config/com.ticklab.biopass/config.yaml";
 const NEW_CONFIG_PATH: &str = ".config/biopass-rs/config.yaml";
 const OLD_DATA_DIR: &str = ".local/share/com.ticklab.biopass";
 const NEW_DATA_DIR: &str = ".local/share/biopass-rs";
@@ -183,39 +185,35 @@ pub fn migrate_all_users() -> Result<(), String> {
         }
 
         let home_path = PathBuf::from(home);
-        let old_config = home_path.join(OLD_CONFIG_PATH);
         let new_config = home_path.join(NEW_CONFIG_PATH);
 
-        let mut copied_legacy_config = false;
-
-        // Copy old config to new location only when the new config does not exist.
-        if new_config.exists() {
-            eprintln!(
-                "Skipping config migration for user '{}': config already exists at {}",
-                username,
-                new_config.display()
-            );
-        } else if old_config.exists() {
-            eprintln!(
-                "Copying upstream config for user '{}' from {} to {}",
-                username,
-                old_config.display(),
-                new_config.display()
-            );
-            if let Some(parent) = new_config.parent() {
-                let _ = fs::create_dir_all(parent);
+        match bootstrap_config_at(&new_config, Some(&home_path), BiopassConfig::default) {
+            Ok(BootstrapOutcome::AlreadyPresent) => {
+                eprintln!(
+                    "Skipping config bootstrap for user '{}': config already exists at {}",
+                    username,
+                    new_config.display()
+                );
             }
-            match fs::copy(&old_config, &new_config) {
-                Ok(_) => {
-                    copied_legacy_config = true;
-                    eprintln!("Copied upstream config for user '{}'", username);
-                }
-                Err(e) => {
-                    eprintln!(
-                        "Warning: Failed to migrate config for '{}': {}",
-                        username, e
-                    );
-                }
+            Ok(BootstrapOutcome::ImportedFromUpstream) => {
+                eprintln!(
+                    "Imported upstream config for user '{}' into {}",
+                    username,
+                    new_config.display()
+                );
+            }
+            Ok(BootstrapOutcome::WroteDefaults) => {
+                eprintln!(
+                    "Wrote default config for user '{}' at {}",
+                    username,
+                    new_config.display()
+                );
+            }
+            Err(e) => {
+                eprintln!(
+                    "Warning: Failed to bootstrap config for '{}': {}",
+                    username, e
+                );
             }
         }
 
@@ -229,19 +227,6 @@ pub fn migrate_all_users() -> Result<(), String> {
                     "Warning: Failed to migrate data dir for '{}': {}",
                     username, e
                 );
-            }
-        }
-
-        // Only migrate the schema for configs this install copied from upstream.
-        if copied_legacy_config {
-            eprintln!("Migrating config schema for user '{}'...", username);
-            match crate::migrate_config_schema(username) {
-                Ok(true) => eprintln!("Migrated config schema for user '{}'", username),
-                Ok(false) => eprintln!("Config schema already current for user '{}'", username),
-                Err(error) => eprintln!(
-                    "Warning: Failed to migrate config schema for '{}': {}",
-                    username, error
-                ),
             }
         }
     }

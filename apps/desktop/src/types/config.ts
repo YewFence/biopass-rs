@@ -79,8 +79,18 @@ export interface ModelConfig {
   type: "detection" | "recognition" | "anti-spoofing";
 }
 
-export interface LoadConfigResult {
-  config: BiopassConfig;
-  /** True when the on-disk config was rewritten to the current schema. */
-  migrated: boolean;
-}
+export type LoadConfigResult =
+  | {
+      status: "loaded";
+      path: string;
+      config: BiopassConfig;
+      /** True when the on-disk config was rewritten to the current schema. */
+      migrated: boolean;
+      /** True when the file was just created from built-in defaults or imported from upstream. */
+      initialized: boolean;
+    }
+  | {
+      status: "broken";
+      path: string;
+      message: string;
+    };
