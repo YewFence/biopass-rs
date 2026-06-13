@@ -87,9 +87,13 @@ description = "Build Rust workspace"
 depends = ["check-rust"]
 run = "cargo build --all"
 
+[tasks.test-rust]
+description = "Run Rust tests"
+run = "cargo test --all"
+
 [tasks.check]
 description = "Run all checks"
-depends = ["check-app", "lint-rust", "clippy-rust"]
+depends = ["check-app", "lint-rust", "clippy-rust", "test-rust"]
 run = { task = "build-rust"}
 
 [tasks.fix-rust]
