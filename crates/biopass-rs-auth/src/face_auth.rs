@@ -1,6 +1,6 @@
 use crate::{
     camera_available, capture_rgb_frame, decode_jpeg_rgb, emit_log, encode_jpeg, list_faces,
-    user_data_dir, AuthConfig, AuthMethod, AuthResult, CameraRequest, FaceAntiSpoofing,
+    user_data_dir, AuthConfig, AuthMethod, AuthResult, CameraRequest, FaceAntiSpoofing, FaceBox,
     FaceDetector, FaceMethodConfig, FaceRecognizer, FrameFormat, LogLevel, RgbFrame,
 };
 use std::path::{Path, PathBuf};
@@ -136,26 +136,36 @@ impl FaceAuth {
             ),
         );
         log(LogLevel::Debug, "running face detection");
-        let candidate = match self
-            .detector()
-            .and_then(|detector| detector.crop_largest_face(&frame))
-        {
-            Ok(Some(candidate)) => candidate,
-            Ok(None) => {
-                log(LogLevel::Info, "no face detected in frame");
-                save_debug_frame_if_enabled(debug, username, &frame, "no_face_detected");
-                return Ok(AuthResult::Retry);
-            }
-            Err(error) => {
-                save_debug_frame_if_enabled(debug, username, &frame, "detection_error");
-                return Err(error);
-            }
-        };
+        let (rgb_frame, rgb_face) =
+            match self.detector().and_then(|detector| detector.detect(&frame)) {
+                Ok(detections) if !detections.is_empty() => {
+                    let best = detections
+                        .into_iter()
+                        .max_by(|a, b| a.bbox.area().cmp(&b.bbox.area()))
+                        .expect("at least one detection");
+                    (frame.clone(), best)
+                }
+                Ok(_) => {
+                    log(LogLevel::Info, "no face detected in frame");
+                    save_debug_frame_if_enabled(debug, username, &frame, "no_face_detected");
+                    return Ok(AuthResult::Retry);
+                }
+                Err(error) => {
+                    save_debug_frame_if_enabled(debug, username, &frame, "detection_error");
+                    return Err(error);
+                }
+            };
+        let candidate = rgb_face.crop.clone();
         log(
             LogLevel::Debug,
             &format!(
-                "face candidate cropped: {}x{}",
-                candidate.width, candidate.height
+                "face candidate cropped: {}x{} at bbox={}x{}@({},{})",
+                candidate.width,
+                candidate.height,
+                rgb_face.bbox.width(),
+                rgb_face.bbox.height(),
+                rgb_face.bbox.x1,
+                rgb_face.bbox.y1,
             ),
         );
 
@@ -247,7 +257,14 @@ impl FaceAuth {
             );
             if face_match.similar {
                 log(LogLevel::Debug, "running anti-spoofing check");
-                match self.check_anti_spoofing(username, auth_config, cancel_signal, &candidate) {
+                match self.check_anti_spoofing(
+                    username,
+                    auth_config,
+                    cancel_signal,
+                    &rgb_frame,
+                    rgb_face.bbox,
+                    &candidate,
+                ) {
                     Ok(true) => {}
                     Ok(false) => {
                         log(LogLevel::Info, "anti-spoofing check rejected the candidate");
@@ -280,6 +297,8 @@ impl FaceAuth {
         username: &str,
         auth_config: &AuthConfig,
         cancel_signal: Option<&AtomicBool>,
+        rgb_frame: &RgbFrame,
+        rgb_face_box: FaceBox,
         face: &RgbFrame,
     ) -> Result<bool, String> {
         let debug = auth_config.debug;
@@ -359,7 +378,13 @@ impl FaceAuth {
 
         if ir_enabled {
             log(LogLevel::Info, "running IR face liveness check");
-            if !self.run_ir_check_with_retries(username, auth_config, cancel_signal)? {
+            if !self.run_ir_check_with_retries(
+                username,
+                auth_config,
+                cancel_signal,
+                rgb_frame,
+                rgb_face_box,
+            )? {
                 return Ok(false);
             }
         }
@@ -372,6 +397,8 @@ impl FaceAuth {
         username: &str,
         auth_config: &AuthConfig,
         cancel_signal: Option<&AtomicBool>,
+        rgb_frame: &RgbFrame,
+        rgb_face_box: FaceBox,
     ) -> Result<bool, String> {
         let max_attempts = self.config.anti_spoofing.ir.retries.saturating_add(1);
         let retry_delay_ms = self.config.anti_spoofing.ir.retry_delay_ms;
@@ -388,7 +415,7 @@ impl FaceAuth {
                     &format!("attempt {attempt}/{max_attempts}"),
                 );
             }
-            if self.check_ir_liveness(username, auth_config)? {
+            if self.check_ir_liveness(username, auth_config, rgb_frame, rgb_face_box)? {
                 return Ok(true);
             }
             if attempt < max_attempts {
@@ -413,6 +440,8 @@ impl FaceAuth {
         &mut self,
         username: &str,
         auth_config: &AuthConfig,
+        rgb_frame: &RgbFrame,
+        rgb_face_box: FaceBox,
     ) -> Result<bool, String> {
         let debug = auth_config.debug;
         let log = |level: LogLevel, msg: &str| emit_log(level, debug, "FaceAntiSpoofingIr", msg);
@@ -518,17 +547,36 @@ impl FaceAuth {
                 continue;
             }
 
-            let best_detection = detections
-                .iter()
-                .max_by(|a, b| a.confidence.total_cmp(&b.confidence))
-                .expect("detections is non-empty");
+            let best_detection = match pick_ir_face_match(
+                rgb_frame.width,
+                rgb_frame.height,
+                rgb_face_box,
+                frame.width,
+                frame.height,
+                &detections,
+            ) {
+                Some(detection) => detection,
+                None => {
+                    log(
+                        LogLevel::Info,
+                        "no IR face matches the RGB face spatially, treating as spoof",
+                    );
+                    save_debug_frame_if_enabled(debug, username, &frame, "ir_face_mismatch");
+                    if frame_idx + 1 < IR_LIVENESS_FRAME_COUNT {
+                        std::thread::sleep(Duration::from_millis(IR_LIVENESS_FRAME_INTERVAL_MS));
+                    }
+                    continue;
+                }
+            };
             log(
                 LogLevel::Debug,
                 &format!(
-                    "selected IR face crop conf={:.4} bbox={}x{}",
+                    "selected IR face crop conf={:.4} bbox={}x{}@({},{})",
                     best_detection.confidence,
                     best_detection.bbox.width(),
-                    best_detection.bbox.height()
+                    best_detection.bbox.height(),
+                    best_detection.bbox.x1,
+                    best_detection.bbox.y1,
                 ),
             );
 
@@ -588,6 +636,87 @@ fn ir_camera_request(camera: &str, debug: bool) -> CameraRequest {
         timeout: Duration::from_millis(IR_CAPTURE_TIMEOUT_MS),
         debug,
         ..CameraRequest::default()
+    }
+}
+
+/// Pick the IR detection that best matches the RGB face. Returns `None` if
+/// no candidate is close enough that the IR camera is plausibly looking at
+/// the same person — a mismatch is treated as a spoof attempt.
+#[allow(clippy::too_many_arguments)]
+fn pick_ir_face_match(
+    rgb_width: u32,
+    rgb_height: u32,
+    rgb_box: FaceBox,
+    ir_width: u32,
+    ir_height: u32,
+    detections: &[crate::FaceDetection],
+) -> Option<&crate::FaceDetection> {
+    if detections.is_empty() || rgb_width == 0 || rgb_height == 0 || ir_width == 0 || ir_height == 0
+    {
+        return None;
+    }
+
+    let target_rx1 = rgb_box.x1 as f32 / rgb_width as f32;
+    let target_ry1 = rgb_box.y1 as f32 / rgb_height as f32;
+    let target_rx2 = rgb_box.x2 as f32 / rgb_width as f32;
+    let target_ry2 = rgb_box.y2 as f32 / rgb_height as f32;
+    let target_cx = (target_rx1 + target_rx2) * 0.5;
+    let target_cy = (target_ry1 + target_ry2) * 0.5;
+
+    let mut best: Option<(&crate::FaceDetection, f32, f32)> = None;
+    for detection in detections {
+        if detection.bbox.width() == 0 || detection.bbox.height() == 0 {
+            continue;
+        }
+        let ir_rx1 = detection.bbox.x1 as f32 / ir_width as f32;
+        let ir_ry1 = detection.bbox.y1 as f32 / ir_height as f32;
+        let ir_rx2 = detection.bbox.x2 as f32 / ir_width as f32;
+        let ir_ry2 = detection.bbox.y2 as f32 / ir_height as f32;
+        let iou = bbox_iou(
+            target_rx1, target_ry1, target_rx2, target_ry2, ir_rx1, ir_ry1, ir_rx2, ir_ry2,
+        );
+        let ir_cx = (ir_rx1 + ir_rx2) * 0.5;
+        let ir_cy = (ir_ry1 + ir_ry2) * 0.5;
+        let dx = ir_cx - target_cx;
+        let dy = ir_cy - target_cy;
+        let center_distance = (dx * dx + dy * dy).sqrt();
+        match best {
+            None => best = Some((detection, iou, center_distance)),
+            Some((_, best_iou, best_dist)) => {
+                if iou > best_iou || (best_iou <= 0.0 && center_distance < best_dist) {
+                    best = Some((detection, iou, center_distance));
+                }
+            }
+        }
+    }
+
+    let (detection, iou, center_distance) = best?;
+    // If the boxes never overlap and the centers are far apart, treat it as
+    // a different face. A generous 0.3 normalized center distance threshold
+    // tolerates FOV differences while still rejecting a face on the wrong
+    // side of the frame.
+    if iou <= 0.0 && center_distance > 0.3 {
+        return None;
+    }
+    Some(detection)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn bbox_iou(ax1: f32, ay1: f32, ax2: f32, ay2: f32, bx1: f32, by1: f32, bx2: f32, by2: f32) -> f32 {
+    let inter_x1 = ax1.max(bx1);
+    let inter_y1 = ay1.max(by1);
+    let inter_x2 = ax2.min(bx2);
+    let inter_y2 = ay2.min(by2);
+    let inter_w = (inter_x2 - inter_x1).max(0.0);
+    let inter_h = (inter_y2 - inter_y1).max(0.0);
+    let inter = inter_w * inter_h;
+    let area_a = (ax2 - ax1).max(0.0) * (ay2 - ay1).max(0.0);
+    let area_b = (bx2 - bx1).max(0.0) * (by2 - by1).max(0.0);
+    let union = area_a + area_b - inter;
+    if union <= 0.0 {
+        0.0
+    } else {
+        inter / union
     }
 }
 
