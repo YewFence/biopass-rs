@@ -43,6 +43,8 @@ enum Commands {
     },
     /// Install models and run setup
     Install,
+    /// Download models only
+    ModelDownload,
     /// Crop face from image
     CropFace {
         /// Input image path
@@ -134,6 +136,7 @@ fn main() -> ExitCode {
             }
         }
         Commands::Install => install(),
+        Commands::ModelDownload => model_download(),
         Commands::CropFace {
             input,
             output,
@@ -401,6 +404,20 @@ fn bootstrap_current_user() -> Result<Option<String>, String> {
     }
 
     Ok(Some(outcome_message))
+}
+
+fn model_download() -> u8 {
+    eprintln!("Downloading models...");
+    match download_models() {
+        Ok(_) => {
+            eprintln!("Models downloaded successfully.");
+            EXIT_SUCCESS
+        }
+        Err(error) => {
+            eprintln!("Failed to download models: {error}");
+            EXIT_AUTH_ERR
+        }
+    }
 }
 
 fn crop_face(input: &PathBuf, output: &PathBuf, model: &str, quality: u8) -> u8 {

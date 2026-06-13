@@ -400,9 +400,46 @@ impl FaceAuth {
         rgb_frame: &RgbFrame,
         rgb_face_box: FaceBox,
     ) -> Result<bool, String> {
+        let debug = auth_config.debug;
+        let log = |level: LogLevel, msg: &str| emit_log(level, debug, "FaceAntiSpoofingIr", msg);
+
+        // Fast-fail on permanent configuration/model errors
+        let Some(camera) = self
+            .config
+            .anti_spoofing
+            .ir
+            .camera
+            .as_deref()
+            .filter(|camera| !camera.is_empty())
+            .map(str::to_owned)
+        else {
+            log(
+                LogLevel::Error,
+                "no IR camera configured, cannot run liveness check",
+            );
+            return Ok(false);
+        };
+
+        if !Path::new(&self.config.detection.model).is_file() {
+            log(
+                LogLevel::Error,
+                "detection model missing, cannot run IR check. Run 'biopass-rs-helper model-download' to download models.",
+            );
+            return Ok(false);
+        }
+
+        let model_path = self.config.anti_spoofing.ir.model.path.clone();
+        if model_path.is_empty() || !Path::new(&model_path).is_file() {
+            log(
+                LogLevel::Error,
+                "IR anti-spoofing model missing, cannot run liveness check. Run 'biopass-rs-helper model-download' to download models.",
+            );
+            return Ok(false);
+        }
+
+        // Retry transient failures like frame capture errors
         let max_attempts = self.config.anti_spoofing.ir.retries.saturating_add(1);
         let retry_delay_ms = self.config.anti_spoofing.ir.retry_delay_ms;
-        let debug = auth_config.debug;
         for attempt in 1..=max_attempts {
             if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
                 return Ok(false);
@@ -415,7 +452,7 @@ impl FaceAuth {
                     &format!("attempt {attempt}/{max_attempts}"),
                 );
             }
-            if self.check_ir_liveness(username, auth_config, rgb_frame, rgb_face_box)? {
+            if self.check_ir_liveness(username, auth_config, &camera, rgb_frame, rgb_face_box)? {
                 return Ok(true);
             }
             if attempt < max_attempts {
@@ -440,44 +477,12 @@ impl FaceAuth {
         &mut self,
         username: &str,
         auth_config: &AuthConfig,
+        camera: &str,
         rgb_frame: &RgbFrame,
         rgb_face_box: FaceBox,
     ) -> Result<bool, String> {
         let debug = auth_config.debug;
         let log = |level: LogLevel, msg: &str| emit_log(level, debug, "FaceAntiSpoofingIr", msg);
-
-        let Some(camera) = self
-            .config
-            .anti_spoofing
-            .ir
-            .camera
-            .as_deref()
-            .filter(|camera| !camera.is_empty())
-            .map(str::to_owned)
-        else {
-            log(
-                LogLevel::Warn,
-                "no IR camera configured, treating as missing",
-            );
-            return Ok(false);
-        };
-
-        if !Path::new(&self.config.detection.model).is_file() {
-            log(
-                LogLevel::Warn,
-                "detection model missing, cannot run IR check",
-            );
-            return Ok(false);
-        }
-
-        let model_path = self.config.anti_spoofing.rgb.model.path.clone();
-        if model_path.is_empty() || !Path::new(&model_path).is_file() {
-            log(
-                LogLevel::Warn,
-                "IR anti-spoofing model missing, cannot run liveness check",
-            );
-            return Ok(false);
-        }
 
         if self.config.anti_spoofing.ir.warmup_delay_ms > 0 {
             log(
@@ -516,7 +521,7 @@ impl FaceAuth {
                     IR_LIVENESS_FRAME_COUNT
                 ),
             );
-            let frame = match capture_rgb_frame(&ir_camera_request(&camera, debug)) {
+            let frame = match capture_rgb_frame(&ir_camera_request(camera, debug)) {
                 Ok(frame) => frame,
                 Err(error) => {
                     log(LogLevel::Warn, &format!("IR frame capture failed: {error}"));
