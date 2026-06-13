@@ -1,7 +1,8 @@
 use crate::{
     camera_available, capture_rgb_frame, decode_jpeg_rgb, emit_log, encode_jpeg, list_faces,
-    user_data_dir, AuthConfig, AuthMethod, AuthResult, CameraRequest, FaceAntiSpoofing, FaceBox,
-    FaceDetector, FaceMethodConfig, FaceRecognizer, FrameFormat, LogLevel, RgbFrame,
+    user_data_dir, AuthConfig, AuthMethod, AuthResult, CameraRequest, CameraSession,
+    FaceAntiSpoofing, FaceBox, FaceDetector, FaceMethodConfig, FaceRecognizer, FrameFormat,
+    LogLevel, RgbFrame,
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -24,6 +25,7 @@ struct FaceAuthSession {
     recognizer: Option<FaceRecognizer>,
     anti_spoofing: Option<FaceAntiSpoofing>,
     ir_anti_spoofing: Option<FaceAntiSpoofing>,
+    camera_session: Option<CameraSession>,
 }
 
 impl FaceAuth {
@@ -80,6 +82,21 @@ impl FaceAuth {
         Ok(self.session.ir_anti_spoofing.as_mut().unwrap())
     }
 
+    fn camera_session(&mut self, debug: bool) -> Result<&mut CameraSession, String> {
+        if self.session.camera_session.is_none() {
+            let request = face_camera_request(
+                self.config.camera.as_deref(),
+                self.config.auto_optimize_camera,
+                debug,
+            );
+            let mut session = CameraSession::open(&request)?;
+            session.warmup(request.warmup_frames)?;
+            self.session.camera_session = Some(session);
+        }
+
+        Ok(self.session.camera_session.as_mut().unwrap())
+    }
+
     fn authenticate_face(
         &mut self,
         username: &str,
@@ -118,11 +135,9 @@ impl FaceAuth {
         }
 
         log(LogLevel::Debug, "capturing frame from camera");
-        let frame = capture_rgb_frame(&face_camera_request(
-            self.config.camera.as_deref(),
-            self.config.auto_optimize_camera,
-            debug,
-        ))?;
+        let frame = self
+            .camera_session(debug)
+            .and_then(|session| session.next_frame())?;
         log(
             LogLevel::Debug,
             &format!("frame captured: {}x{}", frame.width, frame.height),
