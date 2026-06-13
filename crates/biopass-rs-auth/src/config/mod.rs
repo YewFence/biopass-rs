@@ -24,7 +24,7 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn reads_legacy_and_normalizes_config() {
+    fn reads_current_and_normalizes_config() {
         let yaml = r#"
 strategy:
   execution_mode: sequential
@@ -37,7 +37,7 @@ methods:
       enable: true
       device_id: 3
     anti_spoofing:
-      ai:
+      rgb:
         enable: true
         model: old.onnx
         threshold: 0.42
@@ -45,6 +45,9 @@ methods:
         enable: true
         camera: /dev/video3
         warmup_delay_ms: 250
+        model:
+          path: old.onnx
+          threshold: 0.42
   fingerprint:
     enable: true
     retry_delay: 9000
@@ -159,12 +162,16 @@ methods:
 
         assert!(needs_migration);
         assert_eq!(
-            anti["ai"]["model"]["path"],
+            anti["rgb"]["model"]["path"],
             Value::String("legacy.onnx".to_string())
         );
-        assert_eq!(anti["ai"]["model"]["threshold"], Value::from(0.67_f32));
-        assert_eq!(anti["ai"]["enable"], Value::Bool(true));
+        assert_eq!(anti["rgb"]["model"]["threshold"], Value::from(0.67_f32));
+        assert_eq!(anti["rgb"]["enable"], Value::Bool(true));
         assert_eq!(anti["ir"]["enable"], Value::Bool(true));
+        assert_eq!(
+            anti["ir"]["model"]["path"],
+            Value::String("legacy.onnx".to_string())
+        );
         assert_eq!(
             anti["ir"]["camera"],
             Value::String("/dev/video2".to_string())
@@ -208,6 +215,55 @@ methods:
     }
 
     #[test]
+    fn migrate_config_at_path_renames_ai_to_rgb_and_adds_ir_model() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.yaml");
+        fs::write(
+            &path,
+            r#"
+methods:
+  face:
+    anti_spoofing:
+      ai:
+        enable: false
+        retries: 0
+        retry_delay_ms: 200
+        model:
+          path: models/mobilenetv3_antispoof.onnx
+          threshold: 0.6
+      ir:
+        enable: true
+        retries: 3
+        retry_delay_ms: 200
+        camera: /dev/video2
+        warmup_delay_ms: 600
+"#,
+        )
+        .unwrap();
+
+        assert!(migrate_config_at_path(&path).unwrap());
+        let migrated = fs::read_to_string(&path).unwrap();
+        let yaml = serde_yaml::from_str::<Value>(&migrated).unwrap();
+        let anti = &yaml["methods"]["face"]["anti_spoofing"];
+
+        assert!(anti.get("ai").is_none());
+        assert_eq!(
+            anti["rgb"]["model"]["path"],
+            Value::String("models/mobilenetv3_antispoof.onnx".to_string())
+        );
+        assert_eq!(
+            anti["ir"]["model"]["path"],
+            Value::String("models/mobilenetv3_antispoof.onnx".to_string())
+        );
+        assert_eq!(anti["ir"]["retries"], Value::from(3));
+        assert_eq!(anti["ir"]["warmup_delay_ms"], Value::from(600));
+
+        let config = read_config_from_path(&path).unwrap();
+        assert!(!config.methods.face.anti_spoofing.rgb.enable);
+        assert!(config.methods.face.anti_spoofing.ir.enable);
+    }
+
+    #[test]
     fn migrate_config_at_path_leaves_current_schema_untouched() {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("config.yaml");
@@ -215,7 +271,7 @@ methods:
 methods:
   face:
     anti_spoofing:
-      ai:
+      rgb:
         enable: true
         model:
           path: current.onnx
@@ -224,6 +280,9 @@ methods:
         enable: true
         camera: /dev/video4
         warmup_delay_ms: 400
+        model:
+          path: current-ir.onnx
+          threshold: 0.8
 "#;
         fs::write(&path, yaml).unwrap();
 

@@ -265,7 +265,7 @@ impl<'de> Deserialize<'de> for AntiSpoofingConfig {
                 "the `anti_spoofing` schema changed: `ai` was renamed to `rgb` and `ir` now requires a `model` field. \
                  Run the migration:\n\
                  \n\
-                 biopass-rs-helper migrate-config <username>\n\
+                 biopass-rs-helper migrate-config -u <username>\n\
                  \n\
                  Or update your config manually to:\n\
                  \n\

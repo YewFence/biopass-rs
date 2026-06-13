@@ -34,7 +34,7 @@ enum Commands {
         username: Option<String>,
     },
     /// Migrate user configuration
-    Migrate {
+    MigrateConfig {
         /// Username to migrate
         #[arg(short, long)]
         username: String,
@@ -95,7 +95,7 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let code = match cli.command {
         Commands::Auth { username, service } => authenticate(username.as_deref(), Some(&service)),
-        Commands::Migrate { username } => migrate(&username),
+        Commands::MigrateConfig { username } => migrate(&username),
         Commands::Install => install(),
         Commands::CropFace {
             input,
@@ -426,4 +426,30 @@ fn current_username() -> Option<String> {
         }
     }
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn help_uses_migrate_config_command_name() {
+        let mut command = Cli::command();
+        let mut help = Vec::new();
+        command.write_long_help(&mut help).unwrap();
+        let help = String::from_utf8(help).unwrap();
+
+        assert!(help.contains("migrate-config"));
+        assert!(!help.contains("\n  migrate          "));
+    }
+
+    #[test]
+    fn migrate_config_accepts_username_option() {
+        let cli = Cli::parse_from(["biopass-rs-helper", "migrate-config", "-u", "yewfence"]);
+
+        match cli.command {
+            Commands::MigrateConfig { username } => assert_eq!(username, "yewfence"),
+            _ => panic!("expected migrate-config command"),
+        }
+    }
 }

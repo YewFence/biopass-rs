@@ -1,6 +1,8 @@
 use super::paths::config_path;
 use super::schema::{read_antispoofing_model, AntiSpoofingModelConfig};
-use super::serde_defaults::{default_antispoofing_retry_delay, default_ir_warmup_delay};
+use super::serde_defaults::{
+    default_antispoofing_retry_delay, default_ir_min_face_area_ratio, default_ir_warmup_delay,
+};
 use serde_yaml::{Mapping, Value};
 use std::fs;
 use std::io;
@@ -45,8 +47,11 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
 
     let mut enable = false;
     let mut model = AntiSpoofingModelConfig::default();
+    let mut ir_model = AntiSpoofingModelConfig::default();
+    let mut has_ir_model_value = false;
     let mut ir_camera_path = None;
     let mut warmup_delay = default_ir_warmup_delay();
+    let mut min_face_area_ratio = default_ir_min_face_area_ratio();
     let mut ai_retries = 0;
     let mut ai_retry_delay_ms = default_antispoofing_retry_delay();
     let mut ir_enable = false;
@@ -82,7 +87,38 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
         {
             warmup_delay = value as i32;
         }
-        if let Some(ai) = anti
+        if let Some(rgb) = anti
+            .get(Value::String("rgb".to_string()))
+            .and_then(Value::as_mapping)
+        {
+            if let Some(value) = rgb
+                .get(Value::String("enable".to_string()))
+                .and_then(Value::as_bool)
+            {
+                enable = value;
+            }
+            if let Some(value) = rgb.get(Value::String("model".to_string())) {
+                read_antispoofing_model(value, &mut model);
+            }
+            if let Some(value) = rgb
+                .get(Value::String("threshold".to_string()))
+                .and_then(Value::as_f64)
+            {
+                model.threshold = value as f32;
+            }
+            if let Some(value) = rgb
+                .get(Value::String("retries".to_string()))
+                .and_then(Value::as_u64)
+            {
+                ai_retries = value as u32;
+            }
+            if let Some(value) = rgb
+                .get(Value::String("retry_delay_ms".to_string()))
+                .and_then(Value::as_u64)
+            {
+                ai_retry_delay_ms = value as u32;
+            }
+        } else if let Some(ai) = anti
             .get(Value::String("ai".to_string()))
             .and_then(Value::as_mapping)
         {
@@ -137,6 +173,16 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
                 warmup_delay = value as i32;
             }
             if let Some(value) = ir
+                .get(Value::String("min_face_area_ratio".to_string()))
+                .and_then(Value::as_f64)
+            {
+                min_face_area_ratio = value as f32;
+            }
+            if let Some(value) = ir.get(Value::String("model".to_string())) {
+                read_antispoofing_model(value, &mut ir_model);
+                has_ir_model_value = true;
+            }
+            if let Some(value) = ir
                 .get(Value::String("retries".to_string()))
                 .and_then(Value::as_u64)
             {
@@ -185,7 +231,12 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
                 && model.contains_key(Value::String("threshold".to_string()))
         });
     let has_new_ai = anti.is_some_and(|anti| anti.contains_key(Value::String("ai".to_string())));
+    let has_new_rgb = anti.is_some_and(|anti| anti.contains_key(Value::String("rgb".to_string())));
     let has_new_ir = anti.is_some_and(|anti| anti.contains_key(Value::String("ir".to_string())));
+    let has_new_ir_model = anti
+        .and_then(|anti| anti.get(Value::String("ir".to_string())))
+        .and_then(Value::as_mapping)
+        .is_some_and(|ir| ir.contains_key(Value::String("model".to_string())));
     let has_legacy_ir_key =
         anti.is_some_and(|anti| anti.contains_key(Value::String("ir_camera".to_string())));
     let has_legacy_ir_warmup =
@@ -196,8 +247,14 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
         || has_new_model_map
         || has_legacy_ir_key
         || has_legacy_ir_warmup
-        || !has_new_ai
-        || !has_new_ir;
+        || has_new_ai
+        || !has_new_rgb
+        || !has_new_ir
+        || !has_new_ir_model;
+
+    if !has_ir_model_value {
+        ir_model = model.clone();
+    }
 
     let mut model_value = Mapping::new();
     model_value.insert(Value::String("path".to_string()), Value::String(model.path));
@@ -206,17 +263,17 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
         Value::from(model.threshold),
     );
 
-    let mut ai_value = Mapping::new();
-    ai_value.insert(Value::String("enable".to_string()), Value::Bool(enable));
-    ai_value.insert(
+    let mut rgb_value = Mapping::new();
+    rgb_value.insert(Value::String("enable".to_string()), Value::Bool(enable));
+    rgb_value.insert(
         Value::String("retries".to_string()),
         Value::from(ai_retries),
     );
-    ai_value.insert(
+    rgb_value.insert(
         Value::String("retry_delay_ms".to_string()),
         Value::from(ai_retry_delay_ms),
     );
-    ai_value.insert(
+    rgb_value.insert(
         Value::String("model".to_string()),
         Value::Mapping(model_value.clone()),
     );
@@ -239,14 +296,27 @@ pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {
         Value::String("warmup_delay_ms".to_string()),
         Value::from(warmup_delay),
     );
-    // IR now has its own model field, initialized from the same model as RGB
+    let mut ir_model_value = Mapping::new();
+    ir_model_value.insert(
+        Value::String("path".to_string()),
+        Value::String(ir_model.path),
+    );
+    ir_model_value.insert(
+        Value::String("threshold".to_string()),
+        Value::from(ir_model.threshold),
+    );
+
     ir_value.insert(
         Value::String("model".to_string()),
-        Value::Mapping(model_value),
+        Value::Mapping(ir_model_value),
+    );
+    ir_value.insert(
+        Value::String("min_face_area_ratio".to_string()),
+        Value::from(min_face_area_ratio),
     );
 
     let mut anti_value = Mapping::new();
-    anti_value.insert(Value::String("rgb".to_string()), Value::Mapping(ai_value));
+    anti_value.insert(Value::String("rgb".to_string()), Value::Mapping(rgb_value));
     anti_value.insert(Value::String("ir".to_string()), Value::Mapping(ir_value));
 
     (Value::Mapping(anti_value), needs_migration)
