@@ -24,6 +24,14 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            let data_dir = crate::paths::get_data_dir(app.handle())
+                .map_err(|error| format!("failed to resolve data dir: {error}"))?;
+            app.asset_protocol_scope()
+                .allow_directory(&data_dir, true)
+                .map_err(|error| {
+                    format!("failed to allow asset dir {}: {error}", data_dir.display())
+                })?;
+
             #[cfg(target_os = "linux")]
             {
                 use webkit2gtk::{PermissionRequestExt, WebViewExt};
