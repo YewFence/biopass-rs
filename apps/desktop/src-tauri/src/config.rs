@@ -10,38 +10,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
-use crate::paths::{get_config_dir, get_config_path, get_data_dir};
+use crate::paths::{get_config_dir, get_config_path};
 
-fn get_default_config(app: &AppHandle) -> BiopassConfig {
-    let models_dir = get_data_dir(app)
-        .map(|d| d.join("models"))
-        .unwrap_or_else(|_| PathBuf::from("models"));
-
-    let model_path = |name: &str| -> String { models_dir.join(name).to_string_lossy().to_string() };
-
-    let mut config = BiopassConfig::default();
-
-    // 只覆盖需要动态路径的部分
-    config.methods.face.detection.model = model_path("yolov8n-face.onnx");
-    config.methods.face.recognition.model = model_path("edgeface_s_gamma_05.onnx");
-    config.methods.face.anti_spoofing.rgb.model.path = model_path("mobilenetv3_antispoof.onnx");
-
-    config.models = vec![
-        ModelConfig {
-            path: model_path("yolov8n-face.onnx"),
-            model_type: "detection".to_string(),
-        },
-        ModelConfig {
-            path: model_path("edgeface_s_gamma_05.onnx"),
-            model_type: "recognition".to_string(),
-        },
-        ModelConfig {
-            path: model_path("mobilenetv3_antispoof.onnx"),
-            model_type: "anti-spoofing".to_string(),
-        },
-    ];
-
-    config
+fn get_default_config(_app: &AppHandle) -> BiopassConfig {
+    // 使用库的默认配置，其中包含相对路径 (models/xxx.onnx)。
+    // 这些相对路径会在 read_config_from_path 中自动规范化为
+    // $DATA_DIR/models/xxx.onnx 的绝对路径。
+    BiopassConfig::default()
 }
 
 /// Returned by `load_config`. The variants distinguish the three GUI-relevant
@@ -114,7 +89,6 @@ fn initialize_missing_config(
 ) -> Result<LoadConfigResult, String> {
     let upstream_home = std::env::var_os("HOME").map(PathBuf::from);
     let defaults = get_default_config(app);
-    let defaults_for_read = defaults.clone();
 
     let outcome = bootstrap_config_at(config_path, upstream_home.as_deref(), move || defaults)
         .map_err(|e| format!("Failed to bootstrap config: {e}"))?;
@@ -130,7 +104,11 @@ fn initialize_missing_config(
             let config = read_config_from_path(config_path)?;
             (config, true, true)
         }
-        BootstrapOutcome::WroteDefaults => (defaults_for_read, false, true),
+        BootstrapOutcome::WroteDefaults => {
+            // 重新读取配置以应用路径规范化
+            let config = read_config_from_path(config_path)?;
+            (config, false, true)
+        }
     };
 
     Ok(LoadConfigResult::Loaded {
@@ -160,13 +138,12 @@ pub fn save_config(app: AppHandle, config: BiopassConfig) -> Result<(), String> 
 pub fn reset_config(app: AppHandle) -> Result<LoadConfigResult, String> {
     let config_path = get_config_path(&app)?;
     let defaults = get_default_config(&app);
-    // Write the GUI-flavoured defaults (with absolute model paths) rather
-    // than the bare library defaults so the user does not lose their model
-    // wiring.
     write_config_to_path(&config_path, &defaults)?;
+    // 重新读取以应用路径规范化
+    let config = read_config_from_path(&config_path)?;
     Ok(LoadConfigResult::Loaded {
         path: path_to_string(&config_path),
-        config: Box::new(defaults),
+        config: Box::new(config),
         migrated: false,
         initialized: true,
     })

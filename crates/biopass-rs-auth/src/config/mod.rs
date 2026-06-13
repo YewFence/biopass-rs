@@ -27,6 +27,131 @@ mod tests {
     use std::path::Path;
 
     #[test]
+    fn normalizes_relative_model_paths_to_data_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("testuser");
+        let config_path = home.join(".config/biopass-rs/config.yaml");
+        fs::create_dir_all(config_path.parent().unwrap()).unwrap();
+
+        // 写入包含相对路径的配置
+        fs::write(
+            &config_path,
+            r#"
+methods:
+  face:
+    detection:
+      model: models/yolov8n-face.onnx
+    recognition:
+      model: models/edgeface_s_gamma_05.onnx
+    anti_spoofing:
+      rgb:
+        model:
+          path: models/mobilenetv3_antispoof.onnx
+      ir:
+        model:
+          path: models/ir_antispoof.onnx
+models:
+  - path: models/yolov8n-face.onnx
+    type: detection
+"#,
+        )
+        .unwrap();
+
+        // 读取配置，应该自动规范化路径
+        let config = read_config_from_path(&config_path).unwrap();
+
+        // 验证路径已被规范化为绝对路径（包含 models/ 前缀）
+        assert!(
+            config
+                .methods
+                .face
+                .detection
+                .model
+                .contains("models/yolov8n-face.onnx"),
+            "detection model path should contain models/yolov8n-face.onnx: {}",
+            config.methods.face.detection.model
+        );
+        assert!(
+            config
+                .methods
+                .face
+                .recognition
+                .model
+                .contains("models/edgeface_s_gamma_05.onnx"),
+            "recognition model path should contain models/edgeface_s_gamma_05.onnx: {}",
+            config.methods.face.recognition.model
+        );
+        assert!(
+            config
+                .methods
+                .face
+                .anti_spoofing
+                .rgb
+                .model
+                .path
+                .contains("models/mobilenetv3_antispoof.onnx"),
+            "rgb antispoof model path should contain models/mobilenetv3_antispoof.onnx: {}",
+            config.methods.face.anti_spoofing.rgb.model.path
+        );
+        assert!(
+            config
+                .methods
+                .face
+                .anti_spoofing
+                .ir
+                .model
+                .path
+                .contains("models/ir_antispoof.onnx"),
+            "ir antispoof model path should contain models/ir_antispoof.onnx: {}",
+            config.methods.face.anti_spoofing.ir.model.path
+        );
+        assert!(
+            config.models[0].path.contains("models/yolov8n-face.onnx"),
+            "models array path should contain models/yolov8n-face.onnx: {}",
+            config.models[0].path
+        );
+
+        // 验证相对路径已经被转换为绝对路径（不再以 models/ 开头）
+        assert!(
+            !config.methods.face.detection.model.starts_with("models/"),
+            "detection model path should not start with models/: {}",
+            config.methods.face.detection.model
+        );
+    }
+
+    #[test]
+    fn leaves_absolute_model_paths_unchanged() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("config.yaml");
+
+        // 写入包含绝对路径的配置
+        fs::write(
+            &config_path,
+            r#"
+methods:
+  face:
+    detection:
+      model: /absolute/path/to/model.onnx
+    recognition:
+      model: /another/absolute/model.onnx
+"#,
+        )
+        .unwrap();
+
+        let config = read_config_from_path(&config_path).unwrap();
+
+        // 绝对路径应该保持不变
+        assert_eq!(
+            config.methods.face.detection.model,
+            "/absolute/path/to/model.onnx"
+        );
+        assert_eq!(
+            config.methods.face.recognition.model,
+            "/another/absolute/model.onnx"
+        );
+    }
+
+    #[test]
     fn reads_current_and_normalizes_config() {
         let yaml = r#"
 strategy:
@@ -204,9 +329,18 @@ methods:
         let config = read_config_from_path(&path).unwrap();
 
         assert!(config.methods.face.anti_spoofing.rgb.enable);
-        assert_eq!(
-            config.methods.face.anti_spoofing.rgb.model.path,
-            "legacy.onnx"
+        // 相对路径会被规范化，所以只检查包含原始文件名
+        assert!(
+            config
+                .methods
+                .face
+                .anti_spoofing
+                .rgb
+                .model
+                .path
+                .ends_with("legacy.onnx"),
+            "expected path to end with legacy.onnx, got: {}",
+            config.methods.face.anti_spoofing.rgb.model.path
         );
         assert_eq!(config.methods.face.anti_spoofing.rgb.model.threshold, 0.67);
         assert!(config.methods.face.anti_spoofing.ir.enable);

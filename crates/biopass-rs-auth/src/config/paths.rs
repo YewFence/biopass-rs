@@ -140,8 +140,70 @@ pub fn user_exists(username: &str) -> bool {
 pub fn read_config_from_path(config_path: &Path) -> Result<BiopassConfig, String> {
     let config_text = fs::read_to_string(config_path)
         .map_err(|error| format!("Failed to read config {}: {error}", config_path.display()))?;
-    serde_yaml::from_str::<BiopassConfig>(&config_text)
-        .map_err(|error| config_parse_error_message(config_path, &error.to_string()))
+    let mut config = serde_yaml::from_str::<BiopassConfig>(&config_text)
+        .map_err(|error| config_parse_error_message(config_path, &error.to_string()))?;
+
+    // Normalize relative model paths to be relative to DATA_DIR
+    normalize_model_paths(&mut config, config_path);
+
+    Ok(config)
+}
+
+/// Resolve relative model paths against DATA_DIR.
+///
+/// Model paths in the config can be:
+/// - Absolute paths (start with `/`) — left unchanged.
+/// - Relative paths — resolved against DATA_DIR for the target user.
+///
+/// This allows users to write `models/yolov8n-face.onnx` in the config and
+/// have it automatically resolve to `$DATA_DIR/models/yolov8n-face.onnx`,
+/// regardless of the application's CWD.
+fn normalize_model_paths(config: &mut BiopassConfig, config_path: &Path) {
+    // Infer username from config path to resolve DATA_DIR
+    let username = infer_username_from_config_path(config_path);
+    let data_dir = user_data_dir(&username);
+
+    let normalize = |path: &str| -> String {
+        if path.is_empty() || Path::new(path).is_absolute() {
+            path.to_string()
+        } else {
+            data_dir.join(path).to_string_lossy().to_string()
+        }
+    };
+
+    config.methods.face.detection.model = normalize(&config.methods.face.detection.model);
+    config.methods.face.recognition.model = normalize(&config.methods.face.recognition.model);
+    config.methods.face.anti_spoofing.rgb.model.path =
+        normalize(&config.methods.face.anti_spoofing.rgb.model.path);
+    config.methods.face.anti_spoofing.ir.model.path =
+        normalize(&config.methods.face.anti_spoofing.ir.model.path);
+
+    for model in &mut config.models {
+        model.path = normalize(&model.path);
+    }
+}
+
+/// Best-effort extraction of the username from a config path.
+///
+/// Looks for `.config/biopass-rs` or `.local/share/biopass-rs` in the path
+/// and extracts the username from the parent directory. Falls back to
+/// [`current_username`] if extraction fails.
+fn infer_username_from_config_path(config_path: &Path) -> String {
+    // Try to extract username from path like /home/username/.config/biopass-rs/config.yaml
+    for ancestor in config_path.ancestors() {
+        if let Some(name) = ancestor.file_name().and_then(|n| n.to_str()) {
+            if name == ".config" || name == ".local" {
+                if let Some(parent) = ancestor.parent() {
+                    if let Some(username) = parent.file_name().and_then(|n| n.to_str()) {
+                        return username.to_string();
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback to current username
+    current_username().unwrap_or_else(|| "current".to_string())
 }
 
 pub fn list_faces(username: &str) -> Vec<PathBuf> {
