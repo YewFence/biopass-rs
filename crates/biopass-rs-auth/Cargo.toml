@@ -20,6 +20,7 @@ clap.workspace = true
 clap_complete.workspace = true
 jpeg-decoder.workspace = true
 jpeg-encoder.workspace = true
+self_cell.workspace = true
 serde.workspace = true
 serde_yaml.workspace = true
 tract-onnx.workspace = true

@@ -46,8 +46,8 @@ pub fn emit_log(level: LogLevel, debug_enabled: bool, scope: &str, message: &str
 }
 
 pub use camera::{
-    camera_available, capture_rgb_frame, list_video_devices, CameraRequest, FrameFormat, RgbFrame,
-    VideoDevice,
+    camera_available, capture_rgb_frame, list_video_devices, CameraRequest, CameraSession,
+    FrameFormat, RgbFrame, VideoDevice,
 };
 pub use config::{
     bootstrap_config_at, config_parse_error_message, config_path, current_username, list_faces,

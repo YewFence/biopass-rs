@@ -1,7 +1,8 @@
 use super::auth::{EXIT_AUTH_ERR, EXIT_IGNORE, EXIT_SUCCESS};
 use crate::utils::helper_auto_optimize_camera;
 use biopass_rs_auth::{
-    capture_rgb_frame, decode_jpeg_rgb, encode_jpeg, CameraRequest, FaceDetector, RgbFrame,
+    capture_rgb_frame, decode_jpeg_rgb, encode_jpeg, CameraRequest, CameraSession, FaceDetector,
+    RgbFrame,
 };
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
@@ -70,6 +71,25 @@ pub(crate) fn preview_session(
         None => None,
     };
 
+    let request = CameraRequest {
+        device_path: camera.filter(|c| !c.is_empty()).map(PathBuf::from),
+        auto_optimize_camera: helper_auto_optimize_camera(username),
+        ..CameraRequest::default()
+    };
+    let mut session = match CameraSession::open(&request) {
+        Ok(session) => session,
+        Err(error) => {
+            println!("ERR failed to open camera: {error}");
+            let _ = std::io::stdout().flush();
+            return EXIT_AUTH_ERR;
+        }
+    };
+    if let Err(error) = session.warmup(request.warmup_frames) {
+        println!("ERR warmup failed: {error}");
+        let _ = std::io::stdout().flush();
+        return EXIT_AUTH_ERR;
+    }
+
     println!("READY");
     let _ = std::io::stdout().flush();
 
@@ -84,7 +104,10 @@ pub(crate) fn preview_session(
         }
 
         if line == "FRAME" {
-            match capture_camera_jpeg(camera, quality, username) {
+            match session
+                .next_frame()
+                .and_then(|frame| encode_jpeg(&frame, quality))
+            {
                 Ok(jpeg) => {
                     println!("OK {}", jpeg.len());
                     if std::io::stdout().write_all(&jpeg).is_err()
@@ -108,10 +131,18 @@ pub(crate) fn preview_session(
                 continue;
             };
 
-            match capture_face_jpeg_with_detector(camera, detector, quality, username) {
-                Ok(jpeg) => match std::fs::write(path, jpeg) {
-                    Ok(()) => println!("OK"),
-                    Err(error) => println!("ERR save failed: {error}"),
+            match session.next_frame() {
+                Ok(frame) => match detector.crop_largest_face(&frame) {
+                    Ok(Some(face)) => match encode_jpeg(&face, quality) {
+                        Ok(jpeg) => match std::fs::write(path, jpeg) {
+                            Ok(()) => println!("OK"),
+                            Err(error) => println!("ERR save failed: {error}"),
+                        },
+                        Err(error) => println!("ERR {error}"),
+                    },
+                    Ok(None) => println!("NO_FACE"),
+                    Err(error) if error == "No face detected" => println!("NO_FACE"),
+                    Err(error) => println!("ERR {error}"),
                 },
                 Err(error) if error == "No face detected" => println!("NO_FACE"),
                 Err(error) => println!("ERR {error}"),
@@ -159,14 +190,6 @@ fn capture_face_jpeg_with_detector(
         .crop_largest_face(&frame)?
         .ok_or_else(|| "No face detected".to_string())?;
     encode_jpeg(&face, quality)
-}
-
-fn capture_camera_jpeg(
-    camera: Option<&str>,
-    quality: u8,
-    username: Option<&str>,
-) -> Result<Vec<u8>, String> {
-    encode_jpeg(&capture_camera_frame(camera, username)?, quality)
 }
 
 fn capture_camera_frame(camera: Option<&str>, username: Option<&str>) -> Result<RgbFrame, String> {
