@@ -52,6 +52,7 @@ export interface FaceMethodConfig {
       retry_delay_ms: number;
       camera: string | null;
       warmup_delay_ms: number;
+      min_face_area_ratio: number;
     };
   };
   auto_optimize_camera: boolean;

@@ -441,6 +441,32 @@ export function FaceSetting() {
                 className="h-10"
               />
             </div>
+            <div className="grid gap-2 pt-1">
+              <Label htmlFor="ir-min-face-area-ratio" className="text-xs text-muted-foreground">
+                IR Min Face Area Ratio
+              </Label>
+              <Input
+                id="ir-min-face-area-ratio"
+                type="number"
+                min="0"
+                max="1"
+                step="0.01"
+                value={config.anti_spoofing.ir.min_face_area_ratio}
+                onChange={(e) =>
+                  setFaceConfig({
+                    ...config,
+                    anti_spoofing: {
+                      ...config.anti_spoofing,
+                      ir: {
+                        ...config.anti_spoofing.ir,
+                        min_face_area_ratio: parseFloat(e.target.value) || 0,
+                      },
+                    },
+                  })
+                }
+                className="h-10"
+              />
+            </div>
             <SubcheckRetries
               idPrefix="ir-anti-spoofing"
               retries={config.anti_spoofing.ir.retries}
