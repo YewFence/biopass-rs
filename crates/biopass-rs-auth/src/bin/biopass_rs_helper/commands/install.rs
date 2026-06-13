@@ -1,7 +1,7 @@
 use super::auth::{EXIT_AUTH_ERR, EXIT_SUCCESS};
-use crate::utils::current_username;
 use biopass_rs_auth::{
-    bootstrap_config_at, download_models, run_ldconfig, BiopassConfig, BootstrapOutcome,
+    bootstrap_config_at, current_username, download_models, run_ldconfig, BiopassConfig,
+    BootstrapOutcome,
 };
 use users::os::unix::UserExt;
 

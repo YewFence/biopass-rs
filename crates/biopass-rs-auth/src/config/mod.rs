@@ -7,7 +7,7 @@ mod serde_defaults;
 pub use bootstrap::{bootstrap_config_at, upstream_config_path_relative, BootstrapOutcome};
 pub use migration::migrate_config_at_path;
 pub use paths::{
-    config_parse_error_message, config_path, list_faces, read_config_from_path,
+    config_parse_error_message, config_path, current_username, list_faces, read_config_from_path,
     reset_config_at_path, set_config_path_override, set_data_dir_override, setup_config,
     user_data_dir, user_exists, write_config_to_path, CONFIG_PATH_ENV, DATA_DIR_ENV,
 };

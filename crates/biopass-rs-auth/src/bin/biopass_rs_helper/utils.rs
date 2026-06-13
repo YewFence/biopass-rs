@@ -1,27 +1,10 @@
-use biopass_rs_auth::{config_path, read_config_from_path};
-use std::env;
+use biopass_rs_auth::{config_path, current_username, read_config_from_path};
 
 pub(crate) fn resolve_username(explicit: Option<&str>) -> Option<String> {
     explicit
         .filter(|name| !name.is_empty())
         .map(str::to_owned)
         .or_else(current_username)
-}
-
-pub(crate) fn current_username() -> Option<String> {
-    for key in ["SUDO_USER", "USER", "USERNAME", "LOGNAME"] {
-        if let Ok(value) = env::var(key) {
-            let trimmed = value.trim();
-            if !trimmed.is_empty()
-                && trimmed
-                    .chars()
-                    .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.')
-            {
-                return Some(trimmed.to_owned());
-            }
-        }
-    }
-    None
 }
 
 pub(crate) fn helper_auto_optimize_camera(username: Option<&str>) -> bool {

@@ -108,6 +108,31 @@ fn resolve_user_home(username: &str, fallback: PathBuf) -> PathBuf {
         .unwrap_or(fallback)
 }
 
+/// Best-effort lookup of the current process's username.
+///
+/// Under `sudo` we honour `SUDO_USER` (the invoking user) rather than the
+/// effective UID, so the helper invoked from a PAM session still resolves
+/// the target user's config / data dir. Outside sudo we ask the OS via
+/// [`users::get_current_uid`] for a stable, NSS-aware answer.
+///
+/// Used as the default `username` argument to [`config_path`] and
+/// [`user_data_dir`] from both the helper CLI and the desktop GUI, so the
+/// two stay in sync about whose config / data dir to read.
+pub fn current_username() -> Option<String> {
+    if let Some(value) = std::env::var_os("SUDO_USER") {
+        let trimmed = value.to_string_lossy().trim().to_owned();
+        if !trimmed.is_empty()
+            && trimmed
+                .chars()
+                .all(|ch| ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' || ch == '.')
+        {
+            return Some(trimmed);
+        }
+    }
+    users::get_user_by_uid(users::get_current_uid())
+        .map(|user| user.name().to_string_lossy().into_owned())
+}
+
 pub fn user_exists(username: &str) -> bool {
     users::get_user_by_name(username).is_some()
 }

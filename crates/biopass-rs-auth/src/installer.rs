@@ -1,10 +1,10 @@
+use crate::user_data_dir;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
-use users::os::unix::UserExt;
 
 const MODELS: &[(&str, &str)] = &[
     (
@@ -31,20 +31,16 @@ const LEGACY_MODELS: &[&str] = &[
     "mobilenetv3_antispoof_ts.pt",
 ];
 
-const NEW_DATA_DIR: &str = ".local/share/biopass-rs";
-
-fn get_home_dir() -> Result<PathBuf, String> {
-    if let Some(user) = std::env::var_os("SUDO_USER")
-        .filter(|value| !value.is_empty())
-        .and_then(|value| value.to_str().map(str::to_owned))
-    {
-        if let Some(home) = users::get_user_by_name(&user).map(|u| u.home_dir().to_path_buf()) {
-            return Ok(home);
-        }
+/// Resolve the directory where ONNX models live. Honours `BIOPASS_DATA_DIR`
+/// and the CLI `--data-dir` override so `download_models` /
+/// `check_models_present` agree with `user_data_dir()` for the rest of the
+/// crate.
+fn models_dir() -> Result<PathBuf, String> {
+    let dir = user_data_dir("ignored");
+    if dir.as_os_str().is_empty() {
+        return Err("Cannot determine data directory".to_string());
     }
-    users::get_user_by_uid(users::get_current_uid())
-        .map(|user| user.home_dir().to_path_buf())
-        .ok_or_else(|| "Cannot determine home directory".to_string())
+    Ok(dir.join("models"))
 }
 
 fn download_file(
@@ -111,8 +107,7 @@ fn try_download(url: &str, dest: &Path, progress: Option<&ProgressBar>) -> Resul
 }
 
 pub fn download_models() -> Result<(), String> {
-    let home = get_home_dir()?;
-    let data_dir = home.join(NEW_DATA_DIR).join("models");
+    let data_dir = models_dir()?;
 
     remove_legacy_models(&data_dir);
 
@@ -163,10 +158,9 @@ pub fn run_ldconfig() -> Result<(), String> {
 
 /// Check if all required models are present on disk
 pub fn check_models_present() -> bool {
-    let Ok(home) = get_home_dir() else {
+    let Ok(data_dir) = models_dir() else {
         return false;
     };
-    let data_dir = home.join(NEW_DATA_DIR).join("models");
     MODELS
         .iter()
         .all(|(filename, _)| data_dir.join(filename).exists())
