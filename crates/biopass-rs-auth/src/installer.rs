@@ -1,7 +1,7 @@
 use crate::user_data_dir;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
@@ -87,19 +87,25 @@ fn try_download(url: &str, dest: &Path, progress: Option<&ProgressBar>) -> Resul
         }
     }
 
-    let bytes = response
-        .into_body()
-        .read_to_vec()
-        .map_err(|e| format!("Failed to read response: {}", e))?;
-
-    if let Some(pb) = progress {
-        pb.set_position(bytes.len() as u64);
-    }
-
+    let mut reader = response.into_body().into_reader();
     let mut file = fs::File::create(dest).map_err(|e| format!("Failed to create file: {}", e))?;
 
-    file.write_all(&bytes)
-        .map_err(|e| format!("Failed to write file: {}", e))?;
+    let mut buffer = [0u8; 64 * 1024];
+    let mut downloaded: u64 = 0;
+    loop {
+        let n = reader
+            .read(&mut buffer)
+            .map_err(|e| format!("Failed to read response: {}", e))?;
+        if n == 0 {
+            break;
+        }
+        file.write_all(&buffer[..n])
+            .map_err(|e| format!("Failed to write file: {}", e))?;
+        downloaded += n as u64;
+        if let Some(pb) = progress {
+            pb.set_position(downloaded);
+        }
+    }
 
     file.flush()
         .map_err(|e| format!("Failed to flush file: {}", e))?;
