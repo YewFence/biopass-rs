@@ -414,29 +414,57 @@ export function FaceSetting() {
         </div>
 
         {config.anti_spoofing.ir.enable && (
-          <SubcheckRetries
-            idPrefix="ir-anti-spoofing"
-            retries={config.anti_spoofing.ir.retries}
-            retryDelayMs={config.anti_spoofing.ir.retry_delay_ms}
-            onRetriesChange={(retries) =>
-              setFaceConfig({
-                ...config,
-                anti_spoofing: {
-                  ...config.anti_spoofing,
-                  ir: { ...config.anti_spoofing.ir, retries },
-                },
-              })
-            }
-            onRetryDelayChange={(retry_delay_ms) =>
-              setFaceConfig({
-                ...config,
-                anti_spoofing: {
-                  ...config.anti_spoofing,
-                  ir: { ...config.anti_spoofing.ir, retry_delay_ms },
-                },
-              })
-            }
-          />
+          <>
+            <div className="grid gap-2 pt-1">
+              <Label htmlFor="ir-warmup-delay" className="text-xs text-muted-foreground">
+                IR Camera Startup Delay (ms)
+              </Label>
+              <Input
+                id="ir-warmup-delay"
+                type="number"
+                min="0"
+                max="5000"
+                step="100"
+                value={config.anti_spoofing.ir.warmup_delay_ms}
+                onChange={(e) =>
+                  setFaceConfig({
+                    ...config,
+                    anti_spoofing: {
+                      ...config.anti_spoofing,
+                      ir: {
+                        ...config.anti_spoofing.ir,
+                        warmup_delay_ms: parseInt(e.target.value, 10) || 0,
+                      },
+                    },
+                  })
+                }
+                className="h-10"
+              />
+            </div>
+            <SubcheckRetries
+              idPrefix="ir-anti-spoofing"
+              retries={config.anti_spoofing.ir.retries}
+              retryDelayMs={config.anti_spoofing.ir.retry_delay_ms}
+              onRetriesChange={(retries) =>
+                setFaceConfig({
+                  ...config,
+                  anti_spoofing: {
+                    ...config.anti_spoofing,
+                    ir: { ...config.anti_spoofing.ir, retries },
+                  },
+                })
+              }
+              onRetryDelayChange={(retry_delay_ms) =>
+                setFaceConfig({
+                  ...config,
+                  anti_spoofing: {
+                    ...config.anti_spoofing,
+                    ir: { ...config.anti_spoofing.ir, retry_delay_ms },
+                  },
+                })
+              }
+            />
+          </>
         )}
       </div>
     </div>
