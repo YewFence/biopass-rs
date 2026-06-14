@@ -312,7 +312,7 @@ dependencies = [
 
 [[package]]
 name = "biopass-rs"
-version = "0.6.10"
+version = "0.6.11"
 dependencies = [
  "base64 0.22.1",
  "biopass-rs-auth",
@@ -329,7 +329,7 @@ dependencies = [
 
 [[package]]
 name = "biopass-rs-auth"
-version = "0.6.10"
+version = "0.6.11"
 dependencies = [
  "anyhow",
  "chrono",
@@ -351,7 +351,7 @@ dependencies = [
 
 [[package]]
 name = "biopass-rs-pam"
-version = "0.6.10"
+version = "0.6.11"
 
 [[package]]
 name = "bit-set"
