@@ -40,15 +40,34 @@ jobs:
           persist-credentials: false
 
       - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           install_args: rust github:release-plz/release-plz
           cache_key: "mise-v1-release-plz-ci-{{platform}}-{{file_hash}}"
 
       - name: Run release-plz
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
         run: release-plz release --forge github --git-token "${GITHUB_TOKEN}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release from tag
+        if: ${{ startsWith(github.ref, 'refs/tags/') }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "release ${RELEASE_TAG} already exists"
+          else
+            gh release create "${RELEASE_TAG}" \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "biopass-rs ${RELEASE_TAG}" \
+              --generate-notes
+          fi
 
       - name: Resolve release metadata
         id: metadata
@@ -56,9 +75,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          if ! version="$(cargo metadata --format-version=1 --no-deps | jq -er --arg name "${PACKAGE_NAME}" '[.packages[] | select(.name == $name) | .version][0]')"; then
-            echo "package ${PACKAGE_NAME} not found in cargo metadata" >&2
-            exit 1
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            if ! version="$(cargo metadata --format-version=1 --no-deps | jq -er --arg name "${PACKAGE_NAME}" '[.packages[] | select(.name == $name) | .version][0]')"; then
+              echo "package ${PACKAGE_NAME} not found in cargo metadata" >&2
+              exit 1
+            fi
           fi
 
           {
