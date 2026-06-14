@@ -4,7 +4,6 @@ use biopass_rs_auth::{
     bootstrap_config_at, config_path, migrate_config_at_path, reset_config_at_path, user_exists,
     BiopassConfig, BootstrapOutcome,
 };
-use users::os::unix::UserExt;
 
 pub(crate) fn run(username: &str, action: ConfigAction) -> u8 {
     if !user_exists(username) {
@@ -12,16 +11,13 @@ pub(crate) fn run(username: &str, action: ConfigAction) -> u8 {
         return EXIT_AUTH_ERR;
     }
     match action {
-        ConfigAction::Init {
-            force,
-            skip_upstream,
-        } => init(username, force, skip_upstream),
+        ConfigAction::Init { force } => init(username, force),
         ConfigAction::Reset => reset(username),
         ConfigAction::Migrate => migrate(username),
     }
 }
 
-fn init(username: &str, force: bool, skip_upstream: bool) -> u8 {
+fn init(username: &str, force: bool) -> u8 {
     let path = config_path(username);
     if force {
         // reset_config_at_path writes the defaults AND resolves relative model
@@ -37,22 +33,10 @@ fn init(username: &str, force: bool, skip_upstream: bool) -> u8 {
         return EXIT_SUCCESS;
     }
 
-    let home = if skip_upstream {
-        None
-    } else {
-        users::get_user_by_name(username).map(|user| user.home_dir().to_path_buf())
-    };
-    match bootstrap_config_at(&path, home.as_deref(), BiopassConfig::default) {
+    match bootstrap_config_at(&path, BiopassConfig::default) {
         Ok(BootstrapOutcome::AlreadyPresent) => {
             eprintln!(
                 "Config already exists for user '{username}' at {} (use --force to overwrite)",
-                path.display()
-            );
-            EXIT_SUCCESS
-        }
-        Ok(BootstrapOutcome::ImportedFromUpstream) => {
-            eprintln!(
-                "Imported upstream biopass config for user '{username}' into {}",
                 path.display()
             );
             EXIT_SUCCESS

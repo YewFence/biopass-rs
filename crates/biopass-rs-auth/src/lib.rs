@@ -52,11 +52,10 @@ pub use camera::{
 pub use config::{
     bootstrap_config_at, config_parse_error_message, config_path, current_username, list_faces,
     migrate_config_at_path, read_config_from_path, reset_config_at_path, set_config_path_override,
-    set_data_dir_override, setup_config, upstream_config_path_relative, user_data_dir, user_exists,
-    write_config_to_path, AntiSpoofingConfig, AntiSpoofingModelConfig, BiopassConfig,
-    BootstrapOutcome, DetectionConfig, FaceMethodConfig, FingerConfig, FingerprintMethodConfig,
-    MethodConfig, MethodsConfig, ModelConfig, RecognitionConfig, StrategyConfig, CONFIG_PATH_ENV,
-    DATA_DIR_ENV,
+    set_data_dir_override, setup_config, user_data_dir, user_exists, write_config_to_path,
+    AntiSpoofingConfig, AntiSpoofingModelConfig, BiopassConfig, BootstrapOutcome, DetectionConfig,
+    FaceMethodConfig, FingerConfig, FingerprintMethodConfig, MethodConfig, MethodsConfig,
+    ModelConfig, RecognitionConfig, StrategyConfig, CONFIG_PATH_ENV, DATA_DIR_ENV,
 };
 pub use face_antispoofing::{FaceAntiSpoofing, SpoofResult};
 pub use face_auth::FaceAuth;

@@ -108,9 +108,6 @@ pub enum ConfigAction {
         /// Overwrite an existing config file
         #[arg(long)]
         force: bool,
-        /// Skip upstream biopass config import, write defaults directly
-        #[arg(long)]
-        skip_upstream: bool,
     },
     /// Restore the config file to its built-in defaults
     Reset,
@@ -169,42 +166,8 @@ mod tests {
         assert_eq!(cli.username.as_deref(), Some("alice"));
         match cli.command {
             Commands::Config {
-                action:
-                    ConfigAction::Init {
-                        force,
-                        skip_upstream,
-                    },
-            } => {
-                assert!(force);
-                assert!(!skip_upstream);
-            }
-            _ => panic!("expected `config init`"),
-        }
-    }
-
-    #[test]
-    fn config_init_skip_upstream_flag_parses() {
-        let cli = Cli::parse_from([
-            "biopass-rs-helper",
-            "-u",
-            "alice",
-            "config",
-            "init",
-            "--skip-upstream",
-        ]);
-
-        assert_eq!(cli.username.as_deref(), Some("alice"));
-        match cli.command {
-            Commands::Config {
-                action:
-                    ConfigAction::Init {
-                        force,
-                        skip_upstream,
-                    },
-            } => {
-                assert!(!force);
-                assert!(skip_upstream);
-            }
+                action: ConfigAction::Init { force },
+            } => assert!(force),
             _ => panic!("expected `config init`"),
         }
     }

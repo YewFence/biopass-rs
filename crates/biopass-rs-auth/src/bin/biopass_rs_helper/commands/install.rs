@@ -1,13 +1,11 @@
 use super::auth::{EXIT_AUTH_ERR, EXIT_SUCCESS};
-use biopass_rs_auth::{
-    bootstrap_config_at, current_username, download_models, run_ldconfig, BiopassConfig,
-    BootstrapOutcome,
-};
+use super::config;
+use crate::cli::ConfigAction;
+use biopass_rs_auth::{current_username, download_models, run_ldconfig, user_data_dir};
 use users::os::unix::UserExt;
 
-const NEW_CONFIG_PATH: &str = ".config/biopass-rs/config.yaml";
-const OLD_DATA_DIR: &str = ".local/share/com.ticklab.biopass";
-const NEW_DATA_DIR: &str = ".local/share/biopass-rs";
+/// Upstream TickLabVN `biopass` data directory, relative to a user's home.
+const UPSTREAM_DATA_DIR: &str = ".local/share/com.ticklab.biopass";
 
 pub(crate) fn install() -> u8 {
     eprintln!("Running ldconfig...");
@@ -15,15 +13,24 @@ pub(crate) fn install() -> u8 {
         eprintln!("Warning: {error}");
     }
 
-    eprintln!("Bootstrapping config for the current user...");
-    match bootstrap_current_user() {
-        Ok(message) => {
-            if let Some(message) = message {
-                eprintln!("{message}");
-            }
+    let username = match current_username() {
+        Some(username) => username,
+        None => {
+            eprintln!("Cannot determine current user (set USER/SUDO_USER)");
+            return EXIT_AUTH_ERR;
         }
-        Err(error) => eprintln!("Warning: {error}"),
+    };
+
+    eprintln!("Bootstrapping config for the current user...");
+    // `install` 本质上是 `config init` + `model-download` 的打包，再补一次
+    // 上游人脸数据导入。这里复用 `config init` 的实现，让配置路径走与
+    // `config` 命令相同的解析链（CLI override → BIOPASS_CONFIG → 用户主目录）。
+    let init_code = config::run(&username, ConfigAction::Init { force: false });
+    if init_code != EXIT_SUCCESS {
+        return init_code;
     }
+
+    import_legacy_faces(&username);
 
     eprintln!("Downloading models...");
     match download_models() {
@@ -52,43 +59,51 @@ pub(crate) fn model_download() -> u8 {
     }
 }
 
-fn bootstrap_current_user() -> Result<Option<String>, String> {
-    let username = current_username()
-        .ok_or_else(|| "Cannot determine current user (set USER/SUDO_USER)".to_string())?;
-    let home = users::get_user_by_name(&username)
-        .map(|user| user.home_dir().to_path_buf())
-        .ok_or_else(|| format!("Cannot determine home directory for user '{username}'"))?;
+/// Copy enrolled face images from an upstream `biopass` install.
+///
+/// Only the `faces/` directory is copied. The upstream **config** is ignored
+/// because its schema drifts independently and chasing every version is
+/// unsustainable; faces are plain image files with no schema, so copying them
+/// is always safe.
+///
+/// Existing destination files are never overwritten, so the upstream directory
+/// is left untouched and re-runs are idempotent. The destination resolves
+/// through [`user_data_dir`], honouring `BIOPASS_DATA_DIR` and the `--data-dir`
+/// override the same way model downloads do — so `mise run dev-helper install`
+/// lands them under `dev-data/faces/` rather than the user's real home.
+fn import_legacy_faces(username: &str) {
+    let Some(home) = users::get_user_by_name(username).map(|user| user.home_dir().to_path_buf())
+    else {
+        return;
+    };
+    let src_faces = home.join(UPSTREAM_DATA_DIR).join("faces");
+    let dest_faces = user_data_dir(username).join("faces");
 
-    let new_config = home.join(NEW_CONFIG_PATH);
-    let outcome_message =
-        match bootstrap_config_at(&new_config, Some(&home), BiopassConfig::default) {
-            Ok(BootstrapOutcome::AlreadyPresent) => format!(
-                "Skipping config bootstrap for user '{username}': config already exists at {}",
-                new_config.display()
-            ),
-            Ok(BootstrapOutcome::ImportedFromUpstream) => format!(
-                "Imported upstream config for user '{username}' into {}",
-                new_config.display()
-            ),
-            Ok(BootstrapOutcome::WroteDefaults) => format!(
-                "Wrote default config for user '{username}' at {}",
-                new_config.display()
-            ),
-            Err(error) => {
-                return Err(format!(
-                    "failed to bootstrap config for '{username}': {error}"
-                ))
-            }
+    let Ok(entries) = std::fs::read_dir(&src_faces) else {
+        // No upstream faces directory — nothing to import.
+        return;
+    };
+    if let Err(error) = std::fs::create_dir_all(&dest_faces) {
+        eprintln!("Warning: Failed to create faces dir for '{username}': {error}");
+        return;
+    }
+
+    let mut copied = 0usize;
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let Some(name) = file_name.to_str() else {
+            continue;
         };
-
-    let old_data = home.join(OLD_DATA_DIR);
-    let new_data = home.join(NEW_DATA_DIR);
-    if old_data.exists() && !new_data.exists() {
-        eprintln!("Migrating data directory for user '{username}'...");
-        if let Err(error) = std::fs::rename(&old_data, &new_data) {
-            eprintln!("Warning: Failed to migrate data dir for '{username}': {error}");
+        let dest = dest_faces.join(name);
+        if dest.exists() {
+            continue;
+        }
+        if std::fs::copy(entry.path(), &dest).is_ok() {
+            copied += 1;
         }
     }
 
-    Ok(Some(outcome_message))
+    if copied > 0 {
+        eprintln!("Imported {copied} face image(s) from upstream biopass for user '{username}'");
+    }
 }

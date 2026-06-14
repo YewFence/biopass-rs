@@ -4,7 +4,7 @@ mod paths;
 mod schema;
 mod serde_defaults;
 
-pub use bootstrap::{bootstrap_config_at, upstream_config_path_relative, BootstrapOutcome};
+pub use bootstrap::{bootstrap_config_at, BootstrapOutcome};
 pub use migration::migrate_config_at_path;
 pub use paths::{
     config_parse_error_message, config_path, current_username, list_faces, read_config_from_path,

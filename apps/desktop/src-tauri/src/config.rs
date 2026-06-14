@@ -56,8 +56,7 @@ pub enum LoadConfigResult {
         config: Box<BiopassConfig>,
         /// True if the on-disk file was rewritten to the current schema.
         migrated: bool,
-        /// True if the file was just created from built-in defaults or
-        /// imported from an upstream `biopass` install.
+        /// True if the file was just created from built-in defaults.
         initialized: bool,
     },
     Broken {
@@ -113,11 +112,10 @@ fn initialize_missing_config(
     app: &AppHandle,
     config_path: &Path,
 ) -> Result<LoadConfigResult, String> {
-    let upstream_home = std::env::var_os("HOME").map(PathBuf::from);
     let defaults = get_default_config(app);
     let defaults_for_read = defaults.clone();
 
-    let outcome = bootstrap_config_at(config_path, upstream_home.as_deref(), move || defaults)
+    let outcome = bootstrap_config_at(config_path, move || defaults)
         .map_err(|e| format!("Failed to bootstrap config: {e}"))?;
 
     let (config, migrated, initialized) = match outcome {
@@ -126,10 +124,6 @@ fn initialize_missing_config(
             // call it when the file is missing, but be defensive.
             let config = read_config_from_path(config_path)?;
             (config, false, false)
-        }
-        BootstrapOutcome::ImportedFromUpstream => {
-            let config = read_config_from_path(config_path)?;
-            (config, true, true)
         }
         BootstrapOutcome::WroteDefaults => (defaults_for_read, false, true),
     };

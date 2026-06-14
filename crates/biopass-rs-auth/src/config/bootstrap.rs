@@ -1,37 +1,29 @@
 //! Shared "make sure a config file exists at this path" bootstrap logic.
 //!
-//! Two call sites need the same three-step fallback chain:
+//! Two call sites need the same "write defaults if absent" behavior:
 //!
 //! 1. **`config init`** (helper CLI) — invoked by a single user from the
-//!    terminal; same chain but for one target user. Also invoked by
-//!    `biopass-rs-helper install` for the current user.
+//!    terminal; also invoked by `biopass-rs-helper install` for the current
+//!    user.
 //! 2. **Desktop GUI** — invoked on startup when the GUI cannot find a config
 //!    file at its expected location.
 //!
-//! The chain is: (a) try to import the upstream TickLabVN `biopass` config
-//! and migrate its schema, (b) otherwise write the built-in default config
-//! produced by `default_factory`. Steps (b)'s `default_factory` is a closure
-//! so the GUI can inject dynamic model paths without the library crate
-//! depending on Tauri.
+//! Bootstrap only writes built-in defaults. It deliberately does **not**
+//! import or migrate the upstream TickLabVN `biopass` config: the upstream
+//! schema drifts independently and chasing every version is unsustainable.
+//! Instead the helper's `install` command copies the upstream **face images**
+//! (which are schema-independent) — see `commands/install.rs`.
 
-use super::migration::migrate_config_at_path;
-use super::paths::{normalize_config_paths_at_path, read_config_from_path, write_config_to_path};
+use super::paths::{normalize_config_paths_at_path, write_config_to_path};
 use super::schema::BiopassConfig;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-const UPSTREAM_CONFIG_PATH: &str = ".config/com.ticklab.biopass/config.yaml";
-
-/// Outcome of a `bootstrap_config_at` call. The variants distinguish the
-/// three relevant states so callers (GUI, CLI) can show different messages.
+/// Outcome of a `bootstrap_config_at` call.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BootstrapOutcome {
     /// The destination file already existed; nothing was written.
     AlreadyPresent,
-    /// The upstream `biopass` config was copied in and migrated to the
-    /// current schema.
-    ImportedFromUpstream,
-    /// The built-in defaults were written because nothing else applied.
+    /// The built-in defaults were written because the file was absent.
     WroteDefaults,
 }
 
@@ -39,66 +31,20 @@ pub enum BootstrapOutcome {
 ///
 /// * If the file already exists, return [`BootstrapOutcome::AlreadyPresent`]
 ///   without touching it.
-/// * Otherwise, if `upstream_home` contains a TickLabVN `biopass` config,
-///   copy it in and migrate it to the current schema.
-/// * Otherwise, write `default_factory()` to `destination`.
-///
-/// `upstream_home` is the home directory used to locate the upstream config.
-/// Pass `None` to skip the upstream import attempt entirely (e.g. when the
-/// caller has no concept of a per-user home directory).
+/// * Otherwise, write `default_factory()` to `destination` and resolve its
+///   relative model paths against DATA_DIR so the freshly-written config is
+///   self-contained regardless of which reader (CLI / PAM / GUI) loads it.
 pub fn bootstrap_config_at(
     destination: &Path,
-    upstream_home: Option<&Path>,
     default_factory: impl FnOnce() -> BiopassConfig,
 ) -> Result<BootstrapOutcome, String> {
     if destination.is_file() {
         return Ok(BootstrapOutcome::AlreadyPresent);
     }
 
-    if let Some(home) = upstream_home {
-        let upstream = home.join(UPSTREAM_CONFIG_PATH);
-        if upstream.is_file() {
-            if let Some(parent) = destination.parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| format!("Failed to create {}: {e}", parent.display()))?;
-            }
-            match try_import_upstream(&upstream, destination) {
-                Ok(()) => return Ok(BootstrapOutcome::ImportedFromUpstream),
-                Err(err) => {
-                    // Clean up partial copies and fall through to defaults.
-                    eprintln!(
-                        "Warning: failed to import upstream config from {}: {err}",
-                        upstream.display()
-                    );
-                    let _ = fs::remove_file(destination);
-                }
-            }
-        }
-    }
-
     write_config_to_path(destination, &default_factory())?;
-    // Resolve relative model paths against DATA_DIR so the freshly-written
-    // config is self-contained regardless of which reader (CLI / PAM / GUI)
-    // loads it.
     let _ = normalize_config_paths_at_path(destination)?;
     Ok(BootstrapOutcome::WroteDefaults)
-}
-
-fn try_import_upstream(source: &Path, destination: &Path) -> Result<(), String> {
-    fs::copy(source, destination)
-        .map_err(|e| format!("copy {} → {}: {e}", source.display(), destination.display()))?;
-    migrate_config_at_path(destination)
-        .map_err(|e| format!("migrate {}: {e}", destination.display()))?;
-    // Make sure the result parses; if not, bubble the structured error up so
-    // the caller drops the file and falls back to defaults.
-    read_config_from_path(destination).map(|_| ())
-}
-
-/// The upstream-config path relative to a user's home directory. Exported so
-/// other modules (the installer) can probe for it without duplicating the
-/// constant.
-pub fn upstream_config_path_relative() -> PathBuf {
-    PathBuf::from(UPSTREAM_CONFIG_PATH)
 }
 
 #[cfg(test)]
@@ -107,13 +53,12 @@ mod tests {
     use std::fs;
 
     #[test]
-    fn bootstrap_writes_defaults_when_no_upstream() {
+    fn bootstrap_writes_defaults_when_absent() {
         let dir = tempfile::tempdir().unwrap();
         let dest = dir.path().join(".config/biopass-rs/config.yaml");
-        let fake_home = dir.path().join("home");
 
-        let outcome = bootstrap_config_at(&dest, Some(&fake_home), BiopassConfig::default)
-            .expect("bootstrap should succeed");
+        let outcome =
+            bootstrap_config_at(&dest, BiopassConfig::default).expect("bootstrap should succeed");
 
         assert_eq!(outcome, BootstrapOutcome::WroteDefaults);
         assert!(dest.is_file());
@@ -127,48 +72,9 @@ mod tests {
         fs::write(&dest, "preexisting: true").unwrap();
         let original = fs::read_to_string(&dest).unwrap();
 
-        let outcome =
-            bootstrap_config_at(&dest, None, BiopassConfig::default).expect("bootstrap ok");
+        let outcome = bootstrap_config_at(&dest, BiopassConfig::default).expect("bootstrap ok");
 
         assert_eq!(outcome, BootstrapOutcome::AlreadyPresent);
         assert_eq!(fs::read_to_string(&dest).unwrap(), original);
-    }
-
-    #[test]
-    fn bootstrap_imports_and_migrates_upstream_config() {
-        let dir = tempfile::tempdir().unwrap();
-        let home = dir.path();
-        let upstream = home.join(UPSTREAM_CONFIG_PATH);
-        fs::create_dir_all(upstream.parent().unwrap()).unwrap();
-        // Legacy 'ai' key — will be migrated to 'rgb' by migrate_config_at_path.
-        fs::write(
-            &upstream,
-            r#"
-methods:
-  face:
-    anti_spoofing:
-      ai:
-        enable: false
-        model:
-          path: legacy.onnx
-          threshold: 0.5
-"#,
-        )
-        .unwrap();
-
-        let dest = home.join(".config/biopass-rs/config.yaml");
-        let outcome =
-            bootstrap_config_at(&dest, Some(home), BiopassConfig::default).expect("bootstrap ok");
-
-        assert_eq!(outcome, BootstrapOutcome::ImportedFromUpstream);
-        let migrated = fs::read_to_string(&dest).unwrap();
-        assert!(
-            migrated.contains("rgb:"),
-            "expected migrated content to contain rgb key, got: {migrated}"
-        );
-        assert!(
-            !migrated.contains(" ai:"),
-            "expected migrated content to drop ai key, got: {migrated}"
-        );
     }
 }
