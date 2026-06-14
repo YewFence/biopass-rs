@@ -44,12 +44,13 @@
 
 ## 安装
 
-- 请从 [biopass-rs 发布页](https://github.com/YewFence/biopass-rs/releases)下载预构建包。Debian 和 RPM 包会在可用时发布在那里。
+- 请从 [biopass-rs 发布页](https://github.com/YewFence/biopass-rs/releases)下载预构建包。Debian 和 RPM 包会在可用时发布在那里。然后运行 `biopass-helper install` 以初始化。
 - 系统登录设置在可用时使用发行版管理的 PAM 配置（例如 Debian/Ubuntu 上的 `pam-auth-update`）：[docs/PAM.zh-CN.md](docs/PAM.zh-CN.md)
 - 从上游 biopass 迁移需要同时进行每用户配置/数据迁移和 PAM 审查，以确保上游和 biopass-rs 的 PAM 模块不会同时为同一服务启用：[docs/upstream-migration.zh-CN.md](docs/upstream-migration.zh-CN.md)
 - 交互式 `polkit` 认证设置：[docs/Polkit.zh-CN.md](docs/Polkit.zh-CN.md)
 - [IR 相机设置指南](docs/IR%20camera.zh-CN.md)
 - [`biopass-rs-helper` CLI 参考](docs/biopass-rs-helper.zh-CN.md) — 认证、面部捕获、模型安装和 shell 补全。
+- [卸载与重装](docs/uninstall.zh-CN.md) — 数据存放在哪、如何彻底卸载、重装时如何保留已注册的人脸。
 
 ## 特性
 

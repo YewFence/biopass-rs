@@ -44,12 +44,13 @@
 
 ## Installation
 
-- Download prebuilt packages from the [biopass-rs releases](https://github.com/YewFence/biopass-rs/releases). Debian and RPM packages are published there when available.
+- Download prebuilt packages from the [biopass-rs releases](https://github.com/YewFence/biopass-rs/releases). Debian and RPM packages are published there when available.Then run `biopass-helper install` to initialize.
 - System sign-in setup uses distro-managed PAM configuration when available (for example `pam-auth-update` on Debian/Ubuntu): [docs/PAM.md](docs/PAM.md)
 - Migrating from upstream biopass requires both per-user config/data migration and a PAM review so the upstream and biopass-rs PAM modules are not enabled for the same service: [docs/upstream-migration.md](docs/upstream-migration.md)
 - Interactive `polkit` authentication setup: [docs/Polkit.md](docs/Polkit.md)
 - [IR camera setup guide](docs/IR%20camera.md)
 - [`biopass-rs-helper` CLI reference](docs/biopass-rs-helper.md) — authentication, face capture, model install, and shell completion.
+- [Uninstall and reinstall](docs/uninstall.md) — where data lives, how to fully remove biopass-rs, and how to keep enrolled faces when reinstalling.
 
 ## Features
 
