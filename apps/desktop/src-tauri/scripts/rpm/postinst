@@ -1,15 +1,29 @@
 #!/bin/bash
 # postinst-rpm - RPM package post-install script.
 # In RPM, $1 is the number of installed versions after the transaction.
+#
+# System-level setup only. User data (config and face models) is intentionally
+# NOT initialized here: %post runs as root with no way to know which user will
+# actually use biopass. The user runs `biopass-rs-helper install` themselves
+# after logging in.
 
 set -e
 
-HELPER="/usr/bin/biopass-rs-helper"
-if [ -x "$HELPER" ]; then
-    echo "Biopass-rs: Running post-install tasks..."
-    "$HELPER" install || true
-else
-    echo "Biopass-rs: Warning - biopass-rs-helper not found, skipping post-install tasks" >&2
-fi
+# Refresh the linker cache so the PAM module's library path is picked up.
+ldconfig
+
+cat >&2 <<'EOF'
+
+================================================================
+ biopass-rs is now installed. One step left to finish setup.
+
+ Log in as the user who will use biopass, then run:
+
+     biopass-rs-helper install
+
+ This initializes that user's config and downloads the face models.
+================================================================
+
+EOF
 
 exit 0

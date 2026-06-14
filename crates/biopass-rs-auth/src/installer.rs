@@ -43,14 +43,33 @@ fn models_dir() -> Result<PathBuf, String> {
     Ok(dir.join("models"))
 }
 
+/// HTTP agent that fails fast while establishing the connection or waiting for
+/// the server to start responding, but never aborts an in-progress (possibly
+/// slow) body download.
+///
+/// Only the pre-body phases carry a timeout: DNS lookup, TCP+TLS handshake, and
+/// waiting for the response headers (i.e. the first byte). The body read is left
+/// unbounded on purpose — the ONNX models may legitimately take a long time on a
+/// constrained link, and it is better to let a slow download finish than to cut
+/// it off and retry into the same link.
+fn http_agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .timeout_resolve(Some(Duration::from_secs(10)))
+        .timeout_connect(Some(Duration::from_secs(15)))
+        .timeout_recv_response(Some(Duration::from_secs(30)))
+        .build()
+        .into()
+}
+
 fn download_file(
+    agent: &ureq::Agent,
     url: &str,
     dest: &Path,
     retries: u32,
     progress: Option<&ProgressBar>,
 ) -> Result<(), String> {
     for attempt in 1..=retries {
-        match try_download(url, dest, progress) {
+        match try_download(agent, url, dest, progress) {
             Ok(()) => return Ok(()),
             Err(e) if attempt < retries => {
                 let msg = format!(
@@ -70,8 +89,14 @@ fn download_file(
     Err("Max retries exceeded".to_string())
 }
 
-fn try_download(url: &str, dest: &Path, progress: Option<&ProgressBar>) -> Result<(), String> {
-    let response = ureq::get(url)
+fn try_download(
+    agent: &ureq::Agent,
+    url: &str,
+    dest: &Path,
+    progress: Option<&ProgressBar>,
+) -> Result<(), String> {
+    let response = agent
+        .get(url)
         .call()
         .map_err(|e| format!("HTTP request failed: {}", e))?;
 
@@ -120,6 +145,7 @@ pub fn download_models() -> Result<(), String> {
     fs::create_dir_all(&data_dir).map_err(|e| format!("Failed to create data dir: {}", e))?;
 
     let multi = MultiProgress::new();
+    let agent = http_agent();
 
     let style = ProgressStyle::default_bar()
         .template("{msg:30.bold} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
@@ -137,7 +163,7 @@ pub fn download_models() -> Result<(), String> {
         pb.set_style(style.clone());
         pb.set_message(filename.to_string());
 
-        download_file(url, &dest, 3, Some(&pb))?;
+        download_file(&agent, url, &dest, 3, Some(&pb))?;
         pb.finish_with_message(format!("[done] {}", filename));
     }
 
