@@ -24,6 +24,7 @@ run = 'cargo build --release --package biopass-rs-auth --package biopass-rs-pam 
 [tasks.build-app]
 description = "Build the Tauri app (release bundle)"
 alias = 'build'
+raw_args = true
 depends = ["install-app", "build-auth-release"]
 run = 'bun run tauri build "$@"'
 dir = "{{config_root}}/{{vars.app_dir}}"

@@ -217,14 +217,10 @@ jobs:
             bun-${{ runner.os }}-${{ matrix.arch }}-
             bun-${{ runner.os }}-
 
-      - name: Install frontend dependencies
-        working-directory: apps/desktop
-        run: bun install --frozen-lockfile
-
       - name: Build packages
         run: |
           rm -rf target/release/bundle/
-          mise run build --release
+          mise run build
           ls -R target/release/bundle/
 
       - name: Upload build artifacts
