@@ -252,5 +252,7 @@ jobs:
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3.0.0
         with:
           tag_name: ${{ needs.release.outputs.release_tag }}
-          files: dist/*
+          files: |
+            dist/**/*.deb
+            dist/**/*.rpm
           overwrite_files: true
