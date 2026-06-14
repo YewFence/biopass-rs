@@ -634,6 +634,9 @@ impl FaceAuth {
             // already starts out below the configured ratio of the frame
             // carries too little texture to discriminate real vs spoof.
             let frame_area = (frame.width as f32) * (frame.height as f32);
+            let mut max_face_area_ratio = 0.0_f32;
+            let mut max_face_area_width = 0_u32;
+            let mut max_face_area_height = 0_u32;
             let usable: Vec<_> = detections
                 .into_iter()
                 .filter(|detection| {
@@ -642,15 +645,25 @@ impl FaceAuth {
                     }
                     let bbox_area =
                         (detection.bbox.width() as f32) * (detection.bbox.height() as f32);
-                    bbox_area / frame_area >= min_face_area_ratio
+                    let area_ratio = bbox_area / frame_area;
+                    if area_ratio > max_face_area_ratio {
+                        max_face_area_ratio = area_ratio;
+                        max_face_area_width = detection.bbox.width();
+                        max_face_area_height = detection.bbox.height();
+                    }
+                    area_ratio >= min_face_area_ratio
                 })
                 .collect();
             if usable.is_empty() {
                 log(
                     LogLevel::Info,
                     &format!(
-                        "IR face too small for reliable liveness (highest conf={:.4}, ratio threshold={:.4}), treating as spoof",
-                        highest_confidence, min_face_area_ratio
+                        "IR face too small for reliable liveness (highest conf={:.4}, max bbox={}x{}, max area ratio={:.4}, ratio threshold={:.4}), treating as spoof",
+                        highest_confidence,
+                        max_face_area_width,
+                        max_face_area_height,
+                        max_face_area_ratio,
+                        min_face_area_ratio
                     ),
                 );
                 save_debug_frame_if_enabled(debug, username, &frame, "ir_face_too_small");
@@ -684,15 +697,24 @@ impl FaceAuth {
                     continue;
                 }
             };
+            let selected_bbox_area =
+                (best_detection.bbox.width() as f32) * (best_detection.bbox.height() as f32);
+            let selected_area_ratio = if frame_area <= 0.0 {
+                0.0
+            } else {
+                selected_bbox_area / frame_area
+            };
             log(
                 LogLevel::Debug,
                 &format!(
-                    "selected IR face crop conf={:.4} bbox={}x{}@({},{})",
+                    "selected IR face crop conf={:.4} bbox={}x{}@({},{}), area ratio={:.4}, ratio threshold={:.4}",
                     best_detection.confidence,
                     best_detection.bbox.width(),
                     best_detection.bbox.height(),
                     best_detection.bbox.x1,
                     best_detection.bbox.y1,
+                    selected_area_ratio,
+                    min_face_area_ratio,
                 ),
             );
 
