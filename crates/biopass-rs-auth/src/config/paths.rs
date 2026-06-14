@@ -154,81 +154,6 @@ pub fn read_config_from_path(config_path: &Path) -> Result<BiopassConfig, String
         .map_err(|error| config_parse_error_message(config_path, &error.to_string()))
 }
 
-/// Rewrite any relative model paths in the config file at `config_path` as
-/// absolute paths rooted at DATA_DIR, persisting the result to disk.
-///
-/// Model paths may be written as bare relative values like
-/// `models/yolov8n-face.onnx`. Such paths are ambiguous at runtime because
-/// they resolve against the process's current working directory, which differs
-/// between the helper CLI, the PAM module, and the desktop GUI. This function
-/// resolves them once, against the target user's DATA_DIR, and writes the
-/// absolute paths back so every reader sees the same location.
-///
-/// Absolute paths and empty strings are left untouched. Returns `true` if the
-/// on-disk file was rewritten.
-pub fn normalize_config_paths_at_path(config_path: &Path) -> Result<bool, String> {
-    let mut config = read_config_from_path(config_path)?;
-    let before = config.clone();
-    normalize_model_paths(&mut config, config_path);
-    if config == before {
-        return Ok(false);
-    }
-    write_config_to_path(config_path, &config)?;
-    Ok(true)
-}
-
-/// Resolve relative model paths in `config` against DATA_DIR.
-///
-/// - Absolute paths (start with `/`) and empty strings are left unchanged.
-/// - Relative paths are joined onto the DATA_DIR resolved for the user that
-///   owns `config_path` (inferred from the path, falling back to the current
-///   process user).
-fn normalize_model_paths(config: &mut BiopassConfig, config_path: &Path) {
-    let username = infer_username_from_config_path(config_path);
-    let data_dir = user_data_dir(&username);
-
-    let normalize = |path: &str| -> String {
-        if path.is_empty() || Path::new(path).is_absolute() {
-            path.to_string()
-        } else {
-            data_dir.join(path).to_string_lossy().to_string()
-        }
-    };
-
-    config.methods.face.detection.model = normalize(&config.methods.face.detection.model);
-    config.methods.face.recognition.model = normalize(&config.methods.face.recognition.model);
-    config.methods.face.anti_spoofing.rgb.model.path =
-        normalize(&config.methods.face.anti_spoofing.rgb.model.path);
-    config.methods.face.anti_spoofing.ir.model.path =
-        normalize(&config.methods.face.anti_spoofing.ir.model.path);
-
-    for model in &mut config.models {
-        model.path = normalize(&model.path);
-    }
-}
-
-/// Best-effort extraction of the username from a config path.
-///
-/// Standard layout is `/home/<user>/.config/biopass-rs/config.yaml`; we walk
-/// the path looking for the `.config` (or `.local`) segment and take the
-/// preceding component as the username. Falls back to the current process
-/// user when the path does not match the standard layout.
-fn infer_username_from_config_path(config_path: &Path) -> String {
-    for ancestor in config_path.ancestors() {
-        if let Some(name) = ancestor.file_name().and_then(|n| n.to_str()) {
-            if name == ".config" || name == ".local" {
-                if let Some(parent) = ancestor.parent() {
-                    if let Some(username) = parent.file_name().and_then(|n| n.to_str()) {
-                        return username.to_string();
-                    }
-                }
-            }
-        }
-    }
-
-    current_username().unwrap_or_else(|| "current".to_string())
-}
-
 pub fn list_faces(username: &str) -> Vec<PathBuf> {
     let faces_dir = user_data_dir(username).join("faces");
     let Ok(entries) = fs::read_dir(faces_dir) else {
@@ -265,12 +190,8 @@ pub fn write_config_to_path(path: &Path, config: &BiopassConfig) -> Result<(), S
 
 /// Force-rewrite the config at `path` with built-in defaults. Always
 /// overwrites; used by `config reset` and the GUI "Reset to defaults" flow.
-pub fn reset_config_at_path(path: &Path) -> Result<(), String> {
-    write_config_to_path(path, &BiopassConfig::default())?;
-    // Resolve relative model paths against DATA_DIR so the reset config is
-    // immediately usable by every reader (CLI / PAM / GUI).
-    let _ = normalize_config_paths_at_path(path)?;
-    Ok(())
+pub fn reset_config_at_path(path: &Path, data_dir: &Path) -> Result<(), String> {
+    write_config_to_path(path, &BiopassConfig::default_for_data_dir(data_dir))
 }
 
 pub(super) fn is_supported_face_image(path: &Path) -> bool {

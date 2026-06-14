@@ -14,7 +14,7 @@
 //! Instead the helper's `install` command copies the upstream **face images**
 //! (which are schema-independent) — see `commands/install.rs`.
 
-use super::paths::{normalize_config_paths_at_path, write_config_to_path};
+use super::paths::write_config_to_path;
 use super::schema::BiopassConfig;
 use std::path::Path;
 
@@ -31,9 +31,7 @@ pub enum BootstrapOutcome {
 ///
 /// * If the file already exists, return [`BootstrapOutcome::AlreadyPresent`]
 ///   without touching it.
-/// * Otherwise, write `default_factory()` to `destination` and resolve its
-///   relative model paths against DATA_DIR so the freshly-written config is
-///   self-contained regardless of which reader (CLI / PAM / GUI) loads it.
+/// * Otherwise, write `default_factory()` to `destination`.
 pub fn bootstrap_config_at(
     destination: &Path,
     default_factory: impl FnOnce() -> BiopassConfig,
@@ -43,7 +41,6 @@ pub fn bootstrap_config_at(
     }
 
     write_config_to_path(destination, &default_factory())?;
-    let _ = normalize_config_paths_at_path(destination)?;
     Ok(BootstrapOutcome::WroteDefaults)
 }
 
@@ -58,7 +55,8 @@ mod tests {
         let dest = dir.path().join(".config/biopass-rs/config.yaml");
 
         let outcome =
-            bootstrap_config_at(&dest, BiopassConfig::default).expect("bootstrap should succeed");
+            bootstrap_config_at(&dest, || BiopassConfig::default_for_data_dir(dir.path()))
+                .expect("bootstrap should succeed");
 
         assert_eq!(outcome, BootstrapOutcome::WroteDefaults);
         assert!(dest.is_file());
@@ -72,7 +70,9 @@ mod tests {
         fs::write(&dest, "preexisting: true").unwrap();
         let original = fs::read_to_string(&dest).unwrap();
 
-        let outcome = bootstrap_config_at(&dest, BiopassConfig::default).expect("bootstrap ok");
+        let outcome =
+            bootstrap_config_at(&dest, || BiopassConfig::default_for_data_dir(dir.path()))
+                .expect("bootstrap ok");
 
         assert_eq!(outcome, BootstrapOutcome::AlreadyPresent);
         assert_eq!(fs::read_to_string(&dest).unwrap(), original);

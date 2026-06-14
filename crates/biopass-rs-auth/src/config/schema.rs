@@ -1,9 +1,11 @@
 use super::serde_defaults::*;
+use serde::de::Error as _;
 use serde::{Deserialize, Deserializer, Serialize};
 use serde_yaml::Value;
 use std::collections::HashSet;
+use std::path::{Path, PathBuf};
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct BiopassConfig {
     #[serde(default)]
     pub strategy: StrategyConfig,
@@ -15,6 +17,35 @@ pub struct BiopassConfig {
     pub appearance: String,
 }
 
+impl<'de> Deserialize<'de> for BiopassConfig {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        struct Raw {
+            #[serde(default)]
+            strategy: StrategyConfig,
+            #[serde(default)]
+            methods: MethodsConfig,
+            #[serde(default)]
+            models: Vec<ModelConfig>,
+            #[serde(default = "default_appearance")]
+            appearance: String,
+        }
+
+        let raw = Raw::deserialize(deserializer)?;
+        let config = Self {
+            strategy: raw.strategy,
+            methods: raw.methods,
+            models: raw.models,
+            appearance: raw.appearance,
+        };
+        validate_config_model_paths::<D>(&config)?;
+        Ok(config)
+    }
+}
+
 impl Default for BiopassConfig {
     fn default() -> Self {
         Self {
@@ -23,6 +54,43 @@ impl Default for BiopassConfig {
             models: Vec::new(),
             appearance: default_appearance(),
         }
+    }
+}
+
+impl BiopassConfig {
+    pub fn default_for_data_dir(data_dir: &Path) -> Self {
+        let model_path = |filename: &str| -> String {
+            data_dir
+                .join("models")
+                .join(filename)
+                .to_string_lossy()
+                .to_string()
+        };
+
+        let detection_model = model_path(DETECTION_MODEL_FILENAME);
+        let recognition_model = model_path(RECOGNITION_MODEL_FILENAME);
+        let antispoofing_model = model_path(ANTISPOOFING_MODEL_FILENAME);
+
+        let mut config = Self::default();
+        config.methods.face.detection.model = detection_model.clone();
+        config.methods.face.recognition.model = recognition_model.clone();
+        config.methods.face.anti_spoofing.rgb.model.path = antispoofing_model.clone();
+        config.methods.face.anti_spoofing.ir.model.path = antispoofing_model.clone();
+        config.models = vec![
+            ModelConfig {
+                path: detection_model,
+                model_type: "detection".to_string(),
+            },
+            ModelConfig {
+                path: recognition_model,
+                model_type: "recognition".to_string(),
+            },
+            ModelConfig {
+                path: antispoofing_model,
+                model_type: "anti-spoofing".to_string(),
+            },
+        ];
+        config
     }
 }
 
@@ -51,7 +119,6 @@ impl Default for StrategyConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DetectionConfig {
-    #[serde(default = "default_detection_model")]
     pub model: String,
     #[serde(default = "default_threshold")]
     pub threshold: f32,
@@ -60,7 +127,7 @@ pub struct DetectionConfig {
 impl Default for DetectionConfig {
     fn default() -> Self {
         Self {
-            model: default_detection_model(),
+            model: String::new(),
             threshold: default_threshold(),
         }
     }
@@ -68,7 +135,6 @@ impl Default for DetectionConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RecognitionConfig {
-    #[serde(default = "default_recognition_model")]
     pub model: String,
     #[serde(default = "default_threshold")]
     pub threshold: f32,
@@ -77,7 +143,7 @@ pub struct RecognitionConfig {
 impl Default for RecognitionConfig {
     fn default() -> Self {
         Self {
-            model: default_recognition_model(),
+            model: String::new(),
             threshold: default_threshold(),
         }
     }
@@ -85,7 +151,6 @@ impl Default for RecognitionConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct AntiSpoofingModelConfig {
-    #[serde(default = "default_antispoofing_model")]
     pub path: String,
     #[serde(default = "default_threshold")]
     pub threshold: f32,
@@ -94,7 +159,7 @@ pub struct AntiSpoofingModelConfig {
 impl Default for AntiSpoofingModelConfig {
     fn default() -> Self {
         Self {
-            path: default_antispoofing_model(),
+            path: String::new(),
             threshold: default_threshold(),
         }
     }
@@ -142,12 +207,19 @@ impl<'de> Deserialize<'de> for RgbAntiSpoofingConfig {
 
         let raw = Raw::deserialize(deserializer)?;
         let mut model = AntiSpoofingModelConfig::default();
-        if let Some(model_value) = raw.model {
-            read_antispoofing_model(&model_value, &mut model);
-        }
+        let model_value = raw.model.ok_or_else(|| {
+            D::Error::custom(
+                "missing required model path `methods.face.anti_spoofing.rgb.model.path`",
+            )
+        })?;
+        read_antispoofing_model(&model_value, &mut model);
         if let Some(threshold) = raw.threshold {
             model.threshold = threshold;
         }
+        validate_absolute_model_path::<D>(
+            &model.path,
+            "methods.face.anti_spoofing.rgb.model.path",
+        )?;
 
         Ok(Self {
             enable: raw.enable,
@@ -221,9 +293,13 @@ impl<'de> Deserialize<'de> for IrAntiSpoofingConfig {
 
         let raw = Raw::deserialize(deserializer)?;
         let mut model = AntiSpoofingModelConfig::default();
-        if let Some(model_value) = raw.model {
-            read_antispoofing_model(&model_value, &mut model);
-        }
+        let model_value = raw.model.ok_or_else(|| {
+            D::Error::custom(
+                "missing required model path `methods.face.anti_spoofing.ir.model.path`",
+            )
+        })?;
+        read_antispoofing_model(&model_value, &mut model);
+        validate_absolute_model_path::<D>(&model.path, "methods.face.anti_spoofing.ir.model.path")?;
 
         Ok(Self {
             enable: raw.enable,
@@ -353,9 +429,7 @@ impl<'de> Deserialize<'de> for FaceMethodConfig {
             retry_delay: u32,
             #[serde(default)]
             camera: Option<String>,
-            #[serde(default)]
             detection: DetectionConfig,
-            #[serde(default)]
             recognition: RecognitionConfig,
             #[serde(default)]
             anti_spoofing: AntiSpoofingConfig,
@@ -440,6 +514,49 @@ pub struct MethodConfig {
     pub enabled: bool,
     pub retries: u32,
     pub retry_delay_ms: u32,
+}
+
+fn validate_absolute_model_path<'de, D>(path: &str, field: &str) -> Result<(), D::Error>
+where
+    D: Deserializer<'de>,
+{
+    if path.is_empty() {
+        Err(D::Error::custom(format!(
+            "missing required model path `{field}`. Run `biopass-rs-helper config reset` to restore absolute defaults, or edit the config manually."
+        )))
+    } else if PathBuf::from(path).is_absolute() {
+        Ok(())
+    } else {
+        Err(D::Error::custom(format!(
+            "model path `{field}` must be absolute, got `{path}`. Run `biopass-rs-helper config reset` to restore absolute defaults, or edit the config manually."
+        )))
+    }
+}
+
+fn validate_config_model_paths<'de, D>(config: &BiopassConfig) -> Result<(), D::Error>
+where
+    D: Deserializer<'de>,
+{
+    validate_absolute_model_path::<D>(
+        &config.methods.face.detection.model,
+        "methods.face.detection.model",
+    )?;
+    validate_absolute_model_path::<D>(
+        &config.methods.face.recognition.model,
+        "methods.face.recognition.model",
+    )?;
+    validate_absolute_model_path::<D>(
+        &config.methods.face.anti_spoofing.rgb.model.path,
+        "methods.face.anti_spoofing.rgb.model.path",
+    )?;
+    validate_absolute_model_path::<D>(
+        &config.methods.face.anti_spoofing.ir.model.path,
+        "methods.face.anti_spoofing.ir.model.path",
+    )?;
+    for model in &config.models {
+        validate_absolute_model_path::<D>(&model.path, "models[].path")?;
+    }
+    Ok(())
 }
 
 impl BiopassConfig {

@@ -52,14 +52,6 @@ pub(super) fn default_appearance() -> String {
     "system".to_string()
 }
 
-pub(super) fn default_detection_model() -> String {
-    "models/yolov8n-face.onnx".to_string()
-}
-
-pub(super) fn default_recognition_model() -> String {
-    "models/edgeface_s_gamma_05.onnx".to_string()
-}
-
-pub(super) fn default_antispoofing_model() -> String {
-    "models/mobilenetv3_antispoof.onnx".to_string()
-}
+pub(super) const DETECTION_MODEL_FILENAME: &str = "yolov8n-face.onnx";
+pub(super) const RECOGNITION_MODEL_FILENAME: &str = "edgeface_s_gamma_05.onnx";
+pub(super) const ANTISPOOFING_MODEL_FILENAME: &str = "mobilenetv3_antispoof.onnx";

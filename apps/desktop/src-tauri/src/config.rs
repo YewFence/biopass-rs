@@ -7,42 +7,13 @@ pub use biopass_rs_auth::{
 };
 use serde::Serialize;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use tauri::AppHandle;
 
 use crate::paths::{get_config_dir, get_config_path, get_data_dir};
 
-fn get_default_config(app: &AppHandle) -> BiopassConfig {
-    let models_dir = get_data_dir(app)
-        .map(|d| d.join("models"))
-        .unwrap_or_else(|_| PathBuf::from("models"));
-
-    let model_path = |name: &str| -> String { models_dir.join(name).to_string_lossy().to_string() };
-
-    let mut config = BiopassConfig::default();
-
-    // 只覆盖需要动态路径的部分
-    config.methods.face.detection.model = model_path("yolov8n-face.onnx");
-    config.methods.face.recognition.model = model_path("edgeface_s_gamma_05.onnx");
-    config.methods.face.anti_spoofing.rgb.model.path = model_path("mobilenetv3_antispoof.onnx");
-    config.methods.face.anti_spoofing.ir.model.path = model_path("mobilenetv3_antispoof.onnx");
-
-    config.models = vec![
-        ModelConfig {
-            path: model_path("yolov8n-face.onnx"),
-            model_type: "detection".to_string(),
-        },
-        ModelConfig {
-            path: model_path("edgeface_s_gamma_05.onnx"),
-            model_type: "recognition".to_string(),
-        },
-        ModelConfig {
-            path: model_path("mobilenetv3_antispoof.onnx"),
-            model_type: "anti-spoofing".to_string(),
-        },
-    ];
-
-    config
+fn get_default_config(app: &AppHandle) -> Result<BiopassConfig, String> {
+    get_data_dir(app).map(|data_dir| BiopassConfig::default_for_data_dir(&data_dir))
 }
 
 /// Returned by `load_config`. The variants distinguish the three GUI-relevant
@@ -112,7 +83,7 @@ fn initialize_missing_config(
     app: &AppHandle,
     config_path: &Path,
 ) -> Result<LoadConfigResult, String> {
-    let defaults = get_default_config(app);
+    let defaults = get_default_config(app)?;
     let defaults_for_read = defaults.clone();
 
     let outcome = bootstrap_config_at(config_path, move || defaults)
@@ -154,7 +125,7 @@ pub fn save_config(app: AppHandle, config: BiopassConfig) -> Result<(), String> 
 #[tauri::command]
 pub fn reset_config(app: AppHandle) -> Result<LoadConfigResult, String> {
     let config_path = get_config_path(&app)?;
-    let defaults = get_default_config(&app);
+    let defaults = get_default_config(&app)?;
     // Write the GUI-flavoured defaults (with absolute model paths) rather
     // than the bare library defaults so the user does not lose their model
     // wiring.
