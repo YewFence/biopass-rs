@@ -19,35 +19,46 @@ mise run helper -- auth --service sudo
 ## 概要
 
 ```text
-Biopass 认证 helper
+BioPass 认证 helper
 
-用法：biopass-rs-helper [选项] 子命令
+用法：biopass-rs-helper [选项] <命令>
 
 选项：
-  -h, --help    打印此帮助消息并退出
+  -u, --username <USERNAME>  目标用户名。默认为当前用户
+                             （SUDO_USER → USER → USERNAME → LOGNAME）。对于不针对特定用户
+                             的命令（install、crop-face、completion）会被忽略。
+  -c, --config <PATH>        覆盖配置文件路径。为 helper 的其余部分设置 BIOPASS_CONFIG。
+                             便于在不触碰真实配置的情况下进行开发和测试。
+  -d, --data-dir <DIR>       覆盖数据目录（faces / debugs）。为 helper 的其余部分设置
+                             BIOPASS_DATA_DIR。
+  -h, --help                 打印此帮助消息并退出
 
 子命令：
   auth             认证用户
-  migrate          迁移用户配置
+  config           管理用户配置文件
   install          安装模型并运行设置
+  model-download   仅下载模型
   crop-face        从图像中裁剪面部
   capture-face     从相机捕获面部
   preview-session  启动交互式预览会话
   completion       生成 shell 补全脚本
+  clean            移除失败的人脸认证尝试产生的调试帧缓存
 ```
+
+`--username`、`--config` 和 `--data-dir` 是**全局**标志：它们可以出现在子命令**之前或之后**。例如，PAM 模块以 `biopass-rs-helper --username <user> auth --service <service>` 的方式调用。
 
 ## `auth`
 
 针对 biopass-rs 认证用户。这是 PAM 模块在系统登录期间调用的子命令。
 
 ```bash
-biopass-rs-helper auth --service <SERVICE> [--username <USERNAME>]
+biopass-rs-helper [--username <USERNAME>] auth --service <SERVICE>
 ```
 
 | 标志 | 必需 | 描述 |
 | :----------- | :------- | :------------------------------------------------------------------------------------------- |
 | `--service`  | 是 | PAM 服务名称（例如 `sudo`、`login`、`gdm-password`）。用于查询用户的 `ignored_services` 列表。 |
-| `--username` | 否 | 目标用户。如果省略，helper 会尝试从 `SUDO_USER`、`USER`、`USERNAME`、然后 `LOGNAME` 推断。 |
+| `--username` | 否 | 目标用户（全局标志）。如果省略，helper 会尝试从 `SUDO_USER`、`USER`、`USERNAME`、然后 `LOGNAME` 推断。 |
 
 ### 退出代码
 
@@ -64,38 +75,69 @@ biopass-rs-helper auth --service <SERVICE> [--username <USERNAME>]
 biopass-rs-helper auth --service sudo
 
 # 显式认证特定用户
-biopass-rs-helper auth --service login --username alice
+biopass-rs-helper --username alice auth --service login
 ```
 
-## `migrate`
+## `config`
 
-为一个用户运行配置模式迁移。配置格式随时间演变；旧布局会就地升级。
+管理用户的 `~/.config/biopass-rs/config.yaml`。配置格式随时间演变；此子命令树将引导、重置和迁移操作作为独立的动作暴露出来。
 
 ```bash
-biopass-rs-helper migrate --username <USERNAME>
+biopass-rs-helper [--username <USERNAME>] config <动作>
 ```
 
-| 标志 | 必需 | 描述 |
-| :----------- | :------- | :------------------------- |
-| `--username` | 是 | 要迁移配置的用户。 |
+| 动作 | 描述 |
+| :-------- | :---------- |
+| `init`    | 确保配置文件存在。如果不存在，则写入内置默认值。（biopass-rs 不会自动导入上游 `biopass` 配置——其 schema 每个版本都在变；见[从上游 biopass 迁移](upstream-migration.zh-CN.md)。） |
+| `reset`   | 将配置文件恢复为内置默认值。 |
+| `migrate` | 将现有配置带到当前模式（例如 `anti_spoofing.ai` → `anti_spoofing.rgb`）。 |
 
-此命令仅触及当前 biopass-rs 配置路径 `~/.config/biopass-rs/config.yaml`。它不会从 `~/.config/com.ticklab.biopass/config.yaml` 复制上游配置、移动上游数据目录、编辑 PAM 或禁用上游 biopass PAM 模块。
+### `config init`
 
-如果用户不存在或迁移失败，则以非零状态退出。当新配置不存在时，`install` 子命令在将上游配置复制到新路径后对**所有**用户运行迁移。有关完整迁移流程，请参阅[从上游 biopass 迁移](upstream-migration.zh-CN.md)。
+```bash
+biopass-rs-helper [--username <USERNAME>] config init [--force]
+```
+
+| 标志 | 描述 |
+| :-------- | :---------- |
+| `--force` | 覆盖已有的配置文件，而不是保持不动。 |
+
+### `config migrate`
+
+就地迁移配置模式。这是跨模式变更升级 biopass-rs 后运行的命令。
+
+```bash
+biopass-rs-helper --username <USERNAME> config migrate
+```
+
+此动作仅将当前 biopass-rs 配置路径 `~/.config/biopass-rs/config.yaml` 重写为 biopass-rs 的当前 schema。它不会导入上游配置、移动任何数据目录、编辑 PAM 或禁用上游 biopass PAM 模块。
+
+如果用户不存在或迁移失败，则以非零状态退出。`install` 子命令的其中一个步骤就是为**当前**用户运行 `config init`。有关完整迁移流程，请参阅[从上游 biopass 迁移](upstream-migration.zh-CN.md)。
 
 ## `install`
 
-发行版包的安装后脚本使用的一次性设置。它按顺序运行三个步骤：
+发行版包的安装后脚本使用的一次性设置。它按顺序运行四个步骤：
 
 1. `ldconfig` 以刷新动态链接器缓存（以便可以定位 PAM 模块）。
-2. `migrate-all` 在需要时将上游配置复制到 biopass-rs 路径，在可能时移动上游用户数据目录，并将复制的配置带到当前模式。
-3. `download-models` 将 AI 模型（EdgeFace 识别、YOLO-Face 检测）获取到用户的 biopass-rs 数据目录。
+2. **`config init`** — 如果当前用户没有配置，则写入默认配置（**不会**导入上游配置）。
+3. **复制已注册人脸** — 将上游 `~/.local/share/com.ticklab.biopass/faces` 中已注册的人脸图片复制到 biopass-rs 数据目录（非破坏性）。
+4. `download-models` 将 AI 模型（EdgeFace 识别、YOLO-Face 检测）获取到当前用户的 biopass-rs 数据目录。
 
 ```bash
 biopass-rs-helper install
 ```
 
-前两个步骤的警告是非致命的——只有模型下载步骤决定最终退出代码。
+`ldconfig` 的警告是非致命的，复制人脸也不会导致运行失败；`config init` 和模型下载都会决定退出代码。`install` 仅对**当前**用户（通过 `SUDO_USER`/`USER`/… 解析）操作；它不再遍历每个系统用户。
+
+## `model-download`
+
+将 AI 模型（EdgeFace 识别、YOLO-Face 检测）下载到当前用户的 biopass-rs 数据目录，而不运行配置引导或 `ldconfig`。当 `install` 已运行但模型缺失或需要重新获取时（例如重置数据目录后）使用此命令。
+
+```bash
+biopass-rs-helper model-download
+```
+
+当人脸认证因模型文件缺失而失败时，认证路径会记录一条指向此处的错误。
 
 ## `crop-face`
 
@@ -137,7 +179,7 @@ biopass-rs-helper capture-face \
 | `--model`   | 是 |         | YOLO-Face 检测模型的路径。 |
 | `--quality` | 否 | `90`    | JPEG 质量，1–100。 |
 
-遵守当前用户面部配置中的 `auto_optimize_camera` 设置（参见 `biopass-rs-helper.rs` 中的 `helper_auto_optimize_camera`）。如果未检测到面部，则以代码 `2` 退出。
+遵守目标用户面部配置中的 `auto_optimize_camera` 设置（参见 `src/bin/biopass_rs_helper/utils.rs` 中的 `helper_auto_optimize_camera`）。如果未检测到面部，则以代码 `2` 退出。
 
 ## `preview-session`
 
@@ -191,6 +233,16 @@ biopass-rs-helper completion powershell | Out-String | Invoke-Expression
 | `powershell` | PowerShell 补全脚本。 |
 | `elvish` | Elvish 补全脚本。 |
 
+## `clean`
+
+移除失败的人脸认证尝试产生的调试帧缓存。启用调试模式时，biopass-rs 会将原始帧和诊断裁切保存到用户的 `debugs` 目录下；此子命令清空它们，并报告删除的文件数量和释放的空间。
+
+```bash
+biopass-rs-helper [--username <USERNAME>] clean
+```
+
+对目标用户的数据目录（遵循 `--data-dir` / `BIOPASS_DATA_DIR`）操作。
+
 ## 环境变量
 
 几个环境变量影响 `biopass-rs-helper` 行为：
@@ -201,7 +253,10 @@ biopass-rs-helper completion powershell | Out-String | Invoke-Expression
 | `USER`         | `auth`、`capture-face`             | `SUDO_USER` 之后的回退。 |
 | `USERNAME`     | `auth`、`capture-face`             | `USER` 之后的回退。 |
 | `LOGNAME`      | `auth`                             | 用户查找的最后回退。 |
-| `BIOPASS_DEBUG`| `auth` 和朋友（支持时）| 启用详细日志输出以调试失败。请参阅[开发者文档](contributing.zh-CN.md)。 |
+| `BIOPASS_CONFIG`   | 所有感知用户的子命令 | 覆盖配置文件路径（同 `--config`）。 |
+| `BIOPASS_DATA_DIR` | 所有感知用户的子命令 | 覆盖存放 faces / debugs / models 的数据目录（同 `--data-dir`）。 |
+
+详细的调试日志由配置文件中的 `strategy.debug` 字段控制，而不是环境变量。请参阅[开发者文档](contributing.zh-CN.md)。
 
 ## 另请参阅
 

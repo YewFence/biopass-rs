@@ -19,7 +19,7 @@
 </p>
 
 <h2 align="center">biopass-rs</h2>
-<p align="center"><b>An unofficial Rust rewrite of upstream <a href="https://github.com/TickLabVN/biopass">biopass</a> for Linux</b></p>
+<p align="center"><b>An unofficial Rust rewrite of upstream <a href="https://github.com/TickLabVN/biopass">biopass</a></b></p>
 <p align="center">A fast, secure, and privacy-focused biometric recognition module for Linux desktops supporting face and fingerprint.</p>
 
 > **Note**: biopass-rs is a personal, unofficial Rust rewrite of upstream [biopass](https://github.com/TickLabVN/biopass), developed by [@phucvinh57](https://github.com/phucvinh57) and [@thaitran24](https://github.com/thaitran24) at TickLab. The original C++ implementation has been fully replaced with Rust in this repository, and biopass-rs is maintained on a best-effort basis. For the official project, please visit the [upstream biopass repository](https://github.com/TickLabVN/biopass).
@@ -28,7 +28,7 @@
 
 ## Why biopass-rs?
 
-[biopass](https://github.com/TickLabVN/biopass) was developed by TickLab to fill this gap, providing a fast, secure, and modern biometric suite that goes beyond just face ID. biopass-rs is my personal take on the project — translating the C++ implementation into idiomatic Rust for educational purposes and because I enjoy writing Rust in my spare time.
+[biopass](https://github.com/TickLabVN/biopass) was developed by TickLab to fill this gap, providing a fast, secure, and modern biometric suite that goes beyond just face ID. biopass-rs is my personal take on the project — translating the C++ implementation into safer and clearer Rust.
 
 ## Comparison with upstream biopass
 
@@ -40,7 +40,7 @@
 | **Camera Handling** | None | Added image auto-optimization option |
 | **IR Camera Capture Frame Quality Detection** | Under optimization, see [#116](https://github.com/TickLabVN/biopass/issues/116) | Automatically skips dark frames |
 | **Image Processing Path** | GUI uses browser API for image handling, PAM module during authentication uses OpenCV, [#114](https://github.com/TickLabVN/biopass/issues/114) | Both GUI and PAM module use Rust's jpeg crate for image processing, ensuring consistent image quality |
-| **`helper` CLI** | `auth` and `crop-face` commands | Added new subcommands: `migrate`, `install`, `capture-face`, `preview-session`, and `completion`; `auth` subcommand's `--username` automatically looks up from environment variables |
+| **`helper` CLI** | `auth` and `crop-face` commands | Added new subcommands: `config` (config management tree), `install`, `model-download`, `capture-face`, `preview-session`, `clean`, and `completion`; a global `--username` flag with automatic lookup from environment variables |
 
 ## Installation
 

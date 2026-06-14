@@ -19,35 +19,48 @@ mise run helper -- auth --service sudo
 ## Synopsis
 
 ```text
-Biopass authentication helper
+BioPass authentication helper
 
-Usage: biopass-rs-helper [OPTIONS] SUBCOMMAND
+Usage: biopass-rs-helper [OPTIONS] <COMMAND>
 
 Options:
-  -h, --help    Print this help message and exit
+  -u, --username <USERNAME>  Target username. Defaults to the current user
+                             (SUDO_USER → USER → USERNAME → LOGNAME). Ignored by
+                             commands that do not operate on a specific user
+                             (install, crop-face, completion).
+  -c, --config <PATH>        Override the config file path. Sets BIOPASS_CONFIG
+                             for the rest of the helper. Useful for development
+                             and testing without touching the real config.
+  -d, --data-dir <DIR>       Override the data directory (faces / debugs). Sets
+                             BIOPASS_DATA_DIR for the rest of the helper.
+  -h, --help                 Print this help message and exit
 
 Subcommands:
   auth             Authenticate user
-  migrate          Migrate user configuration
+  config           Manage the user's config file
   install          Install models and run setup
+  model-download   Download models only
   crop-face        Crop a face from an image
   capture-face     Capture face from camera
   preview-session  Start interactive preview session
   completion       Generate shell completion script
+  clean            Remove cached debug frames written by failed face-auth attempts
 ```
+
+`--username`, `--config`, and `--data-dir` are **global** flags: they may appear before *or* after the subcommand. The PAM module, for example, invokes `biopass-rs-helper --username <user> auth --service <service>`.
 
 ## `auth`
 
 Authenticate a user against biopass-rs. This is the subcommand invoked by the PAM module during system sign-in.
 
 ```bash
-biopass-rs-helper auth --service <SERVICE> [--username <USERNAME>]
+biopass-rs-helper [--username <USERNAME>] auth --service <SERVICE>
 ```
 
 | Flag         | Required | Description                                                                                  |
 | :----------- | :------- | :------------------------------------------------------------------------------------------- |
 | `--service`  | Yes      | PAM service name (for example `sudo`, `login`, `gdm-password`). Used to consult the user's `ignored_services` list. |
-| `--username` | No       | Target user. If omitted, the helper tries to infer it from `SUDO_USER`, `USER`, `USERNAME`, then `LOGNAME`. |
+| `--username` | No       | Target user (global flag). If omitted, the helper tries to infer it from `SUDO_USER`, `USER`, `USERNAME`, then `LOGNAME`. |
 
 ### Exit codes
 
@@ -64,38 +77,69 @@ biopass-rs-helper auth --service <SERVICE> [--username <USERNAME>]
 biopass-rs-helper auth --service sudo
 
 # Authenticate a specific user explicitly
-biopass-rs-helper auth --service login --username alice
+biopass-rs-helper --username alice auth --service login
 ```
 
-## `migrate`
+## `config`
 
-Run the configuration schema migration for one user. The configuration format has evolved over time; older layouts are upgraded in place.
+Manage the user's `~/.config/biopass-rs/config.yaml`. The configuration format has evolved over time; this subcommand tree exposes the bootstrap, reset, and migration operations as separate actions.
 
 ```bash
-biopass-rs-helper migrate --username <USERNAME>
+biopass-rs-helper [--username <USERNAME>] config <ACTION>
 ```
 
-| Flag         | Required | Description                |
-| :----------- | :------- | :------------------------- |
-| `--username` | Yes      | User whose config to migrate. |
+| Action    | Description |
+| :-------- | :---------- |
+| `init`    | Ensure a config file exists. If none is present, write the built-in defaults. (biopass-rs does not auto-import the upstream `biopass` config — its schema drifts every release; see [Migrating from upstream biopass](upstream-migration.md).) |
+| `reset`   | Restore the config file to its built-in defaults. |
+| `migrate` | Bring the existing config up to the current schema (for example, `anti_spoofing.ai` → `anti_spoofing.rgb`). |
 
-This command only touches the current biopass-rs config path, `~/.config/biopass-rs/config.yaml`. It does not copy the upstream config from `~/.config/com.ticklab.biopass/config.yaml`, move the upstream data directory, edit PAM, or disable the upstream biopass PAM module.
+### `config init`
 
-Exits with a non-zero status if the user does not exist or if the migration fails. The `install` subcommand runs migration across **all** users after copying upstream configs into the new path when the new config is absent. See [Migrating from upstream biopass](upstream-migration.md) for the full migration flow.
+```bash
+biopass-rs-helper [--username <USERNAME>] config init [--force]
+```
+
+| Flag      | Description |
+| :-------- | :---------- |
+| `--force` | Overwrite an existing config file instead of leaving it untouched. |
+
+### `config migrate`
+
+Migrate the configuration schema in place. This is what you run after upgrading biopass-rs across a schema change.
+
+```bash
+biopass-rs-helper --username <USERNAME> config migrate
+```
+
+This action only rewrites the current biopass-rs config path, `~/.config/biopass-rs/config.yaml`, to biopass-rs's current schema. It does not import the upstream config, move any data directory, edit PAM, or disable the upstream biopass PAM module.
+
+Exits with a non-zero status if the user does not exist or if the migration fails. The `install` subcommand runs `config init` for the **current** user as one of its steps. See [Migrating from upstream biopass](upstream-migration.md) for the full migration flow.
 
 ## `install`
 
-One-shot setup used by the post-install scripts of the distro package. It runs three steps in order:
+One-shot setup used by the post-install scripts of the distro package. It runs four steps in order:
 
 1. `ldconfig` to refresh the dynamic linker cache (so the PAM module can be located).
-2. `migrate-all` to copy upstream configs into the biopass-rs path when needed, move upstream user data directories when possible, and bring copied configs up to the current schema.
-3. `download-models` to fetch the AI models (EdgeFace recognition, YOLO-Face detection) into the user's biopass-rs data directory.
+2. **`config init`** — write a default config for the current user if none exists (it does **not** import the upstream config).
+3. **Copy enrolled faces** — copy any enrolled face images from the upstream `~/.local/share/com.ticklab.biopass/faces` into the biopass-rs data directory (non-destructive).
+4. `download-models` to fetch the AI models (EdgeFace recognition, YOLO-Face detection) into the current user's biopass-rs data directory.
 
 ```bash
 biopass-rs-helper install
 ```
 
-Warnings from the first two steps are non-fatal — only the model download step determines the final exit code.
+The `ldconfig` warning is non-fatal and face copying never fails the run; `config init` and the model download both determine the exit code. `install` operates on the **current** user only (resolved via `SUDO_USER`/`USER`/…); it no longer iterates over every system user.
+
+## `model-download`
+
+Download the AI models (EdgeFace recognition, YOLO-Face detection) into the current user's biopass-rs data directory, without running the config bootstrap or `ldconfig`. Use this when `install` already ran but the models are missing or need re-fetching (for example, after a data directory reset).
+
+```bash
+biopass-rs-helper model-download
+```
+
+When face authentication fails because a model file is missing, the auth path logs an error pointing here.
 
 ## `crop-face`
 
@@ -137,7 +181,7 @@ biopass-rs-helper capture-face \
 | `--model`   | Yes      |         | Path to the YOLO-Face detection model. |
 | `--quality` | No       | `90`    | JPEG quality, 1–100. |
 
-Honors the `auto_optimize_camera` setting in the current user's face config (see `helper_auto_optimize_camera` in `biopass-rs-helper.rs`). Exits with code `2` if no face is detected.
+Honors the `auto_optimize_camera` setting in the target user's face config (see `helper_auto_optimize_camera` in `src/bin/biopass_rs_helper/utils.rs`). Exits with code `2` if no face is detected.
 
 ## `preview-session`
 
@@ -191,17 +235,30 @@ biopass-rs-helper completion powershell | Out-String | Invoke-Expression
 | `powershell` | PowerShell completion script. |
 | `elvish` | Elvish completion script. |
 
+## `clean`
+
+Remove the cached debug frames written by failed face-auth attempts. When debug mode is enabled, biopass-rs saves raw frames and diagnostic crops under the user's `debugs` directory; this subcommand clears them out and reports how many files were removed and how much space was freed.
+
+```bash
+biopass-rs-helper [--username <USERNAME>] clean
+```
+
+Operates on the target user's data directory (respecting `--data-dir` / `BIOPASS_DATA_DIR`).
+
 ## Environment variables
 
 Several environment variables influence `biopass-rs-helper` behavior:
 
-| Variable       | Used by                            | Purpose |
-| :------------- | :--------------------------------- | :------ |
-| `SUDO_USER`    | `auth`, `capture-face`             | When `--username` is not given, this is the first variable consulted. Lets `sudo`-invoked auth resolve to the invoking user. |
-| `USER`         | `auth`, `capture-face`             | Fallback after `SUDO_USER`. |
-| `USERNAME`     | `auth`, `capture-face`             | Fallback after `USER`. |
-| `LOGNAME`      | `auth`                             | Last-resort fallback for the user lookup. |
-| `BIOPASS_DEBUG`| `auth` and friends (when supported)| Enables verbose logging output for debugging failures. See [the developer docs](contributing.md). |
+| Variable            | Used by                            | Purpose |
+| :------------------ | :--------------------------------- | :------ |
+| `SUDO_USER`         | `auth`, `capture-face`             | When `--username` is not given, this is the first variable consulted. Lets `sudo`-invoked auth resolve to the invoking user. |
+| `USER`              | `auth`, `capture-face`             | Fallback after `SUDO_USER`. |
+| `USERNAME`          | `auth`, `capture-face`             | Fallback after `USER`. |
+| `LOGNAME`           | `auth`                             | Last-resort fallback for the user lookup. |
+| `BIOPASS_CONFIG`    | all user-aware subcommands         | Override the config file path (same as `--config`). |
+| `BIOPASS_DATA_DIR`  | all user-aware subcommands         | Override the data directory holding faces / debugs / models (same as `--data-dir`). |
+
+Verbose debug logging is toggled by the `strategy.debug` field in the config file rather than an environment variable. See [the developer docs](contributing.md).
 
 ## See also
 

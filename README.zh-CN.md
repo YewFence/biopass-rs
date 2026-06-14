@@ -40,7 +40,7 @@
 | **相机处理** | 无 | 添加了图像自动优化选项 |
 | **IR 相机捕获帧质量检测** | 优化中，详情见 [#116](https://github.com/TickLabVN/biopass/issues/116) | 自动跳过暗帧 |
 | **图片处理路径** | GUI 使用浏览器 API 处理图像，认证时的 PAM 模块使用 OpenCV，[#114](https://github.com/TickLabVN/biopass/issues/114) | GUI 和 PAM 模块都使用 Rust 的 jpeg crate 进行图像处理，确保一致的图片质量 |
-| **`helper` CLI** | `auth` 和 `crop-face` 命令 | 新增子命令：`migrate`、`install`、`capture-face`、`preview-session` 和 `completion`；`auth` 子命令的 `--username` 会自动从环境变量查找 |
+| **`helper` CLI** | `auth` 和 `crop-face` 命令 | 新增子命令：`config`（配置管理树）、`install`、`model-download`、`capture-face`、`preview-session`、`clean` 和 `completion`；全局 `--username` flag 会自动从环境变量查找 |
 
 ## 安装
 

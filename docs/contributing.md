@@ -1,5 +1,7 @@
 # Contributing guidelines
 
+[简体中文](contributing.zh-CN.md) | English
+
 Welcome to biopass-rs! We appreciate your interest in contributing. This guide outlines how to get the project running locally, explains the core architecture, and provides important debugging guidelines.
 
 ## 1. How to Run
@@ -8,7 +10,7 @@ biopass-rs consists of Rust workspace crates and a frontend Tauri desktop applic
 
 ### Install Dependencies
 
-**For Linux system dependencies:**
+**1. Linux system dependencies:**
 
 Ubuntu/Debian:
 ```bash
@@ -21,43 +23,73 @@ Fedora:
 sudo dnf install -y gtk3-devel gdk-pixbuf2-devel webkit2gtk4.1-devel libv4l-devel pam-devel librsvg2-devel xdotool-devel libayatana-appindicator-gtk3-devel rpm-build nasm
 ```
 
-**For Rust and frontend tools:**
+**2. Trust the project and install the language toolchains with mise:**
 
-You need to install [Bun](https://bun.sh/), Rust/Cargo, and mise.
+`mise.toml` pins the exact Rust, Bun, Node, Vite+ and git-lfs versions under `[tools]`. After installing [mise](https://mise.jdx.dev/getting-started.html), trust the config and install every toolchain in one step — no separate rustup/Bun install is needed:
+
 ```bash
-# Install Bun
-curl -fsSL https://bun.sh/install | bash
-
-# Install Rust
-curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+mise trust
+mise install        # shorthand: mise i
 ```
+
+### Development Workflow
+
+All developer tasks live in `mise.toml`. The dev tasks isolate your work under a `dev-data/` directory at the repo root (driven by the `BIOPASS_DATA_DIR` / `BIOPASS_CONFIG` env vars `mise.toml` sets), so nothing touches your real `~/.config/biopass-rs` or `~/.local/share/biopass-rs`.
+
+**1. Initialize the dev data directory** — write a default config, download the ONNX models, and import any enrolled faces from an upstream `biopass` install:
+
+```bash
+mise run dev-helper install
+```
+
+This populates `dev-data/` with `config.yaml`, `models/`, and `faces/`.
+
+**2. Run the desktop app** — launches the Tauri app in dev mode with HMR, pointed at the `dev-data/` config:
+
+```bash
+mise run dev-app
+```
+
+**3. Exercise an end-to-end auth flow** — runs a single authentication attempt as if invoked by `sudo`:
+
+```bash
+mise run dev-helper auth -s sudo
+```
+
+For a cleaner repeat, use the wrapped task which first clears captured frames and then authenticates:
+
+```bash
+mise run auth-test
+```
+
+Both write the RGB/IR frames captured during failed attempts into `dev-data/debugs/`, so you can inspect the raw frames the models actually saw.
+
+**4. Before committing** — run the full check suite (Rust `cargo check` + `clippy` + `fmt --check` + tests, and the frontend `vp check`):
+
+```bash
+mise run check
+```
+
+If anything fails, `mise run fix` auto-fixes formatting and clippy lints where possible.
 
 ### Building the Project
 
-The root directory includes `mise.toml` tasks that orchestrate the entire build process.
-
 To build the Rust auth module:
+
 ```bash
 mise run build-auth
 ```
 
 To build both the Rust auth module and the Tauri frontend:
+
 ```bash
 mise run build
 ```
 
-To package the application into Linux release artifacts (`.deb` and `.rpm`)
+To package the application into Linux release artifacts (`.deb` and `.rpm`):
+
 ```bash
 mise run package
-```
-
-### Running the Desktop App in Dev Mode
-
-To run the Tauri app locally with hot module replacement (HMR), use the following commands:
-```bash
-cd apps/desktop
-bun install
-bun run tauri dev
 ```
 
 ## 2. Tech Stack
