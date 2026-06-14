@@ -4,18 +4,6 @@
 
 `biopass-rs-helper` 是桌面 GUI 和 PAM 模块用于执行认证、捕获和裁剪面部图像、安装 AI 模型等操作的低级命令行工具。它也是脚本和调试的主要入口点。
 
-使用发行版包时，该二进制文件安装到 `/usr/bin/biopass-rs-helper`。从此仓库进行开发时，通过以下方式运行：
-
-```bash
-mise run helper
-```
-
-…这会构建 crate 并调用二进制文件。附加 `--` 以转发额外的参数：
-
-```bash
-mise run helper -- auth --service sudo
-```
-
 ## 概要
 
 ```text

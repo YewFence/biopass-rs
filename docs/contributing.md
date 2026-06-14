@@ -80,16 +80,10 @@ To build the Rust auth module:
 mise run build-auth
 ```
 
-To build both the Rust auth module and the Tauri frontend:
+To build both the Rust auth module and the Tauri frontend and package the application into Linux release artifacts (`.deb` and `.rpm`):
 
 ```bash
 mise run build
-```
-
-To package the application into Linux release artifacts (`.deb` and `.rpm`):
-
-```bash
-mise run package
 ```
 
 ## 2. Tech Stack
@@ -120,31 +114,41 @@ sequenceDiagram
     participant OS as Linux Login/Sudo (PAM)
     participant Lib as libbiopass_rs_pam.so
     participant Helper as biopass-rs-helper
-    participant Sensors as Camera/Mic/Fingerprint
+    participant Sensors as Camera/Fingerprint
+    participant Store as On-disk Store
     participant TauriBackend as Tauri Rust Backend
     participant ReactUI as React Frontend
 
+    Note over Store: config.yaml under ~/.config/biopass-rs<br/>faces · models · debugs under ~/.local/share/biopass-rs
+
     rect rgb(30, 41, 59)
-    Note over OS,Sensors: Backend Authentication Flow
+    Note over OS,Store: Backend Authentication Flow
     OS->>Lib: Authenticate User
     Lib->>Helper: Spawn Isolated Process
+    Helper->>Store: Read config, enrolled faces & models
+    Store-->>Helper: Config + reference data
     Helper->>Sensors: Capture Biometrics
-    Sensors-->>Helper: Return Data
-    Helper->>Helper: Run Local Inference
+    Sensors-->>Helper: Live frames (face auth) / fingerprint (fingerprint auth)
+    Helper->>Helper: Run inference & match against enrolled data
+    Helper->>Helper: Apply config-driven decisions (retry / anti-spoofing)
+    Helper->>Store: Save failed captures to debugs/ (optional)
     Helper-->>Lib: Return Exit Code (0 for Success)
     Lib-->>OS: PAM_SUCCESS or PAM_AUTH_ERR
     end
 
     rect rgb(31, 41, 55)
-    Note over TauriBackend,ReactUI: Desktop Management Flow
-    ReactUI->>TauriBackend: Update Config/Register Biometrics
-    TauriBackend->>Sensors: Capture Biometrics
-    Sensors-->>TauriBackend: Return Reference Data
-    TauriBackend-->>ReactUI: Save to ~/.../config.yaml
+    Note over Sensors,ReactUI: Desktop Management Flow
+    ReactUI->>TauriBackend: Register face / update config
+    TauriBackend->>Sensors: Capture reference biometrics
+    Sensors-->>TauriBackend: Reference image / fingerprint list
+    TauriBackend->>Store: Write face to faces/ & persist config.yaml
+    TauriBackend->>Store: List enrolled face images / fingerprints
+    Store-->>TauriBackend: Enrolled face images / fingerprint data
+    TauriBackend-->>ReactUI: Show config & data (face images / fingerprint list)
     end
-```
 
-### The PAM Module (`crates/biopass-rs-pam/`)
+    Note over Store: Written by the GUI at enroll time, read by PAM at auth time
+```
 
 ### Directory Structure
 

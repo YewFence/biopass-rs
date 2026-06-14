@@ -80,16 +80,10 @@ mise run check
 mise run build-auth
 ```
 
-同时构建 Rust 认证模块和 Tauri 前端：
+同时构建 Rust 认证模块和 Tauri 前端并打包成 Linux 发布产物（`.deb` 和 `.rpm`）：
 
 ```bash
 mise run build
-```
-
-打包成 Linux 发布产物（`.deb` 和 `.rpm`）：
-
-```bash
-mise run package
 ```
 
 ## 2. 技术栈
@@ -120,31 +114,41 @@ sequenceDiagram
     participant OS as Linux 登录/Sudo (PAM)
     participant Lib as libbiopass_rs_pam.so
     participant Helper as biopass-rs-helper
-    participant Sensors as 摄像头/麦克风/指纹
+    participant Sensors as 摄像头/指纹
+    participant Store as 磁盘存储
     participant TauriBackend as Tauri Rust 后端
     participant ReactUI as React 前端
 
+    Note over Store: config.yaml 位于 ~/.config/biopass-rs<br/>faces · models · debugs 位于 ~/.local/share/biopass-rs
+
     rect rgb(30, 41, 59)
-    Note over OS,Sensors: 后端认证流程
+    Note over OS,Store: 后端认证流程
     OS->>Lib: 认证用户
     Lib->>Helper: 拉起隔离进程
+    Helper->>Store: 读取配置、已录入人脸与模型
+    Store-->>Helper: 配置 + 参考数据
     Helper->>Sensors: 采集生物特征
-    Sensors-->>Helper: 返回数据
-    Helper->>Helper: 本地推理
+    Sensors-->>Helper: 返回实时帧(人脸认证) / 指纹(指纹认证)
+    Helper->>Helper: 本地推理并与已录入数据比对
+    Helper->>Helper: 根据配置执行决策（重试 / 反欺骗）
+    Helper->>Store: 保存失败帧到 debugs/（可选）
     Helper-->>Lib: 返回退出码（0 表示成功）
     Lib-->>OS: PAM_SUCCESS 或 PAM_AUTH_ERR
     end
 
     rect rgb(31, 41, 55)
-    Note over TauriBackend,ReactUI: 桌面管理流程
-    ReactUI->>TauriBackend: 更新配置 / 注册生物特征
+    Note over Sensors,ReactUI: 桌面管理流程
+    ReactUI->>TauriBackend: 录入人脸 / 更新配置
     TauriBackend->>Sensors: 采集生物特征
-    Sensors-->>TauriBackend: 返回参考数据
-    TauriBackend-->>ReactUI: 保存到 ~/.../config.yaml
+    Sensors-->>TauriBackend: 参考图像 / 指纹列表
+    TauriBackend->>Store: 写入人脸到 faces/ 并持久化 config.yaml
+    TauriBackend->>Store: 读取已录入人脸图片/ 指纹列表
+    Store-->>TauriBackend: 已录入人脸图片 / 指纹列表数据
+    TauriBackend-->>ReactUI: 展示配置和数据(人脸图像 / 指纹列表)
     end
-```
 
-### PAM 模块（`crates/biopass-rs-pam/`）
+    Note over Store: GUI 录入时写入，PAM 认证时读取
+```
 
 ### 目录结构
 
