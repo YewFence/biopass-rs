@@ -12,7 +12,7 @@ default-members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.6.10"
 edition = "2021"
 license = "MIT"
 repository = "https://github.com/YewFence/biopass-rs"
@@ -20,6 +20,7 @@ repository = "https://github.com/YewFence/biopass-rs"
 [workspace.dependencies]
 anyhow = "1"
 base64 = "0.22"
+biopass-rs-auth = { path = "crates/biopass-rs-auth" }
 chrono = "0.4"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"

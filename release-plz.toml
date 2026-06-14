@@ -16,7 +16,9 @@ changelog_include = ["biopass-rs-auth", "biopass-rs-pam"]
 [[package]]
 name = "biopass-rs-auth"
 release = false
+publish = false
 
 [[package]]
 name = "biopass-rs-pam"
 release = false
+publish = false
