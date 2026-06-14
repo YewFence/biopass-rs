@@ -1,0 +1,3 @@
+[tools]
+"github:release-plz/release-plz" = "latest"
+rust = "latest"

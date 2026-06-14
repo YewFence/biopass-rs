@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+    tags:
+      - "v*"
   workflow_dispatch:
 
 permissions:
@@ -25,6 +27,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
+    env:
+      MISE_ENV: ci
     outputs:
       release_tag: ${{ steps.metadata.outputs.release_tag }}
       should_upload_assets: ${{ steps.assets.outputs.should_upload_assets }}
@@ -35,13 +39,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_args: rust github:release-plz/release-plz
+          cache_key: "mise-v1-release-plz-ci-{{platform}}-{{file_hash}}"
 
       - name: Run release-plz
-        uses: release-plz/action@e8792575c7f2366cf6ff3ccc33ead9ace5b691c7 # v0.5.130
-        with:
-          command: release
+        run: release-plz release --forge github --git-token "${GITHUB_TOKEN}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -95,10 +100,13 @@ jobs:
   release-pr:
     name: Open or update Release-plz PR
     needs: release
+    if: ${{ !startsWith(github.ref, 'refs/tags/') }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
       pull-requests: write
+    env:
+      MISE_ENV: ci
     steps:
       - name: Checkout repository
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -106,13 +114,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+      - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_args: rust github:release-plz/release-plz
+          cache_key: "mise-v1-release-plz-ci-{{platform}}-{{file_hash}}"
 
       - name: Run release-plz
-        uses: release-plz/action@e8792575c7f2366cf6ff3ccc33ead9ace5b691c7 # v0.5.130
-        with:
-          command: release-pr
+        run: release-plz release-pr --forge github --git-token "${GITHUB_TOKEN}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
