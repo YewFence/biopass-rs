@@ -10,7 +10,27 @@ biopass-rs consists of Rust workspace crates and a frontend Tauri desktop applic
 
 ### Install Dependencies
 
-**1. Linux system dependencies:**
+**1. Trust the project config:**
+
+After installing [mise](https://mise.jdx.dev/getting-started.html), trust this repository config:
+
+```bash
+mise trust
+```
+
+**2. Optional experimental bootstrap path:**
+
+`mise.toml` declares the Linux system packages under `[bootstrap.packages]` and the language toolchains under `[tools]`. If your installed [mise](https://mise.jdx.dev/getting-started.html) version supports the experimental bootstrap feature, you can let mise install missing system packages and then install the pinned Rust, Bun, Node, Vite+ and git-lfs toolchains in one step:
+
+```bash
+mise bootstrap --update
+```
+
+On Linux this may prompt for `sudo`. The bootstrap package entries are filtered by package manager, so the `apt` packages are ignored on Fedora and the `dnf` packages are ignored on Ubuntu/Debian.
+
+Because mise bootstrap is still experimental, you can keep using the manual system package flow instead.
+
+**Manual Linux system dependencies:**
 
 Ubuntu/Debian:
 ```bash
@@ -20,15 +40,14 @@ sudo apt install libpam0g-dev libv4l-dev fprintd libwebkit2gtk-4.1-dev build-ess
 
 Fedora:
 ```bash
-sudo dnf install -y gtk3-devel gdk-pixbuf2-devel webkit2gtk4.1-devel libv4l-devel pam-devel librsvg2-devel xdotool-devel libayatana-appindicator-gtk3-devel rpm-build nasm
+sudo dnf install -y gtk3-devel gdk-pixbuf2-devel webkit2gtk4.1-devel libv4l-devel pam-devel librsvg2-devel libxdo-devel libayatana-appindicator-gtk3-devel rpm-build nasm
 ```
 
-**2. Trust the project and install the language toolchains with mise:**
+After installing the system packages manually, install the language toolchains with mise:
 
-`mise.toml` pins the exact Rust, Bun, Node, Vite+ and git-lfs versions under `[tools]`. After installing [mise](https://mise.jdx.dev/getting-started.html), trust the config and install every toolchain in one step — no separate rustup/Bun install is needed:
+`mise.toml` pins the exact Rust, Bun, Node, Vite+ and git-lfs versions under `[tools]`. No separate rustup/Bun install is needed:
 
 ```bash
-mise trust
 mise install        # shorthand: mise i
 ```
 
