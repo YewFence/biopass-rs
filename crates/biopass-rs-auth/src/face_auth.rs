@@ -1,7 +1,9 @@
 use crate::{
-    camera_available, decode_jpeg_rgb, emit_log, encode_jpeg, list_faces, user_data_dir,
-    AuthConfig, AuthMethod, AuthResult, CameraRequest, CameraSession, FaceAntiSpoofing, FaceBox,
-    FaceDetector, FaceMethodConfig, FaceRecognizer, FrameFormat, LogLevel, RgbFrame,
+    camera_available, decode_jpeg_rgb, emit_log, encode_jpeg, list_faces,
+    save_failed_frames_enabled, user_data_dir, AuthAttemptSummary, AuthConfig, AuthMethod,
+    AuthMethodSummaryResult, AuthResult, CameraRequest, CameraSession, FaceAntiSpoofing,
+    FaceBestMatchSummary, FaceBox, FaceDetector, FaceMethodConfig, FaceRecognizer, FrameFormat,
+    LogComponent, LogLevel, MethodAuthOutcome, RgbFrame,
 };
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,6 +28,49 @@ struct FaceAuthSession {
     ir_anti_spoofing: Option<FaceAntiSpoofing>,
     camera_session: Option<CameraSession>,
     ir_camera_session: Option<CameraSession>,
+}
+
+#[derive(Debug, Clone)]
+struct FaceAuthAttemptOutcome {
+    result: AuthResult,
+    reason: Option<String>,
+    message: String,
+    best_match: Option<FaceBestMatchSummary>,
+}
+
+impl FaceAuthAttemptOutcome {
+    fn new(result: AuthResult, reason: &str, message: &str) -> Self {
+        Self {
+            result,
+            reason: Some(reason.to_string()),
+            message: message.to_string(),
+            best_match: None,
+        }
+    }
+
+    fn into_method_outcome(self) -> MethodAuthOutcome {
+        let summary_result = method_summary_result(self.result);
+        let attempt = AuthAttemptSummary {
+            attempt: 1,
+            result: summary_result.clone(),
+            reason: self.reason.clone(),
+            message: self.message.clone(),
+            best_match: self.best_match,
+            ir: None,
+        };
+        MethodAuthOutcome {
+            result: self.result,
+            summary: crate::AuthMethodSummary {
+                method: "face".to_string(),
+                result: summary_result,
+                attempts: vec![attempt],
+                reason: self.reason,
+                message: self.message,
+                best_match: self.best_match,
+                ir: None,
+            },
+        }
+    }
 }
 
 impl FaceAuth {
@@ -102,9 +147,9 @@ impl FaceAuth {
         username: &str,
         auth_config: &AuthConfig,
         cancel_signal: Option<&AtomicBool>,
-    ) -> Result<AuthResult, String> {
+    ) -> Result<FaceAuthAttemptOutcome, String> {
         let debug = auth_config.debug;
-        let log = |level: LogLevel, msg: &str| emit_log(level, debug, "FaceAuth", msg);
+        let log = |level: LogLevel, msg: &str| emit_log(LogComponent::Auth, level, "FaceAuth", msg);
 
         log(
             LogLevel::Info,
@@ -114,7 +159,11 @@ impl FaceAuth {
         let enrolled = list_faces(username);
         if enrolled.is_empty() {
             log(LogLevel::Info, "no enrolled faces found");
-            return Ok(AuthResult::Unavailable);
+            return Ok(FaceAuthAttemptOutcome::new(
+                AuthResult::Unavailable,
+                "no_enrolled_faces",
+                "no enrolled faces found",
+            ));
         }
 
         log(
@@ -126,12 +175,20 @@ impl FaceAuth {
             || !Path::new(&self.config.recognition.model).is_file()
         {
             log(LogLevel::Warn, "model files not found");
-            return Ok(AuthResult::Unavailable);
+            return Ok(FaceAuthAttemptOutcome::new(
+                AuthResult::Unavailable,
+                "model_missing",
+                "face model files were not found",
+            ));
         }
 
         if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
             log(LogLevel::Info, "authentication cancelled");
-            return Ok(AuthResult::Failure);
+            return Ok(FaceAuthAttemptOutcome::new(
+                AuthResult::Failure,
+                "cancelled",
+                "face authentication was cancelled",
+            ));
         }
 
         log(LogLevel::Debug, "capturing frame from camera");
@@ -163,7 +220,11 @@ impl FaceAuth {
                 Ok(_) => {
                     log(LogLevel::Info, "no face detected in frame");
                     save_debug_frame_if_enabled(debug, username, &frame, "no_face_detected");
-                    return Ok(AuthResult::Retry);
+                    return Ok(FaceAuthAttemptOutcome::new(
+                        AuthResult::Retry,
+                        "no_face_detected",
+                        "no face was detected in the captured frame",
+                    ));
                 }
                 Err(error) => {
                     save_debug_frame_if_enabled(debug, username, &frame, "detection_error");
@@ -206,10 +267,15 @@ impl FaceAuth {
             LogLevel::Debug,
             &format!("comparing against {} enrolled face(s)", enrolled.len()),
         );
-        for enrolled_path in enrolled {
+        let mut best_match: Option<FaceBestMatchSummary> = None;
+        for (enrolled_index, enrolled_path) in enrolled.into_iter().enumerate() {
             if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
                 log(LogLevel::Info, "authentication cancelled during matching");
-                return Ok(AuthResult::Failure);
+                return Ok(FaceAuthAttemptOutcome::new(
+                    AuthResult::Failure,
+                    "cancelled",
+                    "face authentication was cancelled during matching",
+                ));
             }
 
             let Ok(enrolled_face) = read_enrolled_face(&enrolled_path) else {
@@ -270,6 +336,18 @@ impl FaceAuth {
                     face_match.similar
                 ),
             );
+            let current_match = FaceBestMatchSummary {
+                enrolled_index: enrolled_index + 1,
+                similarity: face_match.similarity,
+                threshold: recognition_threshold,
+                similar: face_match.similar,
+            };
+            if best_match
+                .map(|best| face_match.similarity > best.similarity)
+                .unwrap_or(true)
+            {
+                best_match = Some(current_match);
+            }
             if face_match.similar {
                 log(LogLevel::Debug, "running anti-spoofing check");
                 match self.check_anti_spoofing(
@@ -289,7 +367,11 @@ impl FaceAuth {
                             &candidate,
                             "antispoof_rejected",
                         );
-                        return Ok(AuthResult::Failure);
+                        return Ok(FaceAuthAttemptOutcome::new(
+                            AuthResult::Failure,
+                            "anti_spoofing_rejected",
+                            "anti-spoofing rejected the matched face candidate",
+                        ));
                     }
                     Err(error) => {
                         save_debug_frame_if_enabled(debug, username, &candidate, "antispoof_error");
@@ -298,13 +380,31 @@ impl FaceAuth {
                 }
 
                 log(LogLevel::Info, "face matched, authentication successful");
-                return Ok(AuthResult::Success);
+                return Ok(FaceAuthAttemptOutcome {
+                    result: AuthResult::Success,
+                    reason: Some("face_matched".to_string()),
+                    message: "face authentication succeeded".to_string(),
+                    best_match: Some(current_match),
+                });
             }
         }
 
         log(LogLevel::Info, "no enrolled face matched, will retry");
         save_debug_frame_if_enabled(debug, username, &candidate, "not_similar");
-        Ok(AuthResult::Retry)
+        let message = best_match
+            .map(|best| {
+                format!(
+                    "no enrolled face matched, best match was enrolled face #{} with similarity {:.4}, threshold {:.4}",
+                    best.enrolled_index, best.similarity, best.threshold
+                )
+            })
+            .unwrap_or_else(|| "no enrolled face could be compared".to_string());
+        Ok(FaceAuthAttemptOutcome {
+            result: AuthResult::Retry,
+            reason: Some("no_enrolled_face_matched".to_string()),
+            message,
+            best_match,
+        })
     }
 
     fn check_anti_spoofing(
@@ -317,7 +417,9 @@ impl FaceAuth {
         face: &RgbFrame,
     ) -> Result<bool, String> {
         let debug = auth_config.debug;
-        let log = |level: LogLevel, msg: &str| emit_log(level, debug, "FaceAntiSpoofing", msg);
+        let log = |level: LogLevel, msg: &str| {
+            emit_log(LogComponent::Auth, level, "FaceAntiSpoofing", msg)
+        };
 
         if !auth_config.antispoof {
             log(LogLevel::Info, "skipped (antispoof disabled at runtime)");
@@ -416,7 +518,9 @@ impl FaceAuth {
         rgb_face_box: FaceBox,
     ) -> Result<bool, String> {
         let debug = auth_config.debug;
-        let log = |level: LogLevel, msg: &str| emit_log(level, debug, "FaceAntiSpoofingIr", msg);
+        let log = |level: LogLevel, msg: &str| {
+            emit_log(LogComponent::Auth, level, "FaceAntiSpoofingIr", msg)
+        };
 
         // Fast-fail on permanent configuration/model errors
         let Some(camera) = self
@@ -508,8 +612,8 @@ impl FaceAuth {
             }
             if attempt > 1 {
                 emit_log(
+                    LogComponent::Auth,
                     LogLevel::Debug,
-                    debug,
                     "FaceAntiSpoofingIr",
                     &format!("attempt {attempt}/{max_attempts}"),
                 );
@@ -538,8 +642,8 @@ impl FaceAuth {
                 }
                 if retry_delay_ms > 0 {
                     emit_log(
+                        LogComponent::Auth,
                         LogLevel::Debug,
-                        debug,
                         "FaceAntiSpoofingIr",
                         &format!("retry sleeping {retry_delay_ms}ms"),
                     );
@@ -560,7 +664,9 @@ impl FaceAuth {
         rgb_face_box: FaceBox,
     ) -> Result<bool, String> {
         let debug = auth_config.debug;
-        let log = |level: LogLevel, msg: &str| emit_log(level, debug, "FaceAntiSpoofingIr", msg);
+        let log = |level: LogLevel, msg: &str| {
+            emit_log(LogComponent::Auth, level, "FaceAntiSpoofingIr", msg)
+        };
 
         let min_face_area_ratio = self.config.anti_spoofing.ir.min_face_area_ratio;
         let model_diagnostic = !self.config.anti_spoofing.ir.ir_model_hard_fail;
@@ -938,37 +1044,50 @@ impl AuthMethod for FaceAuth {
         username: &str,
         config: &AuthConfig,
         cancel_signal: Option<&AtomicBool>,
-    ) -> AuthResult {
+    ) -> MethodAuthOutcome {
         match self.authenticate_face(username, config, cancel_signal) {
-            Ok(result) => result,
+            Ok(outcome) => outcome.into_method_outcome(),
             Err(error) => {
                 emit_log(
+                    LogComponent::Auth,
                     LogLevel::Error,
-                    config.debug,
                     "FaceAuth",
                     &format!("error during authentication for {username}: {error}"),
                 );
-                AuthResult::Retry
+                MethodAuthOutcome::basic(
+                    "face",
+                    AuthResult::Retry,
+                    format!("face authentication error: {error}"),
+                )
             }
         }
     }
 }
 
-fn save_debug_frame_if_enabled(debug: bool, username: &str, frame: &RgbFrame, reason: &str) {
-    if !debug {
+fn method_summary_result(result: AuthResult) -> AuthMethodSummaryResult {
+    match result {
+        AuthResult::Success => AuthMethodSummaryResult::Success,
+        AuthResult::Failure => AuthMethodSummaryResult::Failure,
+        AuthResult::Retry => AuthMethodSummaryResult::Retry,
+        AuthResult::Unavailable => AuthMethodSummaryResult::Unavailable,
+    }
+}
+
+fn save_debug_frame_if_enabled(_debug: bool, username: &str, frame: &RgbFrame, reason: &str) {
+    if !save_failed_frames_enabled() {
         return;
     }
 
     match save_debug_frame(username, frame, reason) {
         Ok(path) => emit_log(
+            LogComponent::Auth,
             LogLevel::Debug,
-            debug,
             "FaceAuth",
             &format!("saved debug frame to {}", path.display()),
         ),
         Err(error) => emit_log(
+            LogComponent::Auth,
             LogLevel::Warn,
-            debug,
             "FaceAuth",
             &format!("failed to save debug frame: {error}"),
         ),

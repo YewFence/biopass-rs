@@ -1,6 +1,10 @@
 use super::schema::{read_antispoofing_model, AntiSpoofingModelConfig};
 use super::serde_defaults::{
-    default_antispoofing_retry_delay, default_ir_min_face_area_ratio, default_ir_warmup_delay,
+    default_antispoofing_retry_delay, default_auth_history_retention_days,
+    default_auth_log_retention_days, default_console_log_level, default_desktop_log_retention_days,
+    default_failed_frame_retention_days, default_helper_log_retention_days,
+    default_ir_min_face_area_ratio, default_ir_warmup_delay, default_log_level,
+    default_log_max_files_per_day, default_log_max_size_mb, default_log_rotation_kind,
 };
 use serde_yaml::{Mapping, Value};
 use std::fs;
@@ -57,25 +61,141 @@ fn migrate_schema_at_path(path: &Path) -> io::Result<bool> {
     let mut yaml = serde_yaml::from_str::<Value>(&config_text)
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error))?;
 
-    let Some(face) = yaml
+    let Some(root) = yaml.as_mapping_mut() else {
+        return Ok(false);
+    };
+
+    let (logging, logging_needs_migration) = migrated_logging(root);
+    if logging_needs_migration {
+        root.insert(Value::String("logging".to_string()), logging);
+    }
+
+    let Some(face) = root
         .get_mut("methods")
         .and_then(Value::as_mapping_mut)
         .and_then(|methods| methods.get_mut(Value::String("face".to_string())))
         .and_then(Value::as_mapping_mut)
     else {
-        return Ok(false);
+        if logging_needs_migration {
+            let serialized = serde_yaml::to_string(&yaml).map_err(io::Error::other)?;
+            fs::write(path, serialized)?;
+        }
+        return Ok(logging_needs_migration);
     };
 
     let (new_anti, needs_migration) = migrated_antispoofing(face);
-    if !needs_migration {
+    if !needs_migration && !logging_needs_migration {
         return Ok(false);
     }
-    face.insert(Value::String("anti_spoofing".to_string()), new_anti);
-    face.remove(Value::String("ir_camera".to_string()));
+    if needs_migration {
+        face.insert(Value::String("anti_spoofing".to_string()), new_anti);
+        face.remove(Value::String("ir_camera".to_string()));
+    }
 
     let serialized = serde_yaml::to_string(&yaml).map_err(io::Error::other)?;
     fs::write(path, serialized)?;
     Ok(true)
+}
+
+fn migrated_logging(root: &Mapping) -> (Value, bool) {
+    let has_logging = root.contains_key(Value::String("logging".to_string()));
+    let debug = root
+        .get(Value::String("strategy".to_string()))
+        .and_then(Value::as_mapping)
+        .and_then(|strategy| extract_bool(strategy, "debug"))
+        .unwrap_or(false);
+
+    let mut file = Mapping::new();
+    file.insert(Value::String("enabled".to_string()), Value::Bool(true));
+    file.insert(
+        Value::String("level".to_string()),
+        Value::String(if debug {
+            "debug".to_string()
+        } else {
+            default_log_level()
+        }),
+    );
+
+    let mut rotation = Mapping::new();
+    rotation.insert(
+        Value::String("kind".to_string()),
+        Value::String(default_log_rotation_kind()),
+    );
+    rotation.insert(
+        Value::String("max_size_mb".to_string()),
+        Value::from(default_log_max_size_mb()),
+    );
+    rotation.insert(
+        Value::String("max_files_per_day".to_string()),
+        Value::from(default_log_max_files_per_day()),
+    );
+    file.insert(
+        Value::String("rotation".to_string()),
+        Value::Mapping(rotation),
+    );
+
+    let mut retention = Mapping::new();
+    retention.insert(
+        Value::String("auth_days".to_string()),
+        Value::from(default_auth_log_retention_days()),
+    );
+    retention.insert(
+        Value::String("helper_days".to_string()),
+        Value::from(default_helper_log_retention_days()),
+    );
+    retention.insert(
+        Value::String("desktop_days".to_string()),
+        Value::from(default_desktop_log_retention_days()),
+    );
+    file.insert(
+        Value::String("retention".to_string()),
+        Value::Mapping(retention),
+    );
+
+    let mut console = Mapping::new();
+    console.insert(Value::String("enabled".to_string()), Value::Bool(debug));
+    console.insert(
+        Value::String("level".to_string()),
+        Value::String(if debug {
+            "debug".to_string()
+        } else {
+            default_console_log_level()
+        }),
+    );
+
+    let mut diagnostics = Mapping::new();
+    diagnostics.insert(
+        Value::String("save_failed_frames".to_string()),
+        Value::Bool(debug),
+    );
+    diagnostics.insert(
+        Value::String("retention_days".to_string()),
+        Value::from(default_failed_frame_retention_days()),
+    );
+
+    let mut auth_history = Mapping::new();
+    auth_history.insert(Value::String("enabled".to_string()), Value::Bool(true));
+    auth_history.insert(
+        Value::String("retention_days".to_string()),
+        Value::from(default_auth_history_retention_days()),
+    );
+
+    let mut logging = Mapping::new();
+    logging.insert(Value::String("file".to_string()), Value::Mapping(file));
+    logging.insert(
+        Value::String("console".to_string()),
+        Value::Mapping(console),
+    );
+    logging.insert(
+        Value::String("diagnostics".to_string()),
+        Value::Mapping(diagnostics),
+    );
+    logging.insert(
+        Value::String("auth_history".to_string()),
+        Value::Mapping(auth_history),
+    );
+
+    (Value::Mapping(logging), !has_logging)
 }
 
 pub(super) fn migrated_antispoofing(face: &mut Mapping) -> (Value, bool) {

@@ -1,4 +1,4 @@
-use crate::{AuthConfig, AuthMethod, AuthResult, FingerprintMethodConfig};
+use crate::{AuthConfig, AuthMethod, AuthResult, FingerprintMethodConfig, MethodAuthOutcome};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::thread;
@@ -137,8 +137,15 @@ impl AuthMethod for FingerprintAuth {
         username: &str,
         _config: &AuthConfig,
         cancel_signal: Option<&AtomicBool>,
-    ) -> AuthResult {
-        self.authenticate_fingerprint(username, cancel_signal)
+    ) -> MethodAuthOutcome {
+        let result = self.authenticate_fingerprint(username, cancel_signal);
+        let message = match result {
+            AuthResult::Success => "fingerprint authentication succeeded",
+            AuthResult::Failure => "fingerprint authentication failed",
+            AuthResult::Retry => "fingerprint authentication should retry",
+            AuthResult::Unavailable => "fingerprint authentication is unavailable",
+        };
+        MethodAuthOutcome::basic("fingerprint", result, message)
     }
 }
 

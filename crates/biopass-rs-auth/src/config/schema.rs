@@ -10,6 +10,8 @@ pub struct BiopassConfig {
     #[serde(default)]
     pub strategy: StrategyConfig,
     #[serde(default)]
+    pub logging: LoggingConfig,
+    #[serde(default)]
     pub methods: MethodsConfig,
     #[serde(default)]
     pub models: Vec<ModelConfig>,
@@ -27,6 +29,8 @@ impl<'de> Deserialize<'de> for BiopassConfig {
             #[serde(default)]
             strategy: StrategyConfig,
             #[serde(default)]
+            logging: LoggingConfig,
+            #[serde(default)]
             methods: MethodsConfig,
             #[serde(default)]
             models: Vec<ModelConfig>,
@@ -37,6 +41,7 @@ impl<'de> Deserialize<'de> for BiopassConfig {
         let raw = Raw::deserialize(deserializer)?;
         let config = Self {
             strategy: raw.strategy,
+            logging: raw.logging,
             methods: raw.methods,
             models: raw.models,
             appearance: raw.appearance,
@@ -50,6 +55,7 @@ impl Default for BiopassConfig {
     fn default() -> Self {
         Self {
             strategy: StrategyConfig::default(),
+            logging: LoggingConfig::default(),
             methods: MethodsConfig::default(),
             models: Vec::new(),
             appearance: default_appearance(),
@@ -104,6 +110,132 @@ pub struct StrategyConfig {
     pub order: Vec<String>,
     #[serde(default = "default_ignored_services")]
     pub ignore_services: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub struct LoggingConfig {
+    #[serde(default)]
+    pub file: FileLoggingConfig,
+    #[serde(default)]
+    pub console: ConsoleLoggingConfig,
+    #[serde(default)]
+    pub diagnostics: DiagnosticsLoggingConfig,
+    #[serde(default)]
+    pub auth_history: AuthHistoryConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct FileLoggingConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_log_level")]
+    pub level: String,
+    #[serde(default)]
+    pub rotation: LogRotationConfig,
+    #[serde(default)]
+    pub retention: LogRetentionConfig,
+}
+
+impl Default for FileLoggingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            level: default_log_level(),
+            rotation: LogRotationConfig::default(),
+            retention: LogRetentionConfig::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ConsoleLoggingConfig {
+    #[serde(default)]
+    pub enabled: bool,
+    #[serde(default = "default_console_log_level")]
+    pub level: String,
+}
+
+impl Default for ConsoleLoggingConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            level: default_console_log_level(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LogRotationConfig {
+    #[serde(default = "default_log_rotation_kind")]
+    pub kind: String,
+    #[serde(default = "default_log_max_size_mb")]
+    pub max_size_mb: u32,
+    #[serde(default = "default_log_max_files_per_day")]
+    pub max_files_per_day: u32,
+}
+
+impl Default for LogRotationConfig {
+    fn default() -> Self {
+        Self {
+            kind: default_log_rotation_kind(),
+            max_size_mb: default_log_max_size_mb(),
+            max_files_per_day: default_log_max_files_per_day(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LogRetentionConfig {
+    #[serde(default = "default_auth_log_retention_days")]
+    pub auth_days: u32,
+    #[serde(default = "default_helper_log_retention_days")]
+    pub helper_days: u32,
+    #[serde(default = "default_desktop_log_retention_days")]
+    pub desktop_days: u32,
+}
+
+impl Default for LogRetentionConfig {
+    fn default() -> Self {
+        Self {
+            auth_days: default_auth_log_retention_days(),
+            helper_days: default_helper_log_retention_days(),
+            desktop_days: default_desktop_log_retention_days(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct DiagnosticsLoggingConfig {
+    #[serde(default)]
+    pub save_failed_frames: bool,
+    #[serde(default = "default_failed_frame_retention_days")]
+    pub retention_days: u32,
+}
+
+impl Default for DiagnosticsLoggingConfig {
+    fn default() -> Self {
+        Self {
+            save_failed_frames: false,
+            retention_days: default_failed_frame_retention_days(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AuthHistoryConfig {
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    #[serde(default = "default_auth_history_retention_days")]
+    pub retention_days: u32,
+}
+
+impl Default for AuthHistoryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            retention_days: default_auth_history_retention_days(),
+        }
+    }
 }
 
 impl Default for StrategyConfig {

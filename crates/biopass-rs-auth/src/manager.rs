@@ -5,7 +5,12 @@ use std::sync::{
 use std::thread;
 use std::time::Duration;
 
-use crate::{emit_log, LogLevel};
+use chrono::Local;
+
+use crate::{
+    emit_log, make_auth_summary_id, AuthAttemptSummary, AuthMethodSummary, AuthMethodSummaryResult,
+    AuthSessionSummary, AuthSummaryResult, LogComponent, LogLevel,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthResult {
@@ -34,10 +39,11 @@ pub struct AuthConfig {
     pub antispoof: bool,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AuthOutcome {
     pub code: PamCode,
     pub attempted: bool,
+    pub summary: AuthSessionSummary,
 }
 
 pub trait AuthMethod: Send {
@@ -52,7 +58,39 @@ pub trait AuthMethod: Send {
         username: &str,
         config: &AuthConfig,
         cancel_signal: Option<&AtomicBool>,
-    ) -> AuthResult;
+    ) -> MethodAuthOutcome;
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MethodAuthOutcome {
+    pub result: AuthResult,
+    pub summary: AuthMethodSummary,
+}
+
+impl MethodAuthOutcome {
+    pub fn basic(method: &str, result: AuthResult, message: impl Into<String>) -> Self {
+        let summary_result = method_summary_result(result);
+        let message = message.into();
+        Self {
+            result,
+            summary: AuthMethodSummary {
+                method: method.to_string(),
+                result: summary_result.clone(),
+                attempts: vec![AuthAttemptSummary {
+                    attempt: 1,
+                    result: summary_result,
+                    reason: None,
+                    message: message.clone(),
+                    best_match: None,
+                    ir: None,
+                }],
+                reason: None,
+                message,
+                best_match: None,
+                ir: None,
+            },
+        }
+    }
 }
 
 pub struct AuthManager {
@@ -89,21 +127,34 @@ impl AuthManager {
     }
 
     pub fn authenticate(&mut self, username: &str) -> AuthOutcome {
+        let started_at = Local::now();
         if self.methods.is_empty() {
             return AuthOutcome {
                 code: PamCode::Ignore,
                 attempted: false,
+                summary: session_summary(
+                    started_at,
+                    AuthSummaryResult::Ignored,
+                    self.mode,
+                    Vec::new(),
+                    None,
+                ),
             };
         }
 
         match self.mode {
-            ExecutionMode::Sequential => self.run_sequential(username),
-            ExecutionMode::Parallel => self.run_parallel(username),
+            ExecutionMode::Sequential => self.run_sequential(username, started_at),
+            ExecutionMode::Parallel => self.run_parallel(username, started_at),
         }
     }
 
-    fn run_sequential(&mut self, username: &str) -> AuthOutcome {
+    fn run_sequential(
+        &mut self,
+        username: &str,
+        started_at: chrono::DateTime<Local>,
+    ) -> AuthOutcome {
         let mut any_attempted = false;
+        let mut summaries = Vec::new();
 
         for method in &mut self.methods {
             if !method.is_available() {
@@ -112,29 +163,38 @@ impl AuthManager {
 
             let method_name = auth_method_log_name(method.name()).to_string();
             emit_log(
+                LogComponent::Auth,
                 LogLevel::Debug,
-                self.config.debug,
                 "AuthManager",
                 &format!("Starting {method_name} authentication (sequential)"),
             );
             method.begin_authentication_session();
-            let result = authenticate_with_retries(method.as_mut(), username, &self.config, None);
+            let outcome = authenticate_with_retries(method.as_mut(), username, &self.config, None);
             method.end_authentication_session();
             emit_log(
+                LogComponent::Auth,
                 LogLevel::Debug,
-                self.config.debug,
                 "AuthManager",
                 &format!(
                     "{method_name} authentication finished with {:?} (sequential)",
-                    result
+                    outcome.result
                 ),
             );
 
+            let result = outcome.result;
+            summaries.push(outcome.summary);
             match result {
                 AuthResult::Success => {
                     return AuthOutcome {
                         code: PamCode::Success,
                         attempted: true,
+                        summary: session_summary(
+                            started_at,
+                            AuthSummaryResult::Success,
+                            self.mode,
+                            summaries,
+                            None,
+                        ),
                     };
                 }
                 AuthResult::Unavailable => {}
@@ -146,16 +206,30 @@ impl AuthManager {
             AuthOutcome {
                 code: PamCode::AuthError,
                 attempted: true,
+                summary: session_summary(
+                    started_at,
+                    AuthSummaryResult::Failure,
+                    self.mode,
+                    summaries,
+                    None,
+                ),
             }
         } else {
             AuthOutcome {
                 code: PamCode::Ignore,
                 attempted: false,
+                summary: session_summary(
+                    started_at,
+                    AuthSummaryResult::Ignored,
+                    self.mode,
+                    summaries,
+                    None,
+                ),
             }
         }
     }
 
-    fn run_parallel(&mut self, username: &str) -> AuthOutcome {
+    fn run_parallel(&mut self, username: &str, started_at: chrono::DateTime<Local>) -> AuthOutcome {
         let cancel_signal = Arc::new(AtomicBool::new(false));
         let mut handles = Vec::new();
 
@@ -170,61 +244,91 @@ impl AuthManager {
             handles.push(thread::spawn(move || {
                 let method_name = auth_method_log_name(method.name()).to_string();
                 emit_log(
+                    LogComponent::Auth,
                     LogLevel::Debug,
-                    config.debug,
                     "AuthManager",
                     &format!("Starting {method_name} authentication (parallel)"),
                 );
                 method.begin_authentication_session();
-                let result = authenticate_with_retries(
+                let outcome = authenticate_with_retries(
                     method.as_mut(),
                     &username,
                     &config,
                     Some(cancel_signal.as_ref()),
                 );
                 method.end_authentication_session();
-                if result == AuthResult::Success {
+                if outcome.result == AuthResult::Success {
                     cancel_signal.store(true, Ordering::SeqCst);
                 }
                 emit_log(
+                    LogComponent::Auth,
                     LogLevel::Debug,
-                    config.debug,
                     "AuthManager",
                     &format!(
                         "{method_name} authentication finished with {:?} (parallel)",
-                        result
+                        outcome.result
                     ),
                 );
-                result
+                outcome
             }));
         }
 
         let mut any_success = false;
         let mut any_attempted = false;
+        let mut summaries = Vec::new();
 
         for handle in handles {
-            let result = handle.join().unwrap_or(AuthResult::Failure);
+            let outcome = handle.join().unwrap_or_else(|_| {
+                MethodAuthOutcome::basic(
+                    "unknown",
+                    AuthResult::Failure,
+                    "authentication thread panicked",
+                )
+            });
+            let result = outcome.result;
             if result == AuthResult::Success {
                 any_success = true;
             } else if result != AuthResult::Unavailable {
                 any_attempted = true;
             }
+            summaries.push(outcome.summary);
         }
 
         if any_success {
             AuthOutcome {
                 code: PamCode::Success,
                 attempted: true,
+                summary: session_summary(
+                    started_at,
+                    AuthSummaryResult::Success,
+                    self.mode,
+                    summaries,
+                    None,
+                ),
             }
         } else if any_attempted {
             AuthOutcome {
                 code: PamCode::AuthError,
                 attempted: true,
+                summary: session_summary(
+                    started_at,
+                    AuthSummaryResult::Failure,
+                    self.mode,
+                    summaries,
+                    None,
+                ),
             }
         } else {
             AuthOutcome {
                 code: PamCode::Ignore,
                 attempted: false,
+                summary: session_summary(
+                    started_at,
+                    AuthSummaryResult::Ignored,
+                    self.mode,
+                    summaries,
+                    None,
+                ),
             }
         }
     }
@@ -243,25 +347,70 @@ fn authenticate_with_retries(
     username: &str,
     config: &AuthConfig,
     cancel_signal: Option<&AtomicBool>,
-) -> AuthResult {
+) -> MethodAuthOutcome {
     let max_attempts = method.retries().max(1);
     let mut attempts = 0;
+    let mut merged_attempts = Vec::new();
 
     loop {
         if cancel_signal.is_some_and(|signal| signal.load(Ordering::SeqCst)) {
-            return AuthResult::Failure;
+            let mut outcome = MethodAuthOutcome::basic(
+                method.name(),
+                AuthResult::Failure,
+                "authentication cancelled",
+            );
+            outcome.summary.result = AuthMethodSummaryResult::Cancelled;
+            outcome.summary.reason = Some("cancelled".to_string());
+            outcome.summary.message = "authentication cancelled".to_string();
+            outcome.summary.attempts = merged_attempts;
+            return outcome;
         }
 
         if attempts > 0 {
             thread::sleep(Duration::from_millis(method.retry_delay_ms().into()));
         }
 
-        let result = method.authenticate(username, config, cancel_signal);
+        let mut outcome = method.authenticate(username, config, cancel_signal);
         attempts += 1;
-
-        if result != AuthResult::Retry || attempts >= max_attempts {
-            return result;
+        if let Some(attempt) = outcome.summary.attempts.first_mut() {
+            attempt.attempt = attempts;
         }
+        merged_attempts.extend(outcome.summary.attempts.clone());
+
+        if outcome.result != AuthResult::Retry || attempts >= max_attempts {
+            outcome.summary.attempts = merged_attempts;
+            return outcome;
+        }
+    }
+}
+
+fn session_summary(
+    started_at: chrono::DateTime<Local>,
+    result: AuthSummaryResult,
+    mode: ExecutionMode,
+    methods: Vec<AuthMethodSummary>,
+    service: Option<String>,
+) -> AuthSessionSummary {
+    AuthSessionSummary {
+        id: make_auth_summary_id(),
+        started_at: started_at.to_rfc3339(),
+        finished_at: Local::now().to_rfc3339(),
+        service,
+        result,
+        execution_mode: match mode {
+            ExecutionMode::Sequential => "sequential".to_string(),
+            ExecutionMode::Parallel => "parallel".to_string(),
+        },
+        methods,
+    }
+}
+
+fn method_summary_result(result: AuthResult) -> AuthMethodSummaryResult {
+    match result {
+        AuthResult::Success => AuthMethodSummaryResult::Success,
+        AuthResult::Failure => AuthMethodSummaryResult::Failure,
+        AuthResult::Retry => AuthMethodSummaryResult::Retry,
+        AuthResult::Unavailable => AuthMethodSummaryResult::Unavailable,
     }
 }
 
@@ -314,13 +463,18 @@ mod tests {
             _username: &str,
             _config: &AuthConfig,
             _cancel_signal: Option<&AtomicBool>,
-        ) -> AuthResult {
+        ) -> MethodAuthOutcome {
             self.attempts.lock().unwrap().push(self.name.clone());
-            if self.results.len() > 1 {
+            let result = if self.results.len() > 1 {
                 self.results.remove(0)
             } else {
                 self.results[0]
-            }
+            };
+            MethodAuthOutcome::basic(
+                &self.name,
+                result,
+                format!("{} returned {:?}", self.name, result),
+            )
         }
     }
 

@@ -12,9 +12,11 @@ pub use paths::{
     user_data_dir, user_exists, write_config_to_path, CONFIG_PATH_ENV, DATA_DIR_ENV,
 };
 pub use schema::{
-    AntiSpoofingConfig, AntiSpoofingModelConfig, BiopassConfig, DetectionConfig, FaceMethodConfig,
-    FingerConfig, FingerprintMethodConfig, MethodConfig, MethodsConfig, ModelConfig,
-    RecognitionConfig, StrategyConfig,
+    AntiSpoofingConfig, AntiSpoofingModelConfig, AuthHistoryConfig, BiopassConfig,
+    ConsoleLoggingConfig, DetectionConfig, DiagnosticsLoggingConfig, FaceMethodConfig,
+    FileLoggingConfig, FingerConfig, FingerprintMethodConfig, LogRetentionConfig,
+    LogRotationConfig, LoggingConfig, MethodConfig, MethodsConfig, ModelConfig, RecognitionConfig,
+    StrategyConfig,
 };
 
 #[cfg(test)]
@@ -388,6 +390,27 @@ methods:
         model:
           path: /absolute/current-ir.onnx
           threshold: 0.8
+logging:
+  file:
+    enabled: true
+    level: info
+    rotation:
+      kind: daily
+      max_size_mb: 10
+      max_files_per_day: 5
+    retention:
+      auth_days: 30
+      helper_days: 14
+      desktop_days: 14
+  console:
+    enabled: false
+    level: warn
+  diagnostics:
+    save_failed_frames: false
+    retention_days: 7
+  auth_history:
+    enabled: true
+    retention_days: 180
 "#;
         fs::write(&path, yaml).unwrap();
 
