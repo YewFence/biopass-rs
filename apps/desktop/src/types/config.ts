@@ -1,5 +1,6 @@
 export interface BiopassConfig {
   strategy: StrategyConfig;
+  logging: LoggingConfig;
   methods: MethodsConfig;
   models: ModelConfig[];
   appearance: string;
@@ -11,6 +12,37 @@ export interface StrategyConfig {
   order: string[];
   ignore_services: string[];
 }
+
+export interface LoggingConfig {
+  file: {
+    enabled: boolean;
+    level: LogLevelName;
+    rotation: {
+      kind: "daily";
+      max_size_mb: number;
+      max_files_per_day: number;
+    };
+    retention: {
+      auth_days: number;
+      helper_days: number;
+      desktop_days: number;
+    };
+  };
+  console: {
+    enabled: boolean;
+    level: LogLevelName;
+  };
+  diagnostics: {
+    save_failed_frames: boolean;
+    retention_days: number;
+  };
+  auth_history: {
+    enabled: boolean;
+    retention_days: number;
+  };
+}
+
+export type LogLevelName = "debug" | "info" | "warn" | "error";
 
 export interface MethodsConfig {
   face: FaceMethodConfig;

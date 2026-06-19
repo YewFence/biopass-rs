@@ -44,7 +44,9 @@ function parseIgnoredServicesInput(raw: string): string[] {
 
 export function StrategyConfig() {
   const strategy = useConfigurationStore((state) => state.config?.strategy);
+  const logging = useConfigurationStore((state) => state.config?.logging);
   const setStrategy = useConfigurationStore((state) => state.setStrategy);
+  const setLogging = useConfigurationStore((state) => state.setLogging);
   const [ignoredServicesInput, setIgnoredServicesInput] = useState("");
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -58,8 +60,9 @@ export function StrategyConfig() {
     setIgnoredServicesInput(strategy.ignore_services.join(", "));
   }, [strategy]);
 
-  if (!strategy) return null;
+  if (!strategy || !logging) return null;
   const strategyConfig = strategy;
+  const loggingConfig = logging;
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -98,20 +101,100 @@ export function StrategyConfig() {
           </a>
         </div>
 
-        {/* Debug Logging Toggle */}
+        {/* Logging */}
         <div className="flex items-center justify-between p-3 rounded-lg border border-border transition-all">
           <div className="grid gap-0.5">
-            <Label htmlFor="debug-enabled" className="text-sm font-medium flex items-center gap-2">
-              Verbose Debug Logging
+            <Label
+              htmlFor="file-logging-enabled"
+              className="text-sm font-medium flex items-center gap-2"
+            >
+              File logging
             </Label>
             <p className="text-xs text-muted-foreground max-w-100">
-              Enable detailed console output for authentication methods. Useful for troubleshooting.
+              Keep authentication diagnostics on disk while PAM output stays quiet.
             </p>
           </div>
           <Switch
-            id="debug-enabled"
-            checked={strategyConfig.debug}
-            onCheckedChange={(checked) => setStrategy({ ...strategyConfig, debug: checked })}
+            id="file-logging-enabled"
+            checked={loggingConfig.file.enabled}
+            onCheckedChange={(checked) =>
+              setLogging({
+                ...loggingConfig,
+                file: { ...loggingConfig.file, enabled: checked },
+              })
+            }
+          />
+        </div>
+
+        <div className="flex items-center justify-between p-3 rounded-lg border border-border transition-all">
+          <div className="grid gap-0.5">
+            <Label
+              htmlFor="console-logging-enabled"
+              className="text-sm font-medium flex items-center gap-2"
+            >
+              Console output
+            </Label>
+            <p className="text-xs text-muted-foreground max-w-100">
+              Print authentication diagnostics to the invoking terminal.
+            </p>
+          </div>
+          <Switch
+            id="console-logging-enabled"
+            checked={loggingConfig.console.enabled}
+            onCheckedChange={(checked) =>
+              setLogging({
+                ...loggingConfig,
+                console: { ...loggingConfig.console, enabled: checked },
+              })
+            }
+          />
+        </div>
+
+        <div className="flex items-center justify-between p-3 rounded-lg border border-border transition-all">
+          <div className="grid gap-0.5">
+            <Label
+              htmlFor="failed-frames-enabled"
+              className="text-sm font-medium flex items-center gap-2"
+            >
+              Save failed frames
+            </Label>
+            <p className="text-xs text-muted-foreground max-w-100">
+              Store captured face frames for camera and model diagnosis.
+            </p>
+          </div>
+          <Switch
+            id="failed-frames-enabled"
+            checked={loggingConfig.diagnostics.save_failed_frames}
+            onCheckedChange={(checked) =>
+              setLogging({
+                ...loggingConfig,
+                diagnostics: { ...loggingConfig.diagnostics, save_failed_frames: checked },
+              })
+            }
+          />
+        </div>
+
+        <div className="flex items-center justify-between p-3 rounded-lg border border-border transition-all">
+          <div className="grid gap-0.5">
+            <Label
+              htmlFor="auth-history-enabled"
+              className="text-sm font-medium flex items-center gap-2"
+            >
+              Authentication summaries
+            </Label>
+            <p className="text-xs text-muted-foreground max-w-100">
+              Record concise success and failure summaries for the Activity page.
+            </p>
+          </div>
+          <Switch
+            id="auth-history-enabled"
+            checked={loggingConfig.auth_history.enabled}
+            onCheckedChange={(checked) =>
+              setLogging({
+                ...loggingConfig,
+                auth_history: { ...loggingConfig.auth_history, enabled: checked },
+              })
+            }
           />
         </div>
 

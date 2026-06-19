@@ -1,4 +1,5 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
+pub mod activity;
 pub mod config;
 pub mod face;
 pub mod face_session;
@@ -7,6 +8,10 @@ pub mod fingerprint_auth;
 pub mod paths;
 pub mod system;
 
+use activity::{
+    activity_log_file_path, activity_logs_dir, auth_history_dir_path, list_auth_history,
+    read_activity_log_tail,
+};
 use config::{config_file_path, load_config, reset_config, save_config};
 use face::{capture_face, delete_face, list_faces};
 use face_session::{capture_face_in_session, start_face_preview, stop_face_preview};
@@ -54,6 +59,11 @@ pub fn run() {
             save_config,
             reset_config,
             config_file_path,
+            list_auth_history,
+            read_activity_log_tail,
+            activity_log_file_path,
+            activity_logs_dir,
+            auth_history_dir_path,
             get_current_username,
             capture_face,
             start_face_preview,

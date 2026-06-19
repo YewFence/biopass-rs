@@ -2,8 +2,10 @@ use biopass_rs_auth::{
     bootstrap_config_at, read_config_from_path, write_config_to_path, BootstrapOutcome,
 };
 pub use biopass_rs_auth::{
-    BiopassConfig, DetectionConfig, FaceMethodConfig, FingerConfig, FingerprintMethodConfig,
-    MethodsConfig, ModelConfig, RecognitionConfig, StrategyConfig,
+    AuthHistoryConfig, BiopassConfig, ConsoleLoggingConfig, DetectionConfig,
+    DiagnosticsLoggingConfig, FaceMethodConfig, FileLoggingConfig, FingerConfig,
+    FingerprintMethodConfig, LogRetentionConfig, LogRotationConfig, LoggingConfig, MethodsConfig,
+    ModelConfig, RecognitionConfig, StrategyConfig,
 };
 use serde::Serialize;
 use std::fs;
