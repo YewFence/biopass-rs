@@ -131,3 +131,53 @@ sudo usermod -aG video $USER
 ```
 
 For systemd services (like polkit), see [Polkit](Polkit.md).
+
+### SELinux Camera Denial on the Fedora Login Screen
+
+On Fedora/RHEL-based systems, the graphical login screen may log a SELinux denial like:
+
+```text
+SELinux is preventing biopass-rs-help from map access on the chr_file /dev/video0
+```
+
+When inspected with `ausearch`, the denial commonly looks like:
+
+```text
+scontext=system_u:system_r:xdm_t:s0-s0:c0.c1023
+tcontext=system_u:object_r:v4l_device_t:s0
+tclass=chr_file
+denied { map }
+```
+
+`biopass-rs-help` is usually the kernel-truncated process name for `biopass-rs-helper`. `xdm_t` means the helper is running from the GDM or display-manager login-screen context, `v4l_device_t` means `/dev/video0` has the normal video-device SELinux label, and `map` means the camera stack tried to memory-map the video device.
+
+If the denial only appears at the boot login screen and biopass-rs works after you sign in, it is usually safe to leave it alone. If you need face authentication on the login screen and it fails in SELinux enforcing mode, inspect the denial first:
+
+```bash
+sudo ausearch -m avc,user_avc -ts boot -c biopass-rs-help
+```
+
+After confirming that the denial only involves `xdm_t`, `v4l_device_t`, and `chr_file map`, generate a local SELinux module and review it before installing:
+
+```bash
+sudo ausearch -m avc,user_avc -ts boot -c biopass-rs-help --raw | audit2allow -M biopass-rs-helper-local
+cat biopass-rs-helper-local.te
+```
+
+The generated rule is usually:
+
+```te
+allow xdm_t v4l_device_t:chr_file map;
+```
+
+This allows only `map` access from the display-manager domain to video devices, but it applies to the whole `xdm_t` domain rather than only to `biopass-rs-helper`. If that scope is acceptable for your machine, install the module:
+
+```bash
+sudo semodule -i biopass-rs-helper-local.pp
+```
+
+To remove it later:
+
+```bash
+sudo semodule -r biopass-rs-helper-local
+```
