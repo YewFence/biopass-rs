@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { cmd } from "@/commands";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { ActivityLogComponent, AuthSessionSummary } from "@/types/activity";
+import type { ActivityLogComponent, AuthSessionSummary, IrLivenessSummary } from "@/types/activity";
 
 export const Route = createFileRoute("/activity")({
   component: ActivityPage,
@@ -121,6 +121,7 @@ function AuthSummaryRow({ entry }: { entry: AuthSessionSummary }) {
     () => entry.methods.find((method) => method.best_match)?.best_match ?? null,
     [entry.methods],
   );
+  const ir = useMemo(() => entry.methods.find((method) => method.ir)?.ir ?? null, [entry.methods]);
 
   return (
     <div className="rounded-lg border border-border bg-card p-4">
@@ -139,6 +140,7 @@ function AuthSummaryRow({ entry }: { entry: AuthSessionSummary }) {
               {best.threshold.toFixed(4)}
             </p>
           )}
+          {ir && <IrSummaryLine ir={ir} />}
         </div>
         <time className="shrink-0 text-xs text-muted-foreground">
           {new Date(entry.started_at).toLocaleString()}
@@ -152,12 +154,29 @@ function AuthSummaryRow({ entry }: { entry: AuthSessionSummary }) {
               <span className="font-medium capitalize">{method.method}</span>
               <span className="mx-2 text-muted-foreground">{method.result}</span>
               <span className="text-muted-foreground">{method.attempts.length} attempt(s)</span>
+              {method.ir && (
+                <span className="ml-2 text-muted-foreground">{formatIrSummary(method.ir)}</span>
+              )}
             </div>
           ))}
         </div>
       )}
     </div>
   );
+}
+
+function IrSummaryLine({ ir }: { ir: IrLivenessSummary }) {
+  return <p className="text-xs text-muted-foreground">{formatIrSummary(ir)}</p>;
+}
+
+function formatIrSummary(ir: IrLivenessSummary) {
+  const parts = [`IR ${ir.passed_frames}/${ir.frames} frame(s) passed`];
+  parts.push(`required ${ir.required_passes}`);
+  if (ir.last_failure) parts.push(`reason ${ir.last_failure}`);
+  if (ir.highest_detection_confidence !== null) {
+    parts.push(`highest confidence ${ir.highest_detection_confidence.toFixed(4)}`);
+  }
+  return parts.join(", ");
 }
 
 function labelForLogComponent(component: ActivityLogComponent) {
