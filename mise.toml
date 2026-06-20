@@ -99,6 +99,14 @@ run = "cargo build --all"
 description = "Run Rust tests"
 run = "cargo test --all"
 
+[tasks.coverage-rust]
+description = "Print Rust coverage summary"
+run = "cargo llvm-cov --workspace"
+
+[tasks.coverage-rust-codecov]
+description = "Generate Rust LCOV coverage report for Codecov"
+run = "cargo llvm-cov --workspace --lcov --output-path lcov.info"
+
 [tasks.check]
 description = "Run all checks"
 depends = ["check-app", "lint-rust", "clippy-rust", "test-rust"]
@@ -126,3 +134,4 @@ rust = "1"
 bun = "1"
 viteplus = "0"
 git-lfs = "latest"
+"cargo:cargo-llvm-cov" = "latest"
