@@ -28,7 +28,3 @@ pub fn get_config_path(_app: &AppHandle) -> Result<PathBuf, String> {
 pub fn get_data_dir(_app: &AppHandle) -> Result<PathBuf, String> {
     Ok(user_data_dir(&resolved_username()))
 }
-
-pub fn get_faces_dir(_app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(get_data_dir(_app)?.join("faces"))
-}

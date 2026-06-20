@@ -155,18 +155,7 @@ pub fn read_config_from_path(config_path: &Path) -> Result<BiopassConfig, String
 }
 
 pub fn list_faces(username: &str) -> Vec<PathBuf> {
-    let faces_dir = user_data_dir(username).join("faces");
-    let Ok(entries) = fs::read_dir(faces_dir) else {
-        return Vec::new();
-    };
-
-    let mut faces = entries
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| is_supported_face_image(path))
-        .collect::<Vec<_>>();
-    faces.sort();
-    faces
+    crate::list_enrolled_faces(&user_data_dir(username)).unwrap_or_default()
 }
 
 pub fn setup_config(username: &str) -> std::io::Result<()> {
@@ -192,18 +181,6 @@ pub fn write_config_to_path(path: &Path, config: &BiopassConfig) -> Result<(), S
 /// overwrites; used by `config reset` and the GUI "Reset to defaults" flow.
 pub fn reset_config_at_path(path: &Path, data_dir: &Path) -> Result<(), String> {
     write_config_to_path(path, &BiopassConfig::default_for_data_dir(data_dir))
-}
-
-pub(super) fn is_supported_face_image(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .map(|extension| {
-            matches!(
-                extension.to_ascii_lowercase().as_str(),
-                "jpg" | "jpeg" | "png" | "bmp" | "tga"
-            )
-        })
-        .unwrap_or(false)
 }
 
 #[cfg(test)]

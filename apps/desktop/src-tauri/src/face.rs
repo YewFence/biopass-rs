@@ -1,86 +1,47 @@
-use std::fs;
+use std::path::Path;
+
+use biopass_rs_auth::{
+    capture_face_jpeg, delete_enrolled_face, list_enrolled_faces, save_enrolled_face_jpeg,
+};
 use tauri::AppHandle;
 
 use crate::config::{require_loaded_config, BiopassConfig};
-use crate::paths::get_faces_dir;
+use crate::paths::get_data_dir;
 
 #[tauri::command]
 pub fn capture_face(app: AppHandle, camera: Option<String>) -> Result<String, String> {
-    let faces_dir = get_faces_dir(&app)?;
+    let data_dir = get_data_dir(&app)?;
     let app_config: BiopassConfig = require_loaded_config(&app)?;
+    let face_config = app_config.methods.face;
+    let jpeg = capture_face_jpeg(
+        camera.as_deref(),
+        &face_config.detection.model,
+        90,
+        face_config.auto_optimize_camera,
+    )
+    .map_err(|error| {
+        if error == "No face detected" {
+            "No face detected. Please position your face in front of the camera.".to_string()
+        } else {
+            format!("Capture failed: {error}")
+        }
+    })?;
 
-    let timestamp = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| format!("Failed to get timestamp: {}", e))?
-        .as_millis();
-    let filename = format!("face_{}.jpg", timestamp);
-    let file_path = faces_dir.join(&filename);
-
-    if !faces_dir.exists() {
-        fs::create_dir_all(&faces_dir)
-            .map_err(|e| format!("Failed to create faces directory: {}", e))?;
-    }
-
-    let detect_model = app_config.methods.face.detection.model;
-
-    let helper_bin = crate::system::biopass_rs_helper_path();
-
-    let mut cmd_builder = std::process::Command::new(&helper_bin);
-    cmd_builder
-        .arg("capture-face")
-        .arg("--output")
-        .arg(&file_path)
-        .arg("--model")
-        .arg(&detect_model);
-
-    if let Some(cam) = camera.filter(|s| !s.is_empty()) {
-        cmd_builder.arg("--camera").arg(cam);
-    }
-
-    let output = cmd_builder
-        .output()
-        .map_err(|e| format!("Failed to execute helper: {}", e))?;
-
-    if output.status.success() {
-        Ok(file_path.to_string_lossy().to_string())
-    } else if output.status.code() == Some(2) {
-        Err("No face detected. Please position your face in front of the camera.".to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        Err(format!(
-            "Capture failed (exit {}): {}",
-            output.status.code().unwrap_or(-1),
-            stderr
-        ))
-    }
+    Ok(save_enrolled_face_jpeg(&data_dir, &jpeg)?
+        .to_string_lossy()
+        .to_string())
 }
 
 #[tauri::command]
 pub fn list_faces(app: AppHandle) -> Result<Vec<String>, String> {
-    let faces_dir = get_faces_dir(&app)?;
-
-    if !faces_dir.exists() {
-        return Ok(vec![]);
-    }
-
-    let entries =
-        fs::read_dir(&faces_dir).map_err(|e| format!("Failed to read faces directory: {}", e))?;
-
-    let mut files: Vec<String> = entries
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path()
-                .extension()
-                .is_some_and(|ext| ext == "jpg" || ext == "png")
-        })
-        .map(|e| e.path().to_string_lossy().to_string())
-        .collect();
-
-    files.sort();
-    Ok(files)
+    let data_dir = get_data_dir(&app)?;
+    Ok(list_enrolled_faces(&data_dir)?
+        .into_iter()
+        .map(|path| path.to_string_lossy().to_string())
+        .collect())
 }
 
 #[tauri::command]
 pub fn delete_face(path: String) -> Result<(), String> {
-    fs::remove_file(&path).map_err(|e| format!("Failed to delete file: {}", e))
+    delete_enrolled_face(Path::new(&path))
 }

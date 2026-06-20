@@ -23,7 +23,6 @@ pub use schema::{
 mod tests {
     use super::*;
     use crate::config::migration::migrated_antispoofing;
-    use crate::config::paths::is_supported_face_image;
     use serde_yaml::Value;
     use std::fs;
     use std::path::Path;
@@ -463,13 +462,6 @@ methods:
         assert_eq!(anti.rgb.retry_delay_ms, 350);
         assert_eq!(anti.ir.retries, 5);
         assert_eq!(anti.ir.retry_delay_ms, 750);
-    }
-
-    #[test]
-    fn filters_supported_face_images() {
-        assert!(is_supported_face_image(Path::new("a.JPG")));
-        assert!(is_supported_face_image(Path::new("a.jpeg")));
-        assert!(!is_supported_face_image(Path::new("a.txt")));
     }
 
     #[test]
