@@ -34,11 +34,21 @@ impl LogLevel {
             LogLevel::Error => "error",
         }
     }
+
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "debug" => Some(LogLevel::Debug),
+            "info" => Some(LogLevel::Info),
+            "warn" => Some(LogLevel::Warn),
+            "error" => Some(LogLevel::Error),
+            _ => None,
+        }
+    }
 }
 
 pub use auth_session::{
-    authenticate_user, authenticate_user_with, build_auth_manager, AuthSessionPaths,
-    AuthSessionResult, AuthSessionStatus,
+    authenticate_user, authenticate_user_with, authenticate_user_with_options, build_auth_manager,
+    AuthSessionOptions, AuthSessionPaths, AuthSessionResult, AuthSessionStatus,
 };
 pub use camera::{
     camera_available, capture_rgb_frame, list_video_devices, CameraRequest, CameraSession,

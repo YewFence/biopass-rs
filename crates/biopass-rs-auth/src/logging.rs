@@ -46,9 +46,9 @@ impl RuntimeLoggingConfig {
         Self {
             data_dir,
             file_enabled: config.file.enabled,
-            file_level: parse_log_level(&config.file.level).unwrap_or(LogLevel::Info),
+            file_level: LogLevel::from_name(&config.file.level).unwrap_or(LogLevel::Info),
             console_enabled: config.console.enabled,
-            console_level: parse_log_level(&config.console.level).unwrap_or(LogLevel::Warn),
+            console_level: LogLevel::from_name(&config.console.level).unwrap_or(LogLevel::Warn),
             max_size_bytes: u64::from(config.file.rotation.max_size_mb.max(1)) * 1024 * 1024,
             max_files_per_day: config.file.rotation.max_files_per_day.max(1),
             save_failed_frames: config.diagnostics.save_failed_frames,
@@ -342,16 +342,6 @@ fn compare_modified_desc(a: &Path, b: &Path) -> Ordering {
         .and_then(|metadata| metadata.modified())
         .unwrap_or(SystemTime::UNIX_EPOCH);
     b_modified.cmp(&a_modified)
-}
-
-fn parse_log_level(level: &str) -> Option<LogLevel> {
-    match level {
-        "debug" => Some(LogLevel::Debug),
-        "info" => Some(LogLevel::Info),
-        "warn" => Some(LogLevel::Warn),
-        "error" => Some(LogLevel::Error),
-        _ => None,
-    }
 }
 
 #[cfg(test)]

@@ -35,9 +35,9 @@ fn run_cli_with_username_resolver(
 
     let username = cli.username;
     let code = match cli.command {
-        Commands::Auth { service } => {
+        Commands::Auth { service, log_level } => {
             let target = username_resolver(username.as_deref());
-            authenticate(target.as_deref(), Some(&service))
+            authenticate(target.as_deref(), Some(&service), log_level.as_deref())
         }
         Commands::Config { action } => match username_resolver(username.as_deref()) {
             Some(name) => commands::config::run(&name, action),
@@ -161,6 +161,7 @@ mod tests {
             data_dir: None,
             command: Commands::Auth {
                 service: "sudo".to_string(),
+                log_level: None,
             },
         };
 

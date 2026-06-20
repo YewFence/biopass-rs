@@ -33,6 +33,9 @@ pub enum Commands {
         /// Service name
         #[arg(short, long)]
         service: String,
+        /// Temporarily override file log level for this authentication run
+        #[arg(long, value_parser = ["debug", "info", "warn", "error"])]
+        log_level: Option<String>,
     },
     /// Manage the user's config file
     Config {
@@ -196,7 +199,27 @@ mod tests {
 
         assert_eq!(cli.username.as_deref(), Some("carol"));
         match cli.command {
-            Commands::Auth { service } => assert_eq!(service, "sudo"),
+            Commands::Auth { service, log_level } => {
+                assert_eq!(service, "sudo");
+                assert!(log_level.is_none());
+            }
+            _ => panic!("expected auth command"),
+        }
+    }
+
+    #[test]
+    fn auth_accepts_log_level_override() {
+        let cli = Cli::parse_from([
+            "biopass-rs-helper",
+            "auth",
+            "--service",
+            "sudo",
+            "--log-level",
+            "debug",
+        ]);
+
+        match cli.command {
+            Commands::Auth { log_level, .. } => assert_eq!(log_level.as_deref(), Some("debug")),
             _ => panic!("expected auth command"),
         }
     }
