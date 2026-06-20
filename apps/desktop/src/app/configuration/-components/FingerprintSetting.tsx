@@ -21,6 +21,7 @@ export function FingerprintSetting() {
   const [selectedFinger, setSelectedFinger] = useState<string>("");
   const [isAdding, setIsAdding] = useState(false);
   const [username, setUsername] = useState<string>("");
+  const [isAvailable, setIsAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
     let canceled = false;
@@ -31,6 +32,12 @@ export function FingerprintSetting() {
         if (canceled) return;
 
         setUsername(user);
+
+        const available = await cmd.fingerprint.isAvailable();
+        if (canceled) return;
+
+        setIsAvailable(available);
+        if (!available) return;
 
         // Sync enrolled fingers from backend
         const enrolledFingers = await cmd.fingerprint.listEnrolled(user);
@@ -54,6 +61,9 @@ export function FingerprintSetting() {
         }
       } catch (err) {
         console.error("Failed to sync fingerprints:", err);
+        if (!canceled) {
+          setIsAvailable(false);
+        }
       }
     };
 
@@ -80,6 +90,7 @@ export function FingerprintSetting() {
   const handleAdd = async () => {
     const currentConfig = useConfigurationStore.getState().config?.methods.fingerprint;
     if (!currentConfig) return;
+    if (!isAvailable) return;
 
     setIsAdding(true);
     const toastId = toast.loading(
@@ -129,6 +140,7 @@ export function FingerprintSetting() {
   const handleDelete = async (fingerName: string) => {
     const currentConfig = useConfigurationStore.getState().config?.methods.fingerprint;
     if (!currentConfig) return;
+    if (!isAvailable) return;
 
     try {
       await cmd.fingerprint.remove(username, fingerName);
@@ -149,6 +161,12 @@ export function FingerprintSetting() {
 
   return (
     <div className="grid gap-4">
+      {isAvailable === false && (
+        <div className="p-4 rounded-lg bg-muted/50 border border-border/50 text-sm text-muted-foreground">
+          No fingerprint reader is available on this device, so fingerprint enrollment is disabled.
+        </div>
+      )}
+
       <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
         <h4 className="font-medium mb-3 text-sm">Registered Fingers</h4>
         {config.fingers.length > 0 ? (
@@ -166,6 +184,7 @@ export function FingerprintSetting() {
                 <button
                   type="button"
                   onClick={() => handleDelete(f.name)}
+                  disabled={!isAvailable}
                   className="p-1 rounded hover:bg-destructive/20 text-destructive cursor-pointer transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -184,7 +203,7 @@ export function FingerprintSetting() {
           <div className="grid gap-2">
             <Label className="text-xs text-muted-foreground">Select Finger</Label>
             <Select value={selectedFinger} onValueChange={setSelectedFinger}>
-              <SelectTrigger className="h-9">
+              <SelectTrigger className="h-9" disabled={!isAvailable}>
                 <SelectValue placeholder="Select Finger">
                   {selectedFinger && (
                     <span className="capitalize">{selectedFinger.replace(/-/g, " ")}</span>
@@ -208,7 +227,7 @@ export function FingerprintSetting() {
 
           <Button
             onClick={handleAdd}
-            disabled={isAdding || !selectedFinger}
+            disabled={!isAvailable || isAdding || !selectedFinger}
             className="w-full h-9 mt-1"
           >
             {isAdding ? "Enrolling..." : "Enroll Finger"}

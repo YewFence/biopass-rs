@@ -1,5 +1,6 @@
 import { Fingerprint, ScanFace, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { cmd } from "@/commands";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useConfigurationStore } from "../-stores/configuration-store";
@@ -13,6 +14,56 @@ export function MethodConfig() {
   const setFaceConfig = useConfigurationStore((state) => state.setFaceConfig);
   const setFingerprintConfig = useConfigurationStore((state) => state.setFingerprintConfig);
   const [expandedMethod, setExpandedMethod] = useState<string | null>("face");
+  const [faceAvailable, setFaceAvailable] = useState<boolean | null>(null);
+  const [fingerprintAvailable, setFingerprintAvailable] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let canceled = false;
+
+    const loadHardwareState = async () => {
+      try {
+        const devices = await cmd.face.listVideoDevices();
+        if (!canceled) {
+          setFaceAvailable(devices.length > 0);
+        }
+      } catch (err) {
+        console.error("Failed to check camera availability:", err);
+        if (!canceled) {
+          setFaceAvailable(false);
+        }
+      }
+
+      try {
+        const available = await cmd.fingerprint.isAvailable();
+        if (!canceled) {
+          setFingerprintAvailable(available);
+        }
+      } catch (err) {
+        console.error("Failed to check fingerprint availability:", err);
+        if (!canceled) {
+          setFingerprintAvailable(false);
+        }
+      }
+    };
+
+    void loadHardwareState();
+
+    return () => {
+      canceled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (faceAvailable === false && faceConfig?.enable) {
+      setFaceConfig({ ...faceConfig, enable: false });
+    }
+  }, [faceAvailable, faceConfig, setFaceConfig]);
+
+  useEffect(() => {
+    if (fingerprintAvailable === false && fingerprintConfig?.enable) {
+      setFingerprintConfig({ ...fingerprintConfig, enable: false });
+    }
+  }, [fingerprintAvailable, fingerprintConfig, setFingerprintConfig]);
 
   if (!faceConfig || !fingerprintConfig) return null;
 
@@ -25,6 +76,8 @@ export function MethodConfig() {
     face: "from-violet-500 to-purple-500",
     fingerprint: "from-emerald-500 to-teal-500",
   };
+  const faceFrozen = faceAvailable === false;
+  const fingerprintFrozen = fingerprintAvailable === false;
 
   return (
     <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm p-6 shadow-lg">
@@ -41,8 +94,14 @@ export function MethodConfig() {
           title="Face Recognition"
           icon={methodIcons.face}
           color={methodColors.face}
-          enabled={faceConfig.enable}
-          onToggle={(enable) => setFaceConfig({ ...faceConfig, enable })}
+          enabled={faceFrozen ? false : faceConfig.enable}
+          frozen={faceFrozen}
+          frozenMessage="No camera is available on this device."
+          onToggle={(enable) => {
+            if (!faceFrozen) {
+              setFaceConfig({ ...faceConfig, enable });
+            }
+          }}
           expanded={expandedMethod === "face"}
           onExpand={() => setExpandedMethod(expandedMethod === "face" ? null : "face")}
         >
@@ -54,8 +113,14 @@ export function MethodConfig() {
           title="Fingerprint"
           icon={methodIcons.fingerprint}
           color={methodColors.fingerprint}
-          enabled={fingerprintConfig.enable}
-          onToggle={(enable) => setFingerprintConfig({ ...fingerprintConfig, enable })}
+          enabled={fingerprintFrozen ? false : fingerprintConfig.enable}
+          frozen={fingerprintFrozen}
+          frozenMessage="No fingerprint reader is available on this device."
+          onToggle={(enable) => {
+            if (!fingerprintFrozen) {
+              setFingerprintConfig({ ...fingerprintConfig, enable });
+            }
+          }}
           expanded={expandedMethod === "fingerprint"}
           onExpand={() =>
             setExpandedMethod(expandedMethod === "fingerprint" ? null : "fingerprint")

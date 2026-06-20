@@ -1,5 +1,9 @@
 import { invokeCommand } from "./core";
 
+function isAvailable() {
+  return invokeCommand<boolean>("fingerprint_is_available");
+}
+
 function listEnrolled(username: string) {
   return invokeCommand<string[]>("list_enrolled_fingerprints", { username });
 }
@@ -19,6 +23,7 @@ function remove(username: string, fingerName: string) {
 }
 
 export const fingerprint = {
+  isAvailable,
   listEnrolled,
   enroll,
   remove,
