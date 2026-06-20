@@ -28,9 +28,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import type { LogLevelName } from "@/types/config";
 import { useConfigurationStore } from "../-stores/configuration-store";
 
 const PAM_MANUAL_SETUP_GUIDE_URL = "https://github.com/TickLabVN/biopass/blob/main/docs/PAM.md";
+const LOG_LEVEL_OPTIONS: { value: LogLevelName; label: string }[] = [
+  { value: "debug", label: "Debug" },
+  { value: "info", label: "Info" },
+  { value: "warn", label: "Warning" },
+  { value: "error", label: "Error" },
+];
 
 function parseIgnoredServicesInput(raw: string): string[] {
   return raw
@@ -126,28 +133,60 @@ export function StrategyConfig() {
           />
         </div>
 
-        <div className="flex items-center justify-between p-3 rounded-lg border border-border transition-all">
-          <div className="grid gap-0.5">
-            <Label
-              htmlFor="console-logging-enabled"
-              className="text-sm font-medium flex items-center gap-2"
-            >
-              Console output
-            </Label>
-            <p className="text-xs text-muted-foreground max-w-100">
-              Print authentication diagnostics to the invoking terminal.
-            </p>
+        <div className="grid gap-3 p-3 rounded-lg border border-border transition-all">
+          <div className="flex items-center justify-between gap-4">
+            <div className="grid gap-0.5">
+              <Label
+                htmlFor="console-logging-enabled"
+                className="text-sm font-medium flex items-center gap-2"
+              >
+                Console output
+              </Label>
+              <p className="text-xs text-muted-foreground max-w-100">
+                Print authentication diagnostics to the invoking terminal.
+              </p>
+            </div>
+            <Switch
+              id="console-logging-enabled"
+              checked={loggingConfig.console.enabled}
+              onCheckedChange={(checked) =>
+                setLogging({
+                  ...loggingConfig,
+                  console: { ...loggingConfig.console, enabled: checked },
+                })
+              }
+            />
           </div>
-          <Switch
-            id="console-logging-enabled"
-            checked={loggingConfig.console.enabled}
-            onCheckedChange={(checked) =>
-              setLogging({
-                ...loggingConfig,
-                console: { ...loggingConfig.console, enabled: checked },
-              })
-            }
-          />
+
+          <div className="grid gap-2">
+            <Label
+              htmlFor="console-log-level"
+              className="text-sm font-medium text-muted-foreground"
+            >
+              Console log level
+            </Label>
+            <Select
+              value={loggingConfig.console.level}
+              disabled={!loggingConfig.console.enabled}
+              onValueChange={(value) =>
+                setLogging({
+                  ...loggingConfig,
+                  console: { ...loggingConfig.console, level: value as LogLevelName },
+                })
+              }
+            >
+              <SelectTrigger id="console-log-level" className="w-full h-10 transition-all">
+                <SelectValue placeholder="Select console log level" />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {LOG_LEVEL_OPTIONS.map((level) => (
+                  <SelectItem key={level.value} value={level.value} className="cursor-pointer">
+                    {level.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="flex items-center justify-between p-3 rounded-lg border border-border transition-all">
