@@ -47,3 +47,14 @@ export interface IrLivenessSummary {
 }
 
 export type ActivityLogComponent = "auth" | "helper" | "desktop";
+
+export type PamCode = "success" | "auth_error" | "ignore";
+
+export type AuthTestResult =
+  | {
+      status: "completed";
+      pam_code: PamCode;
+    }
+  | {
+      status: "ignored";
+    };

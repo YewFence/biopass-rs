@@ -1,4 +1,4 @@
-import type { ActivityLogComponent, AuthSessionSummary } from "@/types/activity";
+import type { ActivityLogComponent, AuthSessionSummary, AuthTestResult } from "@/types/activity";
 import { invokeCommand } from "./core";
 
 function listAuthHistory(limit = 100) {
@@ -24,10 +24,15 @@ function authHistoryDir() {
   return invokeCommand<string>("auth_history_dir_path");
 }
 
+function testAuthFlow(service = "biopass-rs-desktop") {
+  return invokeCommand<AuthTestResult>("test_auth_flow", { service });
+}
+
 export const activity = {
   listAuthHistory,
   readLogTail,
   logFilePath,
   logsDir,
   authHistoryDir,
+  testAuthFlow,
 };

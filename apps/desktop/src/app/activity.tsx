@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { FileText, RefreshCcw, ShieldCheck, Terminal } from "lucide-react";
+import { FileText, Play, RefreshCcw, ShieldCheck, Terminal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { cmd } from "@/commands";
@@ -16,6 +16,7 @@ function ActivityPage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [component, setComponent] = useState<ActivityLogComponent>("auth");
   const [loading, setLoading] = useState(false);
+  const [testingAuth, setTestingAuth] = useState(false);
 
   async function loadHistory() {
     setLoading(true);
@@ -47,6 +48,26 @@ function ActivityPage() {
     void loadLogs(component);
   }, [component]);
 
+  async function testAuthFlow() {
+    setTestingAuth(true);
+    try {
+      const result = await cmd.activity.testAuthFlow();
+      if (result.status === "ignored") {
+        toast.info("Authentication was ignored by the current configuration.");
+      } else if (result.pam_code === "success") {
+        toast.success("Authentication succeeded.");
+      } else {
+        toast.error("Authentication failed.");
+      }
+      await loadHistory();
+      await loadLogs("auth");
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setTestingAuth(false);
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -56,18 +77,24 @@ function ActivityPage() {
             Authentication summaries and diagnostic logs
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            void loadHistory();
-            void loadLogs();
-          }}
-          disabled={loading}
-        >
-          <RefreshCcw className="w-4 h-4" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={() => void testAuthFlow()} disabled={testingAuth}>
+            <Play className="w-4 h-4" />
+            {testingAuth ? "Testing..." : "Test Auth"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void loadHistory();
+              void loadLogs();
+            }}
+            disabled={loading}
+          >
+            <RefreshCcw className="w-4 h-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="history" className="space-y-4">

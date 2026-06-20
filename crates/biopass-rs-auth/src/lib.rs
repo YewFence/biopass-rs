@@ -69,8 +69,9 @@ pub use fingerprint_auth::{EnrollStatusCallback, FingerprintAuth};
 pub use image_io::{decode_jpeg_rgb, encode_jpeg};
 pub use inference::{F32TensorOutput, InferenceModel, TensorInfo};
 pub use installer::{
-    check_models_present, download_models, import_legacy_faces_for_user, import_legacy_faces_from,
-    run_ldconfig, ImportLegacyFacesOutcome,
+    builtin_models, check_models_present, download_models, download_models_report,
+    import_legacy_faces_for_user, import_legacy_faces_from, run_ldconfig, BuiltinModelInfo,
+    ImportLegacyFacesOutcome, ModelDownloadReport,
 };
 pub use logging::{
     auth_history_dir, emit_log, log_file_path, logs_dir, make_auth_summary_id, read_auth_history,

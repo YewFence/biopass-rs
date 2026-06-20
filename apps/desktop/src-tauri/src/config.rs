@@ -1,5 +1,6 @@
 use biopass_rs_auth::{
-    bootstrap_config_at, read_config_from_path, write_config_to_path, BootstrapOutcome,
+    bootstrap_config_at, migrate_config_at_path, read_config_from_path, write_config_to_path,
+    BootstrapOutcome,
 };
 pub use biopass_rs_auth::{
     AuthHistoryConfig, BiopassConfig, ConsoleLoggingConfig, DetectionConfig,
@@ -56,11 +57,21 @@ pub fn load_config_internal(app: &AppHandle) -> Result<LoadConfigResult, String>
         return initialize_missing_config(app, &config_path);
     }
 
+    let migrated = match migrate_config_at_path(&config_path) {
+        Ok(migrated) => migrated,
+        Err(error) => {
+            return Ok(LoadConfigResult::Broken {
+                path: path_to_string(&config_path),
+                message: format!("Failed to migrate config schema: {error}"),
+            });
+        }
+    };
+
     match read_config_from_path(&config_path) {
         Ok(config) => Ok(LoadConfigResult::Loaded {
             path: path_to_string(&config_path),
             config: Box::new(config),
-            migrated: false,
+            migrated,
             initialized: false,
         }),
         Err(message) => Ok(LoadConfigResult::Broken {

@@ -3,16 +3,19 @@ use crate::{
     write_auth_summary, AuthManager, AuthOutcome, BiopassConfig, FaceAuth, FingerprintAuth,
     LogComponent, LogLevel, PamCode, RuntimeLoggingConfig,
 };
+use serde::Serialize;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(tag = "status", content = "pam_code", rename_all = "snake_case")]
 pub enum AuthSessionStatus {
     Completed(PamCode),
     Ignored,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct AuthSessionResult {
+    #[serde(flatten)]
     pub status: AuthSessionStatus,
 }
 

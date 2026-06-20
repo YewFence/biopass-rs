@@ -113,6 +113,18 @@ export interface ModelConfig {
   type: "detection" | "recognition" | "anti-spoofing";
 }
 
+export interface BuiltinModelInfo extends ModelConfig {
+  filename: string;
+  url: string;
+  present: boolean;
+}
+
+export interface ModelDownloadReport {
+  models: BuiltinModelInfo[];
+  downloaded: number;
+  skipped: number;
+}
+
 export type LoadConfigResult =
   | {
       status: "loaded";
