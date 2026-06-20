@@ -121,7 +121,7 @@ jobs:
             cargo-coverage-${{ runner.os }}-
             cargo-${{ runner.os }}-
 
-      - name: Generate Rust coverage
+      - name: Generate core Rust coverage
         run: mise run coverage-rust-codecov
 
       - name: Upload coverage to Codecov
@@ -129,7 +129,8 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: lcov.info
-          flags: rust
+          flags: rust-core
+          name: rust-core
           fail_ci_if_error: true
 
   audit:
