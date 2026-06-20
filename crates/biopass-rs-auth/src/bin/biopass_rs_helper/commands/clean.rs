@@ -65,3 +65,16 @@ fn format_bytes(bytes: u64) -> String {
     }
     format!("{bytes} B")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn format_bytes_uses_largest_binary_unit() {
+        assert_eq!(format_bytes(42), "42 B");
+        assert_eq!(format_bytes(1024), "1.00 KiB");
+        assert_eq!(format_bytes(3 * 1024 * 1024), "3.00 MiB");
+        assert_eq!(format_bytes(5 * 1024 * 1024 * 1024), "5.00 GiB");
+    }
+}

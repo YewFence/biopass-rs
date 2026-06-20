@@ -193,7 +193,49 @@ pub fn check_models_present() -> bool {
     let Ok(data_dir) = models_dir() else {
         return false;
     };
+    models_present_in_dir(&data_dir)
+}
+
+fn models_present_in_dir(data_dir: &Path) -> bool {
     MODELS
         .iter()
         .all(|(filename, _)| data_dir.join(filename).exists())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn models_present_in_dir_requires_every_current_model() {
+        let directory = tempfile::tempdir().unwrap();
+
+        for (filename, _) in MODELS.iter().take(MODELS.len() - 1) {
+            fs::write(directory.path().join(filename), b"model").unwrap();
+        }
+
+        assert!(!models_present_in_dir(directory.path()));
+
+        let (filename, _) = MODELS.last().unwrap();
+        fs::write(directory.path().join(filename), b"model").unwrap();
+
+        assert!(models_present_in_dir(directory.path()));
+    }
+
+    #[test]
+    fn remove_legacy_models_keeps_current_models() {
+        let directory = tempfile::tempdir().unwrap();
+        for filename in LEGACY_MODELS {
+            fs::write(directory.path().join(filename), b"legacy").unwrap();
+        }
+        let (current, _) = MODELS[0];
+        fs::write(directory.path().join(current), b"current").unwrap();
+
+        remove_legacy_models(directory.path());
+
+        for filename in LEGACY_MODELS {
+            assert!(!directory.path().join(filename).exists());
+        }
+        assert!(directory.path().join(current).exists());
+    }
 }

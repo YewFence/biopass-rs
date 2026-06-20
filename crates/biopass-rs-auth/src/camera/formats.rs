@@ -28,3 +28,25 @@ impl FrameFormat {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn frame_formats_round_trip_through_fourcc() {
+        for format in [
+            FrameFormat::Yuyv,
+            FrameFormat::Mjpeg,
+            FrameFormat::Nv12,
+            FrameFormat::Grey,
+        ] {
+            assert_eq!(FrameFormat::from_fourcc(format.fourcc()), Some(format));
+        }
+    }
+
+    #[test]
+    fn unknown_fourcc_is_rejected() {
+        assert_eq!(FrameFormat::from_fourcc(FourCC::new(b"RGB3")), None);
+    }
+}
