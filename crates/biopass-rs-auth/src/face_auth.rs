@@ -17,9 +17,6 @@ use crate::{
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-#[cfg(test)]
-static DATA_DIR_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
 pub struct FaceAuth {
     config: FaceMethodConfig,
     runtime: Box<dyn FaceAuthRuntime>,
@@ -466,7 +463,7 @@ mod tests {
         path: &std::path::Path,
         f: impl FnOnce() -> T + std::panic::UnwindSafe,
     ) -> T {
-        let _guard = super::DATA_DIR_TEST_LOCK.lock().unwrap();
+        let _guard = crate::ENV_TEST_LOCK.lock().unwrap();
         let previous = std::env::var_os(crate::DATA_DIR_ENV);
         std::env::set_var(crate::DATA_DIR_ENV, path);
         let result = std::panic::catch_unwind(f);

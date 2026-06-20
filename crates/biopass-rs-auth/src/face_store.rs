@@ -83,6 +83,32 @@ mod tests {
     }
 
     #[test]
+    fn list_enrolled_faces_accepts_supported_extensions_case_insensitively() {
+        let directory = tempfile::tempdir().unwrap();
+        let faces = faces_dir(directory.path());
+        std::fs::create_dir_all(&faces).unwrap();
+        for name in ["a.JPG", "b.JPEG", "c.PNG", "d.BMP", "e.TGA"] {
+            std::fs::write(faces.join(name), b"face").unwrap();
+        }
+        std::fs::write(faces.join("ignored.gif"), b"gif").unwrap();
+        std::fs::write(faces.join("no_extension"), b"none").unwrap();
+
+        let listed = list_enrolled_faces(directory.path()).unwrap();
+
+        assert_eq!(listed.len(), 5);
+        assert!(listed.iter().all(|path| is_supported_face_image(path)));
+    }
+
+    #[test]
+    fn list_enrolled_faces_returns_empty_for_missing_directory() {
+        let directory = tempfile::tempdir().unwrap();
+
+        let listed = list_enrolled_faces(directory.path()).unwrap();
+
+        assert!(listed.is_empty());
+    }
+
+    #[test]
     fn save_enrolled_face_jpeg_creates_faces_dir() {
         let directory = tempfile::tempdir().unwrap();
 
@@ -101,5 +127,16 @@ mod tests {
         delete_enrolled_face(&path).unwrap();
 
         assert!(!path.exists());
+    }
+
+    #[test]
+    fn delete_enrolled_face_reports_missing_file() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("missing.jpg");
+
+        let error = delete_enrolled_face(&path).unwrap_err();
+
+        assert!(error.contains("Failed to delete face image"));
+        assert!(error.contains("missing.jpg"));
     }
 }

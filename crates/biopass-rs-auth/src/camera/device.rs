@@ -114,10 +114,41 @@ mod tests {
     use super::*;
 
     #[test]
+    fn video_device_display_name_uses_card_when_present() {
+        let device = VideoDevice {
+            path: PathBuf::from("/dev/video2"),
+            driver: "uvcvideo".to_string(),
+            card: "IR Camera".to_string(),
+        };
+
+        assert_eq!(device.display_name(), "IR Camera (/dev/video2)");
+        assert_eq!(device.path_str(), "/dev/video2");
+    }
+
+    #[test]
+    fn video_device_display_name_falls_back_to_path() {
+        let device = VideoDevice {
+            path: PathBuf::from("/dev/video3"),
+            driver: "uvcvideo".to_string(),
+            card: String::new(),
+        };
+
+        assert_eq!(device.display_name(), "/dev/video3");
+    }
+
+    #[test]
     fn video_device_name_parser_accepts_numbered_devices_only() {
         assert!(is_video_device_name("video0"));
         assert!(is_video_device_name("video12"));
         assert!(!is_video_device_name("video"));
         assert!(!is_video_device_name("video-control"));
+    }
+
+    #[test]
+    fn video_device_index_parses_device_suffix() {
+        assert_eq!(video_device_index(Path::new("/dev/video0")), Some(0));
+        assert_eq!(video_device_index(Path::new("/dev/video42")), Some(42));
+        assert_eq!(video_device_index(Path::new("/dev/video")), None);
+        assert_eq!(video_device_index(Path::new("/dev/camera0")), None);
     }
 }

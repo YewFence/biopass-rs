@@ -206,6 +206,28 @@ mod tests {
     }
 
     #[test]
+    fn grey_stats_ignore_stride_padding() {
+        let data = [10, 20, 200, 30, 40, 201];
+        let stats = calculate_grey_frame_stats(&data, 2, 2, 3);
+
+        assert_eq!(stats.min, 10);
+        assert_eq!(stats.max, 40);
+        assert!((stats.mean - 25.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn grey_stats_default_for_empty_dimensions() {
+        assert_eq!(
+            calculate_grey_frame_stats(&[255], 0, 1, 1),
+            GreyFrameStats::default()
+        );
+        assert_eq!(
+            calculate_grey_frame_stats(&[255], 1, 0, 1),
+            GreyFrameStats::default()
+        );
+    }
+
+    #[test]
     fn dark_ir_frame_requires_both_mean_and_max_below_thresholds() {
         let dark = GreyFrameStats {
             mean: 5.0,

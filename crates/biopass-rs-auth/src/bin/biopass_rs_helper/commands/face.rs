@@ -154,3 +154,80 @@ pub(crate) fn preview_session(
 
     EXIT_SUCCESS
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn crop_face_reports_input_read_errors_as_auth_error() {
+        let directory = tempfile::tempdir().unwrap();
+        let input = directory.path().join("missing.jpg");
+        let output = directory.path().join("face.jpg");
+
+        assert_eq!(
+            crop_face(&input, &output, "/tmp/missing-model.onnx", 90),
+            EXIT_AUTH_ERR
+        );
+        assert!(!output.exists());
+    }
+
+    #[test]
+    fn crop_face_reports_model_load_errors_as_auth_error() {
+        let directory = tempfile::tempdir().unwrap();
+        let input = directory.path().join("input.jpg");
+        let output = directory.path().join("face.jpg");
+        let frame = biopass_rs_auth::RgbFrame::new(1, 1, vec![255, 0, 0]).unwrap();
+        std::fs::write(&input, biopass_rs_auth::encode_jpeg(&frame, 90).unwrap()).unwrap();
+
+        assert_eq!(
+            crop_face(&input, &output, "/tmp/missing-model.onnx", 90),
+            EXIT_AUTH_ERR
+        );
+        assert!(!output.exists());
+    }
+
+    #[test]
+    fn capture_face_reports_missing_camera_as_auth_error() {
+        let directory = tempfile::tempdir().unwrap();
+        let output = directory.path().join("face.jpg");
+
+        assert_eq!(
+            capture_face(
+                Some("/dev/biopass-rs-missing-camera"),
+                &output,
+                "/tmp/missing-model.onnx",
+                90,
+                Some("missing-user"),
+            ),
+            EXIT_AUTH_ERR
+        );
+        assert!(!output.exists());
+    }
+
+    #[test]
+    fn preview_session_reports_missing_model_as_auth_error() {
+        assert_eq!(
+            preview_session(
+                Some("/dev/biopass-rs-missing-camera"),
+                Some("/tmp/missing-model.onnx"),
+                70,
+                Some("missing-user"),
+            ),
+            EXIT_AUTH_ERR
+        );
+    }
+
+    #[test]
+    fn preview_session_reports_missing_camera_as_auth_error_without_model() {
+        assert_eq!(
+            preview_session(
+                Some("/dev/biopass-rs-missing-camera"),
+                None,
+                70,
+                Some("missing-user"),
+            ),
+            EXIT_AUTH_ERR
+        );
+    }
+}

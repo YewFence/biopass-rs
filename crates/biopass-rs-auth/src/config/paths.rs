@@ -185,8 +185,33 @@ pub fn reset_config_at_path(path: &Path, data_dir: &Path) -> Result<(), String> 
 
 #[cfg(test)]
 mod tests {
-    use super::absolutize_configured_path;
-    use std::path::PathBuf;
+    use super::*;
+    use std::path::{Path, PathBuf};
+
+    fn with_env_var<T>(
+        key: &str,
+        value: Option<&Path>,
+        f: impl FnOnce() -> T + std::panic::UnwindSafe,
+    ) -> T {
+        let _guard = crate::ENV_TEST_LOCK.lock().unwrap();
+        let previous = std::env::var_os(key);
+        match value {
+            Some(value) => std::env::set_var(key, value),
+            None => std::env::remove_var(key),
+        }
+        let result = std::panic::catch_unwind(f);
+
+        if let Some(value) = previous {
+            std::env::set_var(key, value);
+        } else {
+            std::env::remove_var(key);
+        }
+
+        match result {
+            Ok(value) => value,
+            Err(panic) => std::panic::resume_unwind(panic),
+        }
+    }
 
     #[test]
     fn configured_relative_paths_are_rooted_at_current_dir() {
@@ -201,5 +226,75 @@ mod tests {
         let path = PathBuf::from("/tmp/biopass-rs-dev-data");
 
         assert_eq!(absolutize_configured_path(path.clone()), path);
+    }
+
+    #[test]
+    fn env_path_trims_and_absolutizes_values() {
+        let directory = tempfile::tempdir().unwrap();
+        let relative = PathBuf::from("dev-config.yaml");
+
+        with_env_var(CONFIG_PATH_ENV, Some(&relative), || {
+            let path = env_path(CONFIG_PATH_ENV).unwrap();
+            assert!(path.is_absolute());
+            assert!(path.ends_with("dev-config.yaml"));
+        });
+
+        with_env_var(DATA_DIR_ENV, Some(directory.path()), || {
+            assert_eq!(env_path(DATA_DIR_ENV).unwrap(), directory.path());
+        });
+    }
+
+    #[test]
+    fn env_path_ignores_missing_or_blank_values() {
+        with_env_var(CONFIG_PATH_ENV, None, || {
+            assert!(env_path(CONFIG_PATH_ENV).is_none());
+        });
+
+        let blank = Path::new("   ");
+        with_env_var(CONFIG_PATH_ENV, Some(blank), || {
+            assert!(env_path(CONFIG_PATH_ENV).is_none());
+        });
+    }
+
+    #[test]
+    fn config_parse_error_message_mentions_recovery_command() {
+        let message = config_parse_error_message(Path::new("/tmp/config.yaml"), "bad yaml");
+
+        assert!(message.contains("/tmp/config.yaml"));
+        assert!(message.contains("bad yaml"));
+        assert!(message.contains("biopass-rs-helper config reset"));
+    }
+
+    #[test]
+    fn write_config_creates_parent_and_read_config_round_trips() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join(".config/biopass-rs/config.yaml");
+        let config = BiopassConfig::default_for_data_dir(directory.path());
+
+        write_config_to_path(&path, &config).unwrap();
+
+        assert_eq!(read_config_from_path(&path).unwrap(), config);
+    }
+
+    #[test]
+    fn read_config_reports_missing_file_path() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("missing.yaml");
+
+        let error = read_config_from_path(&path).unwrap_err();
+
+        assert!(error.contains("Failed to read config"));
+        assert!(error.contains(&path.display().to_string()));
+    }
+
+    #[test]
+    fn setup_config_creates_faces_and_debug_directories() {
+        let directory = tempfile::tempdir().unwrap();
+        with_env_var(DATA_DIR_ENV, Some(directory.path()), || {
+            setup_config("missing-user").unwrap();
+        });
+
+        assert!(directory.path().join("faces").is_dir());
+        assert!(directory.path().join("debugs").is_dir());
     }
 }

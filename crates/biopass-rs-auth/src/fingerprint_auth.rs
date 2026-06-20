@@ -377,6 +377,10 @@ mod tests {
             verify_status_to_result("verify-swipe-too-short", true),
             Some(AuthResult::Retry)
         );
+        assert_eq!(
+            verify_status_to_result("verify-retry-scan", true),
+            Some(AuthResult::Retry)
+        );
     }
 
     #[test]
@@ -386,6 +390,7 @@ mod tests {
             verify_status_to_result("verify-swipe-too-short", false),
             None
         );
+        assert_eq!(verify_status_to_result("verify-retry-scan", false), None);
     }
 
     #[test]
@@ -417,6 +422,17 @@ mod tests {
         assert_eq!(
             wait_for_verify_result(&receiver, 1000, Some(&cancel_signal)),
             AuthResult::Failure
+        );
+    }
+
+    #[test]
+    fn wait_for_verify_result_reports_disconnected_listener() {
+        let (sender, receiver) = mpsc::channel();
+        drop(sender);
+
+        assert_eq!(
+            wait_for_verify_result(&receiver, 1000, None),
+            AuthResult::Unavailable
         );
     }
 }
