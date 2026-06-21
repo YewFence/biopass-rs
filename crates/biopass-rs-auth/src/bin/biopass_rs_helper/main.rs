@@ -82,8 +82,12 @@ fn run_cli_with_username_resolver(
             );
             return ExitCode::SUCCESS;
         }
-        Commands::Clean => match username_resolver(username.as_deref()) {
-            Some(name) => commands::clean::run(&name),
+        Commands::Clean {
+            target,
+            all,
+            dry_run,
+        } => match username_resolver(username.as_deref()) {
+            Some(name) => commands::clean::run(&name, target, all, dry_run),
             None => {
                 eprintln!(
                     "clean: no target user provided and none could be inferred from the environment"
@@ -98,6 +102,7 @@ fn run_cli_with_username_resolver(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cli::CleanTargetArg;
     use clap_complete::Shell;
 
     fn no_username(_: Option<&str>) -> Option<String> {
@@ -144,7 +149,11 @@ mod tests {
             username: Some(String::new()),
             config: None,
             data_dir: None,
-            command: Commands::Clean,
+            command: Commands::Clean {
+                target: CleanTargetArg::All,
+                all: false,
+                dry_run: false,
+            },
         };
 
         assert_eq!(

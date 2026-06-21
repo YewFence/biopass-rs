@@ -1,59 +1,91 @@
 use super::auth::{EXIT_AUTH_ERR, EXIT_SUCCESS};
-use biopass_rs_auth::{user_data_dir, user_exists};
-use std::path::Path;
+use crate::cli::CleanTargetArg;
+use biopass_rs_auth::{
+    cleanup_data_dir, config_path, read_config_from_path, user_data_dir, user_exists, CleanupMode,
+    CleanupOptions, CleanupReport, CleanupSectionReport, CleanupTarget,
+};
 
-pub(crate) fn run(username: &str) -> u8 {
+pub(crate) fn run(username: &str, target: CleanTargetArg, all: bool, dry_run: bool) -> u8 {
     if !user_exists(username) {
         eprintln!("User '{username}' not found");
         return EXIT_AUTH_ERR;
     }
 
-    clean_debug_dir(username, &user_data_dir(username).join("debugs"))
-}
-
-fn clean_debug_dir(username: &str, debug_dir: &Path) -> u8 {
-    let Ok(entries) = std::fs::read_dir(debug_dir) else {
-        eprintln!(
-            "No debug cache found for user '{username}' at {}",
-            debug_dir.display()
-        );
-        return EXIT_SUCCESS;
+    let config_path = config_path(username);
+    let config = match read_config_from_path(&config_path) {
+        Ok(config) => config,
+        Err(error) => {
+            eprintln!("clean: {error}");
+            return EXIT_AUTH_ERR;
+        }
+    };
+    let data_dir = user_data_dir(username);
+    let options = CleanupOptions {
+        target: target.into(),
+        mode: if all {
+            CleanupMode::All
+        } else {
+            CleanupMode::Retention
+        },
+        dry_run,
     };
 
-    let mut removed = 0usize;
-    let mut failed = 0usize;
-    let mut freed: u64 = 0;
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-        let is_dir = path.is_dir();
-        let result = if is_dir {
-            std::fs::remove_dir_all(&path)
-        } else {
-            std::fs::remove_file(&path)
-        };
-        match result {
-            Ok(()) => {
-                removed += 1;
-                freed += size;
-            }
-            Err(error) => {
-                eprintln!("Failed to remove {}: {error}", path.display());
-                failed += 1;
-            }
+    let report = cleanup_data_dir(&data_dir, &config, options);
+    print_report(&report, dry_run);
+    if report.has_failures() {
+        EXIT_AUTH_ERR
+    } else {
+        EXIT_SUCCESS
+    }
+}
+
+impl From<CleanTargetArg> for CleanupTarget {
+    fn from(value: CleanTargetArg) -> Self {
+        match value {
+            CleanTargetArg::All => CleanupTarget::All,
+            CleanTargetArg::Debugs => CleanupTarget::Debugs,
+            CleanTargetArg::Logs => CleanupTarget::Logs,
+            CleanTargetArg::AuthHistory => CleanupTarget::AuthHistory,
         }
     }
+}
 
+fn print_report(report: &CleanupReport, dry_run: bool) {
+    let action = if dry_run { "Would remove" } else { "Removed" };
     eprintln!(
-        "Removed {removed} debug frame(s) ({}) from {}",
-        format_bytes(freed),
-        debug_dir.display()
+        "{action} {} entr(y/ies) ({})",
+        report.removed_entries(),
+        format_bytes(report.freed_bytes())
     );
-    if failed > 0 {
-        eprintln!("{failed} entr(y/ies) could not be removed");
-        return EXIT_AUTH_ERR;
+
+    for section in &report.sections {
+        print_section(section, dry_run);
     }
-    EXIT_SUCCESS
+}
+
+fn print_section(section: &CleanupSectionReport, dry_run: bool) {
+    if section.missing {
+        eprintln!("{}: missing at {}", section.name, section.path.display());
+        return;
+    }
+
+    let action = if dry_run { "would remove" } else { "removed" };
+    eprintln!(
+        "{}: scanned {}, {action} {} ({}) from {}",
+        section.name,
+        section.scanned_entries,
+        section.removed_entries,
+        format_bytes(section.freed_bytes),
+        section.path.display()
+    );
+
+    for failure in &section.failures {
+        eprintln!(
+            "Failed to remove {}: {}",
+            failure.path.display(),
+            failure.error
+        );
+    }
 }
 
 fn format_bytes(bytes: u64) -> String {
@@ -73,7 +105,6 @@ fn format_bytes(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
 
     #[test]
     fn format_bytes_uses_largest_binary_unit() {
@@ -84,25 +115,19 @@ mod tests {
     }
 
     #[test]
-    fn missing_debug_directory_is_successful_noop() {
-        let directory = tempfile::tempdir().unwrap();
-
+    fn maps_cli_target_to_cleanup_target() {
+        assert_eq!(CleanupTarget::from(CleanTargetArg::All), CleanupTarget::All);
         assert_eq!(
-            clean_debug_dir("alice", &directory.path().join("debugs")),
-            EXIT_SUCCESS
+            CleanupTarget::from(CleanTargetArg::Debugs),
+            CleanupTarget::Debugs
         );
-    }
-
-    #[test]
-    fn removes_debug_files_and_directories() {
-        let directory = tempfile::tempdir().unwrap();
-        let debug_dir = directory.path().join("debugs");
-        let nested_dir = debug_dir.join("nested");
-        fs::create_dir_all(&nested_dir).unwrap();
-        fs::write(debug_dir.join("frame.jpg"), [1_u8, 2, 3]).unwrap();
-        fs::write(nested_dir.join("trace.txt"), "debug").unwrap();
-
-        assert_eq!(clean_debug_dir("alice", &debug_dir), EXIT_SUCCESS);
-        assert_eq!(fs::read_dir(&debug_dir).unwrap().count(), 0);
+        assert_eq!(
+            CleanupTarget::from(CleanTargetArg::Logs),
+            CleanupTarget::Logs
+        );
+        assert_eq!(
+            CleanupTarget::from(CleanTargetArg::AuthHistory),
+            CleanupTarget::AuthHistory
+        );
     }
 }
