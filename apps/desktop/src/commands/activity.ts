@@ -1,4 +1,11 @@
-import type { ActivityLogComponent, AuthSessionSummary, AuthTestResult } from "@/types/activity";
+import type {
+  ActivityCleanupMode,
+  ActivityCleanupTarget,
+  ActivityLogComponent,
+  AuthSessionSummary,
+  AuthTestResult,
+  CleanupReport,
+} from "@/types/activity";
 import type { LogLevelName } from "@/types/config";
 import { invokeCommand } from "./core";
 
@@ -29,6 +36,18 @@ function testAuthFlow(service = "sudo", logLevel: LogLevelName = "debug") {
   return invokeCommand<AuthTestResult>("test_auth_flow", { service, logLevel });
 }
 
+function cleanActivityData(
+  target: ActivityCleanupTarget,
+  mode: ActivityCleanupMode,
+  dryRun = false,
+) {
+  return invokeCommand<CleanupReport>("clean_activity_data", {
+    target,
+    mode,
+    dryRun,
+  });
+}
+
 export const activity = {
   listAuthHistory,
   readLogTail,
@@ -36,4 +55,5 @@ export const activity = {
   logsDir,
   authHistoryDir,
   testAuthFlow,
+  cleanActivityData,
 };

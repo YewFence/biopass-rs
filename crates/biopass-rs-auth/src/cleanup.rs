@@ -1,5 +1,6 @@
 use crate::{BiopassConfig, LogComponent};
 use chrono::{Duration, Local, NaiveDate};
+use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::SystemTime;
@@ -49,7 +50,7 @@ impl Default for CleanupOptions {
     }
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct CleanupReport {
     pub sections: Vec<CleanupSectionReport>,
 }
@@ -81,7 +82,7 @@ impl CleanupReport {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CleanupSectionReport {
     pub name: &'static str,
     pub path: PathBuf,
@@ -108,7 +109,7 @@ impl CleanupSectionReport {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CleanupFailure {
     pub path: PathBuf,
     pub error: String,

@@ -11,8 +11,8 @@ pub mod paths;
 pub mod system;
 
 use activity::{
-    activity_log_file_path, activity_logs_dir, auth_history_dir_path, list_auth_history,
-    read_activity_log_tail,
+    activity_log_file_path, activity_logs_dir, auth_history_dir_path, clean_activity_data,
+    list_auth_history, read_activity_log_tail,
 };
 use auth::test_auth_flow;
 use config::{config_file_path, load_config, reset_config, save_config};
@@ -69,6 +69,7 @@ pub fn run() {
             activity_log_file_path,
             activity_logs_dir,
             auth_history_dir_path,
+            clean_activity_data,
             get_current_username,
             capture_face,
             start_face_preview,
