@@ -48,7 +48,7 @@ run = [
 
 [tasks.dev-app]
 description = "Run the Tauri app in development mode"
-depends = ["dev-helper-build"]
+depends = ["install-app", "dev-helper-build"]
 run = "bun run tauri dev"
 dir = "{{config_root}}/{{vars.app_dir}}"
 

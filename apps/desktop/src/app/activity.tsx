@@ -344,7 +344,7 @@ function ActivityPage() {
             ))}
           </div>
           <pre className="min-h-96 max-h-[60vh] overflow-auto rounded-lg border border-border bg-muted/30 p-4 text-xs leading-relaxed">
-            {logs.length ? logs.join("\n") : "No log lines found for today."}
+            {logs.length ? logs.join("\n") : emptyStateForLogComponent(component)}
           </pre>
         </TabsContent>
       </Tabs>
@@ -424,6 +424,17 @@ function labelForLogComponent(component: ActivityLogComponent) {
       return "Helper";
     case "desktop":
       return "Desktop";
+  }
+}
+
+function emptyStateForLogComponent(component: ActivityLogComponent) {
+  switch (component) {
+    case "auth":
+      return "No log lines found for today.";
+    case "desktop":
+      return "No desktop events have been logged yet.";
+    case "helper":
+      return "The helper is a CLI tool and does not write file logs, so this view stays empty.";
   }
 }
 

@@ -1,7 +1,7 @@
 use biopass_rs_auth::{
     auth_history_dir, cleanup_data_dir, log_file_path, logs_dir, read_auth_history, read_log_tail,
-    set_runtime_logging, AuthSessionSummary, CleanupMode, CleanupOptions, CleanupReport,
-    CleanupTarget, LogComponent, RuntimeLoggingConfig,
+    AuthSessionSummary, CleanupMode, CleanupOptions, CleanupReport, CleanupTarget, LogComponent,
+    LogLevel,
 };
 use serde::Deserialize;
 use tauri::AppHandle;
@@ -63,19 +63,12 @@ impl From<ActivityCleanupMode> for CleanupMode {
     }
 }
 
-fn configure_logging(app: &AppHandle) -> Result<(), String> {
-    let config = require_loaded_config(app)?;
-    let data_dir = get_data_dir(app)?;
-    set_runtime_logging(RuntimeLoggingConfig::from_config(data_dir, &config.logging));
-    Ok(())
-}
-
 #[tauri::command]
 pub fn list_auth_history(
     app: AppHandle,
     limit: Option<usize>,
 ) -> Result<Vec<AuthSessionSummary>, String> {
-    configure_logging(&app)?;
+    crate::logging::ensure_logging(&app);
     read_auth_history(limit.unwrap_or(100))
 }
 
@@ -85,7 +78,7 @@ pub fn read_activity_log_tail(
     component: ActivityLogComponent,
     max_lines: Option<usize>,
 ) -> Result<Vec<String>, String> {
-    configure_logging(&app)?;
+    crate::logging::ensure_logging(&app);
     read_log_tail(component.into(), max_lines.unwrap_or(500))
 }
 
@@ -94,7 +87,7 @@ pub fn activity_log_file_path(
     app: AppHandle,
     component: ActivityLogComponent,
 ) -> Result<String, String> {
-    configure_logging(&app)?;
+    crate::logging::ensure_logging(&app);
     Ok(log_file_path(component.into())
         .to_string_lossy()
         .to_string())
@@ -102,13 +95,13 @@ pub fn activity_log_file_path(
 
 #[tauri::command]
 pub fn activity_logs_dir(app: AppHandle) -> Result<String, String> {
-    configure_logging(&app)?;
+    crate::logging::ensure_logging(&app);
     Ok(logs_dir().to_string_lossy().to_string())
 }
 
 #[tauri::command]
 pub fn auth_history_dir_path(app: AppHandle) -> Result<String, String> {
-    configure_logging(&app)?;
+    crate::logging::ensure_logging(&app);
     Ok(auth_history_dir().to_string_lossy().to_string())
 }
 
@@ -119,15 +112,31 @@ pub fn clean_activity_data(
     mode: ActivityCleanupMode,
     dry_run: Option<bool>,
 ) -> Result<CleanupReport, String> {
+    crate::logging::ensure_logging(&app);
+    let dry_run = dry_run.unwrap_or(false);
+    crate::logging::desktop_log(
+        LogLevel::Info,
+        "cleanup",
+        &format!("target={:?} mode={:?} dry_run={dry_run}", target, mode),
+    );
     let config = require_loaded_config(&app)?;
     let data_dir = get_data_dir(&app)?;
-    Ok(cleanup_data_dir(
+    let report = cleanup_data_dir(
         &data_dir,
         &config,
         CleanupOptions {
             target: target.into(),
             mode: mode.into(),
-            dry_run: dry_run.unwrap_or(false),
+            dry_run,
         },
-    ))
+    );
+    let removed: usize = report.sections.iter().map(|s| s.removed_entries).sum();
+    let failed: usize = report.sections.iter().map(|s| s.failed_entries).sum();
+    let freed: u64 = report.sections.iter().map(|s| s.freed_bytes).sum();
+    crate::logging::desktop_log(
+        LogLevel::Info,
+        "cleanup",
+        &format!("removed {removed} entries, freed {freed} bytes, {failed} failed"),
+    );
+    Ok(report)
 }

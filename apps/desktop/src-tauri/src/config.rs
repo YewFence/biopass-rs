@@ -1,6 +1,6 @@
 use biopass_rs_auth::{
     bootstrap_config_at, migrate_config_at_path, read_config_from_path, write_config_to_path,
-    BootstrapOutcome,
+    BootstrapOutcome, LogLevel,
 };
 pub use biopass_rs_auth::{
     AuthHistoryConfig, BiopassConfig, ConsoleLoggingConfig, DetectionConfig,
@@ -130,7 +130,16 @@ pub fn save_config(app: AppHandle, config: BiopassConfig) -> Result<(), String> 
             .map_err(|e| format!("Failed to create config directory: {}", e))?;
     }
 
-    write_config_to_path(&config_path, &config)
+    write_config_to_path(&config_path, &config)?;
+    // Re-assert runtime logging so a changed file.level takes effect at once,
+    // then record the save on the Desktop log.
+    crate::logging::ensure_logging(&app);
+    crate::logging::desktop_log(
+        LogLevel::Info,
+        "config",
+        &format!("saved to {}", path_to_string(&config_path)),
+    );
+    Ok(())
 }
 
 /// Tauri command — reset the on-disk config to GUI defaults and return the
@@ -143,6 +152,12 @@ pub fn reset_config(app: AppHandle) -> Result<LoadConfigResult, String> {
     // than the bare library defaults so the user does not lose their model
     // wiring.
     write_config_to_path(&config_path, &defaults)?;
+    crate::logging::ensure_logging(&app);
+    crate::logging::desktop_log(
+        LogLevel::Warn,
+        "config",
+        &format!("reset to defaults at {}", path_to_string(&config_path)),
+    );
     Ok(LoadConfigResult::Loaded {
         path: path_to_string(&config_path),
         config: Box::new(defaults),
