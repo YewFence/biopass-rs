@@ -20,7 +20,7 @@ mise trust
 
 **2. Optional experimental bootstrap path:**
 
-`mise.toml` declares the Linux system packages under `[bootstrap.packages]` and the language toolchains under `[tools]`. If your installed [mise](https://mise.jdx.dev/getting-started.html) version supports the experimental bootstrap feature, you can let mise install missing system packages and then install the pinned Rust, Bun, Node, Vite+ and git-lfs toolchains in one step:
+`.config/mise/conf.d/bootstrap.toml` declares the Linux system packages under `[bootstrap.packages]`, and `mise.toml` declares the language toolchains under `[tools]`. If your installed [mise](https://mise.jdx.dev/getting-started.html) version supports the experimental bootstrap feature, you can let mise install missing system packages and then install the pinned Rust, Bun, Node, Vite+ and git-lfs toolchains in one step:
 
 ```bash
 mise bootstrap --update
@@ -34,13 +34,12 @@ Because mise bootstrap is still experimental, you can keep using the manual syst
 
 Ubuntu/Debian:
 ```bash
-sudo apt update
-sudo apt install libpam0g-dev libv4l-dev fprintd libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev
+sudo apt install -y libclang-dev libwebkit2gtk-4.1-dev nasm build-essential
 ```
 
 Fedora:
 ```bash
-sudo dnf install -y gtk3-devel gdk-pixbuf2-devel webkit2gtk4.1-devel libv4l-devel pam-devel librsvg2-devel libxdo-devel libayatana-appindicator-gtk3-devel rpm-build nasm
+sudo dnf install -y clang-devel webkit2gtk4.1-devel nasm
 ```
 
 After installing the system packages manually, install the language toolchains with mise:
