@@ -1,3 +1,5 @@
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -18,10 +20,31 @@ pub fn save_enrolled_face_jpeg(data_dir: &Path, jpeg: &[u8]) -> Result<PathBuf, 
         .duration_since(UNIX_EPOCH)
         .map_err(|error| format!("Failed to get timestamp: {error}"))?
         .as_millis();
-    let path = dir.join(format!("face_{timestamp}.jpg"));
-    std::fs::write(&path, jpeg)
-        .map_err(|error| format!("Failed to write face image {}: {error}", path.display()))?;
-    Ok(path)
+    for suffix in 0..1000 {
+        let name = if suffix == 0 {
+            format!("face_{timestamp}.jpg")
+        } else {
+            format!("face_{timestamp}_{suffix}.jpg")
+        };
+        let path = dir.join(name);
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(mut file) => {
+                file.write_all(jpeg).map_err(|error| {
+                    format!("Failed to write face image {}: {error}", path.display())
+                })?;
+                return Ok(path);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(format!(
+                    "Failed to create face image {}: {error}",
+                    path.display()
+                ));
+            }
+        }
+    }
+
+    Err("Failed to allocate a unique face image filename".to_string())
 }
 
 pub fn list_enrolled_faces(data_dir: &Path) -> Result<Vec<PathBuf>, String> {
@@ -41,8 +64,20 @@ pub fn list_enrolled_faces(data_dir: &Path) -> Result<Vec<PathBuf>, String> {
     Ok(faces)
 }
 
-pub fn delete_enrolled_face(path: &Path) -> Result<(), String> {
-    std::fs::remove_file(path)
+pub fn delete_enrolled_face(data_dir: &Path, path: &Path) -> Result<(), String> {
+    let faces = faces_dir(data_dir)
+        .canonicalize()
+        .map_err(|error| format!("Failed to access faces directory: {error}"))?;
+    let path = path
+        .canonicalize()
+        .map_err(|error| format!("Failed to access face image {}: {error}", path.display()))?;
+    if !path.starts_with(&faces) {
+        return Err(format!(
+            "Refusing to delete file outside {}",
+            faces.display()
+        ));
+    }
+    std::fs::remove_file(&path)
         .map_err(|error| format!("Failed to delete face image {}: {error}", path.display()))
 }
 
@@ -121,10 +156,12 @@ mod tests {
     #[test]
     fn delete_enrolled_face_removes_file() {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("face.jpg");
+        let faces = faces_dir(directory.path());
+        std::fs::create_dir_all(&faces).unwrap();
+        let path = faces.join("face.jpg");
         std::fs::write(&path, b"jpeg").unwrap();
 
-        delete_enrolled_face(&path).unwrap();
+        delete_enrolled_face(directory.path(), &path).unwrap();
 
         assert!(!path.exists());
     }
@@ -132,11 +169,26 @@ mod tests {
     #[test]
     fn delete_enrolled_face_reports_missing_file() {
         let directory = tempfile::tempdir().unwrap();
-        let path = directory.path().join("missing.jpg");
+        let faces = faces_dir(directory.path());
+        std::fs::create_dir_all(&faces).unwrap();
+        let path = faces.join("missing.jpg");
 
-        let error = delete_enrolled_face(&path).unwrap_err();
+        let error = delete_enrolled_face(directory.path(), &path).unwrap_err();
 
-        assert!(error.contains("Failed to delete face image"));
         assert!(error.contains("missing.jpg"));
+    }
+
+    #[test]
+    fn delete_enrolled_face_rejects_path_outside_faces_directory() {
+        let directory = tempfile::tempdir().unwrap();
+        let faces = faces_dir(directory.path());
+        std::fs::create_dir_all(&faces).unwrap();
+        let outside = directory.path().join("outside.jpg");
+        std::fs::write(&outside, b"jpeg").unwrap();
+
+        let error = delete_enrolled_face(directory.path(), &outside).unwrap_err();
+
+        assert!(error.contains("outside"));
+        assert!(outside.exists());
     }
 }

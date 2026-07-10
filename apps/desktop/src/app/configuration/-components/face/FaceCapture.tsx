@@ -8,13 +8,17 @@ import { Button } from "@/components/ui/button";
 import { formatError } from "@/lib/utils";
 import { useConfigurationStore } from "../../-stores/configuration-store";
 
-export function FaceCapture() {
+interface FaceCaptureProps {
+  unavailable: boolean;
+}
+
+export function FaceCapture({ unavailable }: FaceCaptureProps) {
   const previewRef = useRef<HTMLImageElement>(null);
   const [capturing, setCapturing] = useState(false);
   const [faceImages, setFaceImages] = useState<string[]>([]);
   const camera = useConfigurationStore((state) => state.config?.methods.face.camera ?? null);
   const [videoDeviceCount, setVideoDeviceCount] = useState<number | null>(null);
-  const cameraUnavailable = videoDeviceCount === 0;
+  const cameraUnavailable = unavailable || videoDeviceCount === 0;
 
   const loadVideoDeviceCount = useCallback(async () => {
     try {

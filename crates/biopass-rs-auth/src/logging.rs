@@ -134,21 +134,59 @@ pub fn log_file_path(component: LogComponent) -> PathBuf {
 }
 
 pub fn read_log_tail(component: LogComponent, max_lines: usize) -> Result<Vec<String>, String> {
-    let path = log_file_path(component);
-    let file = match fs::File::open(&path) {
-        Ok(file) => file,
+    let config = runtime_logging();
+    let date = Local::now().format("%Y-%m-%d").to_string();
+    let dir = config.data_dir.join("logs").join(component.as_dir());
+    let mut paths = match fs::read_dir(&dir) {
+        Ok(entries) => entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| is_log_file_for_date(path, &date))
+            .collect::<Vec<_>>(),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(error) => return Err(format!("Failed to read {}: {error}", path.display())),
+        Err(error) => return Err(format!("Failed to read {}: {error}", dir.display())),
     };
-    let reader = BufReader::new(file);
-    let mut lines = reader
-        .lines()
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
+    paths.sort_by_key(|path| log_rotation_index(path, &date));
+
+    let mut lines = Vec::new();
+    for path in paths {
+        let file = fs::File::open(&path)
+            .map_err(|error| format!("Failed to read {}: {error}", path.display()))?;
+        lines.extend(
+            BufReader::new(file)
+                .lines()
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|error| format!("Failed to read {}: {error}", path.display()))?,
+        );
+    }
     if lines.len() > max_lines {
         lines.drain(0..lines.len() - max_lines);
     }
     Ok(lines)
+}
+
+fn is_log_file_for_date(path: &Path, date: &str) -> bool {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return false;
+    };
+    name == format!("{date}.log")
+        || name
+            .strip_prefix(&format!("{date}."))
+            .and_then(|suffix| suffix.strip_suffix(".log"))
+            .is_some_and(|index| index.parse::<u32>().is_ok())
+}
+
+fn log_rotation_index(path: &Path, date: &str) -> u32 {
+    let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
+        return u32::MAX;
+    };
+    if name == format!("{date}.log") {
+        return 0;
+    }
+    name.strip_prefix(&format!("{date}."))
+        .and_then(|suffix| suffix.strip_suffix(".log"))
+        .and_then(|index| index.parse().ok())
+        .unwrap_or(u32::MAX)
 }
 
 fn log_file_path_with_rotation(
@@ -300,8 +338,14 @@ pub fn read_auth_history(limit: usize) -> Result<Vec<AuthSessionSummary>, String
             if line.trim().is_empty() {
                 continue;
             }
-            if let Ok(summary) = serde_json::from_str::<AuthSessionSummary>(&line) {
-                file_summaries.push(summary);
+            match serde_json::from_str::<AuthSessionSummary>(&line) {
+                Ok(summary) => file_summaries.push(summary),
+                Err(error) => emit_log(
+                    LogComponent::Auth,
+                    LogLevel::Warn,
+                    "auth_history",
+                    &format!("skipping invalid entry in {}: {error}", path.display()),
+                ),
             }
         }
         file_summaries.reverse();
@@ -495,6 +539,24 @@ mod tests {
         assert_eq!(
             read_log_tail(LogComponent::Helper, 2).unwrap(),
             vec!["two", "three"]
+        );
+    }
+
+    #[test]
+    fn read_log_tail_includes_rotated_files() {
+        let _guard = LOGGING_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        set_runtime_logging(runtime_config(directory.path().to_path_buf()));
+
+        let base = log_file_path(LogComponent::Auth);
+        std::fs::create_dir_all(base.parent().unwrap()).unwrap();
+        fs::write(&base, "first\n").unwrap();
+        let rotated = base.with_file_name(format!("{}.1.log", Local::now().format("%Y-%m-%d")));
+        fs::write(rotated, "second\nthird\n").unwrap();
+
+        assert_eq!(
+            read_log_tail(LogComponent::Auth, 2).unwrap(),
+            vec!["second", "third"]
         );
     }
 

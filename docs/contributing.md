@@ -34,6 +34,7 @@ Because mise bootstrap is still experimental, you can keep using the manual syst
 
 Ubuntu/Debian:
 ```bash
+sudo apt update
 sudo apt install -y libclang-dev libwebkit2gtk-4.1-dev nasm build-essential
 ```
 

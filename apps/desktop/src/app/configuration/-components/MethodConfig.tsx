@@ -14,8 +14,8 @@ export function MethodConfig() {
   const setFaceConfig = useConfigurationStore((state) => state.setFaceConfig);
   const setFingerprintConfig = useConfigurationStore((state) => state.setFingerprintConfig);
   const [expandedMethod, setExpandedMethod] = useState<string | null>("face");
-  const [faceAvailable, setFaceAvailable] = useState<boolean | null>(null);
-  const [fingerprintAvailable, setFingerprintAvailable] = useState<boolean | null>(null);
+  const [faceAvailable, setFaceAvailable] = useState(false);
+  const [fingerprintAvailable, setFingerprintAvailable] = useState(false);
 
   useEffect(() => {
     let canceled = false;
@@ -53,18 +53,6 @@ export function MethodConfig() {
     };
   }, []);
 
-  useEffect(() => {
-    if (faceAvailable === false && faceConfig?.enable) {
-      setFaceConfig({ ...faceConfig, enable: false });
-    }
-  }, [faceAvailable, faceConfig, setFaceConfig]);
-
-  useEffect(() => {
-    if (fingerprintAvailable === false && fingerprintConfig?.enable) {
-      setFingerprintConfig({ ...fingerprintConfig, enable: false });
-    }
-  }, [fingerprintAvailable, fingerprintConfig, setFingerprintConfig]);
-
   if (!faceConfig || !fingerprintConfig) return null;
 
   const methodIcons: Record<string, React.ReactNode> = {
@@ -76,8 +64,8 @@ export function MethodConfig() {
     face: "from-violet-500 to-purple-500",
     fingerprint: "from-emerald-500 to-teal-500",
   };
-  const faceFrozen = faceAvailable === false;
-  const fingerprintFrozen = fingerprintAvailable === false;
+  const faceUnavailable = !faceAvailable;
+  const fingerprintUnavailable = !fingerprintAvailable;
 
   return (
     <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm p-6 shadow-lg">
@@ -94,18 +82,16 @@ export function MethodConfig() {
           title="Face Recognition"
           icon={methodIcons.face}
           color={methodColors.face}
-          enabled={faceFrozen ? false : faceConfig.enable}
-          frozen={faceFrozen}
-          frozenMessage="No camera is available on this device."
+          enabled={faceConfig.enable}
+          unavailable={faceUnavailable}
+          unavailableMessage="No camera is available. Authentication may fail, and face enrollment is unavailable."
           onToggle={(enable) => {
-            if (!faceFrozen) {
-              setFaceConfig({ ...faceConfig, enable });
-            }
+            setFaceConfig({ ...faceConfig, enable });
           }}
           expanded={expandedMethod === "face"}
           onExpand={() => setExpandedMethod(expandedMethod === "face" ? null : "face")}
         >
-          <FaceSetting />
+          <FaceSetting enrollmentUnavailable={faceUnavailable} />
         </MethodCard>
 
         {/* Fingerprint Authentication */}
@@ -113,13 +99,11 @@ export function MethodConfig() {
           title="Fingerprint"
           icon={methodIcons.fingerprint}
           color={methodColors.fingerprint}
-          enabled={fingerprintFrozen ? false : fingerprintConfig.enable}
-          frozen={fingerprintFrozen}
-          frozenMessage="No fingerprint reader is available on this device."
+          enabled={fingerprintConfig.enable}
+          unavailable={fingerprintUnavailable}
+          unavailableMessage="No fingerprint reader is available. Authentication may fail, and fingerprint enrollment is unavailable."
           onToggle={(enable) => {
-            if (!fingerprintFrozen) {
-              setFingerprintConfig({ ...fingerprintConfig, enable });
-            }
+            setFingerprintConfig({ ...fingerprintConfig, enable });
           }}
           expanded={expandedMethod === "fingerprint"}
           onExpand={() =>
@@ -177,7 +161,7 @@ export function MethodConfig() {
             </div>
 
             <div className="overflow-hidden">
-              <FingerprintSetting />
+              <FingerprintSetting enrollmentUnavailable={fingerprintUnavailable} />
             </div>
           </div>
         </MethodCard>

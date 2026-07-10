@@ -1,5 +1,3 @@
-use std::path::Path;
-
 use biopass_rs_auth::{
     capture_face_jpeg, delete_enrolled_face, list_enrolled_faces, save_enrolled_face_jpeg,
 };
@@ -42,6 +40,7 @@ pub fn list_faces(app: AppHandle) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-pub fn delete_face(path: String) -> Result<(), String> {
-    delete_enrolled_face(Path::new(&path))
+pub fn delete_face(app: AppHandle, path: String) -> Result<(), String> {
+    let data_dir = get_data_dir(&app)?;
+    delete_enrolled_face(&data_dir, path.as_ref())
 }

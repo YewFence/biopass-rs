@@ -128,10 +128,21 @@ fn download_file(
     retries: u32,
     progress: Option<&ProgressBar>,
 ) -> Result<(), String> {
+    let temp = dest.with_extension(format!(
+        "{}.part",
+        dest.extension()
+            .and_then(|extension| extension.to_str())
+            .unwrap_or("download")
+    ));
     for attempt in 1..=retries {
-        match try_download(agent, url, dest, progress) {
-            Ok(()) => return Ok(()),
+        match try_download(agent, url, &temp, progress) {
+            Ok(()) => {
+                fs::rename(&temp, dest)
+                    .map_err(|error| format!("Failed to finalize {}: {error}", dest.display()))?;
+                return Ok(());
+            }
             Err(e) if attempt < retries => {
+                let _ = fs::remove_file(&temp);
                 let msg = format!(
                     "Download attempt {}/{} failed: {}. Retrying...",
                     attempt, retries, e
@@ -143,7 +154,10 @@ fn download_file(
                 }
                 std::thread::sleep(Duration::from_secs(2));
             }
-            Err(e) => return Err(e),
+            Err(e) => {
+                let _ = fs::remove_file(&temp);
+                return Err(e);
+            }
         }
     }
     Err("Max retries exceeded".to_string())

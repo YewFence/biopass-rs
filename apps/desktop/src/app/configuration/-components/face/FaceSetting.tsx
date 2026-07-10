@@ -16,7 +16,11 @@ import { ModelSelect } from "../methods/shared/ModelSelect";
 import { Threshold } from "../methods/shared/Threshold";
 import { FaceCapture } from "./FaceCapture";
 
-export function FaceSetting() {
+interface FaceSettingProps {
+  enrollmentUnavailable: boolean;
+}
+
+export function FaceSetting({ enrollmentUnavailable }: FaceSettingProps) {
   const config = useConfigurationStore((state) => state.config?.methods.face);
   const setFaceConfig = useConfigurationStore((state) => state.setFaceConfig);
   const [videoDevices, setVideoDevices] = useState<VideoDeviceInfo[]>([]);
@@ -175,7 +179,7 @@ export function FaceSetting() {
         </div>
       </div>
 
-      <FaceCapture />
+      <FaceCapture unavailable={enrollmentUnavailable} />
 
       <div className="p-4 rounded-lg bg-muted/50 border border-border/50">
         <h4 className="font-medium mb-3 text-sm">Detection</h4>

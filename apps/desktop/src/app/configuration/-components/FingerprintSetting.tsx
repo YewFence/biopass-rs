@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/select";
 import { useConfigurationStore } from "../-stores/configuration-store";
 
-export function FingerprintSetting() {
+interface FingerprintSettingProps {
+  enrollmentUnavailable: boolean;
+}
+
+export function FingerprintSetting({ enrollmentUnavailable }: FingerprintSettingProps) {
   const config = useConfigurationStore((state) => state.config?.methods.fingerprint);
   const setFingerprintConfig = useConfigurationStore((state) => state.setFingerprintConfig);
   const [selectedFinger, setSelectedFinger] = useState<string>("");
@@ -90,7 +94,7 @@ export function FingerprintSetting() {
   const handleAdd = async () => {
     const currentConfig = useConfigurationStore.getState().config?.methods.fingerprint;
     if (!currentConfig) return;
-    if (!isAvailable) return;
+    if (enrollmentUnavailable || !isAvailable) return;
 
     setIsAdding(true);
     const toastId = toast.loading(
@@ -140,7 +144,7 @@ export function FingerprintSetting() {
   const handleDelete = async (fingerName: string) => {
     const currentConfig = useConfigurationStore.getState().config?.methods.fingerprint;
     if (!currentConfig) return;
-    if (!isAvailable) return;
+    if (enrollmentUnavailable || !isAvailable) return;
 
     try {
       await cmd.fingerprint.remove(username, fingerName);
@@ -158,10 +162,11 @@ export function FingerprintSetting() {
   };
 
   if (!config) return null;
+  const enrollmentAvailable = isAvailable === true && !enrollmentUnavailable;
 
   return (
     <div className="grid gap-4">
-      {isAvailable === false && (
+      {!enrollmentAvailable && (
         <div className="p-4 rounded-lg bg-muted/50 border border-border/50 text-sm text-muted-foreground">
           No fingerprint reader is available on this device, so fingerprint enrollment is disabled.
         </div>
@@ -184,7 +189,7 @@ export function FingerprintSetting() {
                 <button
                   type="button"
                   onClick={() => handleDelete(f.name)}
-                  disabled={!isAvailable}
+                  disabled={!enrollmentAvailable}
                   className="p-1 rounded hover:bg-destructive/20 text-destructive cursor-pointer transition-colors"
                 >
                   <Trash2 className="w-4 h-4" />
@@ -203,7 +208,7 @@ export function FingerprintSetting() {
           <div className="grid gap-2">
             <Label className="text-xs text-muted-foreground">Select Finger</Label>
             <Select value={selectedFinger} onValueChange={setSelectedFinger}>
-              <SelectTrigger className="h-9" disabled={!isAvailable}>
+              <SelectTrigger className="h-9" disabled={!enrollmentAvailable}>
                 <SelectValue placeholder="Select Finger">
                   {selectedFinger && (
                     <span className="capitalize">{selectedFinger.replace(/-/g, " ")}</span>
@@ -227,7 +232,7 @@ export function FingerprintSetting() {
 
           <Button
             onClick={handleAdd}
-            disabled={!isAvailable || isAdding || !selectedFinger}
+            disabled={!enrollmentAvailable || isAdding || !selectedFinger}
             className="w-full h-9 mt-1"
           >
             {isAdding ? "Enrolling..." : "Enroll Finger"}

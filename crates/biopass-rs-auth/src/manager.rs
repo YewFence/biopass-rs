@@ -160,6 +160,13 @@ impl AuthManager {
 
         for method in &mut self.methods {
             if !method.is_available() {
+                let method_name = auth_method_log_name(method.name());
+                emit_log(
+                    LogComponent::Auth,
+                    LogLevel::Warn,
+                    "AuthManager",
+                    &format!("Skipping {method_name} authentication because it is unavailable"),
+                );
                 continue;
             }
 
@@ -237,6 +244,13 @@ impl AuthManager {
 
         for mut method in self.methods.drain(..) {
             if !method.is_available() {
+                let method_name = auth_method_log_name(method.name()).to_string();
+                emit_log(
+                    LogComponent::Auth,
+                    LogLevel::Warn,
+                    "AuthManager",
+                    &format!("Skipping {method_name} authentication because it is unavailable"),
+                );
                 continue;
             }
 
@@ -278,7 +292,6 @@ impl AuthManager {
         let mut any_success = false;
         let mut any_attempted = false;
         let mut summaries = Vec::new();
-
         for handle in handles {
             let outcome = handle.join().unwrap_or_else(|_| {
                 MethodAuthOutcome::basic(

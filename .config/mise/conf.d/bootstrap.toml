@@ -4,5 +4,6 @@
 "apt:build-essential" = "latest"
 "apt:nasm" = "latest"
 "dnf:clang-devel" = "latest"
+"dnf:gtk3-devel" = "latest"
 "dnf:webkit2gtk4.1-devel" = "latest"
 "dnf:nasm" = "latest"
