@@ -117,7 +117,7 @@ run = "cargo llvm-cov --workspace --exclude-from-report biopass-rs --lcov --outp
 
 [tasks.check]
 description = "Run all checks"
-depends = ["check-app", "lint-rust", "clippy-rust", "test-rust"]
+depends = ["install-app", "check-app", "lint-rust", "clippy-rust", "test-rust"]
 run = { task = "build-rust"}
 
 [tasks.fix-rust]

@@ -1,3 +1,10 @@
 [tools]
-"github:release-plz/release-plz" = "latest"
-rust = "latest"
+"cargo:cargo-audit" = "latest"
+
+[tasks.audit-rust]
+description = "Run cargo audit on Rust dependencies"
+run = "cargo audit"
+
+[tasks."audit-rust:deny-warnings"]
+description = "Run cargo audit on Rust dependencies and deny warnings"
+run = "cargo audit --deny warnings"
