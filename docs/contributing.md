@@ -58,7 +58,7 @@ All developer tasks live in `mise.toml`. The dev tasks isolate your work under a
 **1. Initialize the dev data directory** — write a default config, download the ONNX models, and import any enrolled faces from an upstream `biopass` install:
 
 ```bash
-mise run dev-helper install
+mise run dev:helper install
 ```
 
 This populates `dev-data/` with `config.yaml`, `models/`, and `faces/`.
@@ -66,19 +66,19 @@ This populates `dev-data/` with `config.yaml`, `models/`, and `faces/`.
 **2. Run the desktop app** — launches the Tauri app in dev mode with HMR, pointed at the `dev-data/` config:
 
 ```bash
-mise run dev-app
+mise run dev:app
 ```
 
 **3. Exercise an end-to-end auth flow** — runs a single authentication attempt as if invoked by `sudo`:
 
 ```bash
-mise run dev-helper auth -s sudo
+mise run dev:helper auth -s sudo
 ```
 
 For a cleaner repeat, use the wrapped task which first clears captured frames and then authenticates:
 
 ```bash
-mise run auth-test
+mise run test:auth
 ```
 
 Both write the RGB/IR frames captured during failed attempts into `dev-data/debugs/`, so you can inspect the raw frames the models actually saw.
@@ -96,7 +96,7 @@ If anything fails, `mise run fix` auto-fixes formatting and clippy lints where p
 To build the Rust auth module:
 
 ```bash
-mise run build-auth
+mise run build:auth
 ```
 
 To build both the Rust auth module and the Tauri frontend and package the application into Linux release artifacts (`.deb` and `.rpm`):

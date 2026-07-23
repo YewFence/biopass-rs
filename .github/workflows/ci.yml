@@ -1,0 +1,193 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Checks
+    runs-on: ubuntu-latest
+    env:
+      MISE_TASK_RUN_AUTO_INSTALL: "false"
+      MISE_LOCKED: "1"
+      MISE_ENV: "ci"
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          add_shims_to_path: true
+          cache_key: "mise-check-{{file_hash}}"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          mise bootstrap --yes
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-check-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-check-${{ runner.os }}-
+            cargo-${{ runner.os }}-
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.bun/install/cache
+            apps/desktop/node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('apps/desktop/bun.lock') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Check
+        run: mise run check
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    env:
+      MISE_TASK_RUN_AUTO_INSTALL: "false"
+      MISE_LOCKED: "1"
+      MISE_ENV: "ci"
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_args: 'rust "cargo:cargo-llvm-cov"'
+          add_shims_to_path: true
+          cache_key: "mise-coverage-{{install_args_hash}}-{{file_hash}}"
+
+      - name: Install system dependencies
+        run: |
+          sudo apt update
+          mise bootstrap --yes
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-coverage-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          restore-keys: |
+            cargo-coverage-${{ runner.os }}-
+            cargo-${{ runner.os }}-
+
+      - name: Generate core Rust coverage
+        run: mise run coverage:rust:codecov
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          flags: rust-core
+          name: rust-core
+          fail_ci_if_error: true
+
+  actions-version:
+    name: Check Action Versions
+    runs-on: ubuntu-latest
+    env:
+      MISE_TASK_RUN_AUTO_INSTALL: "false"
+      MISE_LOCKED: "1"
+      MISE_ENV: "ci"
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_args: pinact
+          add_shims_to_path: true
+          cache_key: "mise-actioncheck-{{install_args_hash}}-{{file_hash}}"
+
+      - name: Check Action pinned versions
+        env:
+          PINACT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mise run actions:pin:check
+
+      - name: Check whether Action is outdated
+        env:
+          PINACT_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: mise run actions:outdated
+
+  audit:
+    name: Audit
+    runs-on: ubuntu-latest
+    env:
+      MISE_TASK_RUN_AUTO_INSTALL: "false"
+      MISE_LOCKED: "1"
+      MISE_ENV: "ci"
+    permissions:
+      contents: read
+      issues: write
+      checks: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_args: 'rust "cargo:cargo-audit"'
+          add_shims_to_path: true
+          cache_key: "mise-audit-{{install_args_hash}}-{{file_hash}}"
+
+      - name: Audit
+        run: mise run audit
+
+  audit-report:
+    name: Audit Report
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    env:
+      MISE_TASK_RUN_AUTO_INSTALL: "false"
+      MISE_LOCKED: "1"
+      MISE_ENV: "ci"
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          install_args: 'rust "cargo:cargo-audit"'
+          add_shims_to_path: true
+          cache_key: "mise-audit-report-{{install_args_hash}}-{{file_hash}}"
+
+      - name: Write audit report
+        run: |
+          {
+            echo "## cargo audit report"
+            echo
+            echo "_Generated by \`cargo audit\` on $(date -u '+%Y-%m-%d %H:%M:%S UTC'). Informational only; non-vulnerability warnings do not fail this job._"
+            echo
+            echo '```'
+            mise run audit || true
+            echo '```'
+          } >> "${GITHUB_STEP_SUMMARY}"

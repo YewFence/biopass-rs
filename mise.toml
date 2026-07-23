@@ -1,140 +1,7 @@
-[vars]
-app_dir = "apps/desktop"
-
-[env]
-_.path = "{{ cwd }}/target/release"
-BIOPASS_DATA_DIR = "{{ cwd }}/dev-data"
-BIOPASS_CONFIG = "{{ cwd }}/dev-data/config.yaml"
-
-[tasks.install-app]
-description = "Install JS dependencies for the Tauri app"
-run = "bun install --frozen-lockfile"
-dir = "{{config_root}}/{{vars.app_dir}}"
-
-[tasks.build-auth]
-description = "Build the Rust auth helper, auth core and PAM module (debug)"
-raw_args = true
-run = 'cargo build --package biopass-rs-auth --package biopass-rs-pam "$@"'
-
-[tasks.build-auth-release]
-description = "Build the Rust auth helper, auth core and PAM module (release)"
-raw_args = true
-run = 'cargo build --release --package biopass-rs-auth --package biopass-rs-pam "$@"'
-
-[tasks.build-app]
-description = "Build the Tauri app (release bundle)"
-alias = 'build'
-raw_args = true
-depends = ["install-app", "build-auth-release"]
-run = 'bun run tauri build "$@"'
-dir = "{{config_root}}/{{vars.app_dir}}"
-
-[tasks.dev-helper-build]
-description = "Build the biopass-rs helper in debug mode"
-run = "cargo build --package biopass-rs-auth --bin biopass-rs-helper"
-
-[tasks.dev-helper]
-description = "Run the biopass-rs helper CLI in debug mode"
-depends = ["dev-helper-build"]
-raw_args = true
-run = "cargo run --package biopass-rs-auth --bin biopass-rs-helper --"
-
-[tasks.auth-test]
-description = "Run the sudo auth flow through the debug helper"
-run = [
-    { task = "dev-helper", args = ["clean"] },
-    { task = "dev-helper", args = ["auth", "-s", "sudo"] },
-]
-
-[tasks.dev-app]
-description = "Run the Tauri app in development mode"
-depends = ["install-app", "dev-helper-build"]
-run = "bun run tauri dev"
-dir = "{{config_root}}/{{vars.app_dir}}"
-
-[tasks.clean-auth]
-description = "Remove Rust auth build artifacts"
-run = "cargo clean --workspace"
-
-[tasks.clean-app]
-description = "Remove app build artifacts"
-run = '''
-cargo clean --manifest-path src-tauri/Cargo.toml
-rm -rf dist node_modules
-echo "cleaned dist and node_modules"
-'''
-dir = "{{config_root}}/{{vars.app_dir}}"
-
-[tasks.clean]
-description = "Remove auth and app build output"
-run = [
-    { task = "clean-auth" },
-    { task = "clean-app" },
-]
-
-
-[tasks.check-app]
-description = "Check frontend code with Vite+"
-run = "vp check ."
-dir = "{{config_root}}/{{vars.app_dir}}"
-
-[tasks.lint-rust]
-description = "Check Rust code formatting"
-run = "cargo fmt --all --check"
-
-[tasks.clippy-rust]
-description = "Run Clippy lints on Rust code"
-run = "cargo clippy --all --all-targets --all-features -- -D warnings"
-
-[tasks.check-rust]
-description = "Check Rust code compilation"
-run = "cargo check --all"
-
-[tasks.build-rust]
-description = "Build Rust workspace"
-depends = ["check-rust"]
-run = "cargo build --all"
-
-[tasks.test-rust]
-description = "Run Rust tests"
-run = "cargo test --all"
-
-[tasks.coverage-rust]
-description = "Print Rust coverage summary for core crates"
-run = "cargo llvm-cov --workspace --exclude-from-report biopass-rs"
-
-[tasks.coverage-rust-all]
-description = "Print Rust coverage summary for the full workspace"
-run = "cargo llvm-cov --workspace"
-
-[tasks.coverage-rust-html]
-description = "Generate local HTML Rust coverage report for core crates"
-run = "cargo llvm-cov --workspace --exclude-from-report biopass-rs --html"
-
-[tasks.coverage-rust-codecov]
-description = "Generate Rust LCOV coverage report for Codecov from core crates"
-run = "cargo llvm-cov --workspace --exclude-from-report biopass-rs --lcov --output-path lcov.info"
-
-[tasks.check]
-description = "Run all checks"
-depends = ["install-app", "check-app", "lint-rust", "clippy-rust", "test-rust"]
-run = { task = "build-rust"}
-
-[tasks.fix-rust]
-description = "Format Rust code and auto-fix Clippy issues"
-run = """
-cargo fmt --all
-cargo clippy --fix --all --all-targets --all-features --allow-dirty --allow-staged
-"""
-
-[tasks.fix-app]
-description = "Auto-fix frontend formatting and lint issues with Vite+"
-run = "vp check --fix ."
-dir = "{{config_root}}/{{vars.app_dir}}"
-
-[tasks.fix]
-description = "Auto-fix Rust and frontend formatting where possible"
-depends = ["fix-rust", "fix-app"]
+[settings]
+lockfile = true
+env_shell_expand = true
+minimum_release_age = "3d"
 
 [tools]
 node = "24"
@@ -142,4 +9,263 @@ rust = "1"
 bun = "1"
 viteplus = "0"
 git-lfs = "latest"
-"cargo:cargo-llvm-cov" = "latest"
+"cargo:cargo-llvm-cov" = "0.8.7"
+# https://github.com/jdx/hk
+hk = "1"
+# https://github.com/suzuki-shunsuke/nllint
+"github:suzuki-shunsuke/nllint" = "1"
+# https://github.com/suzuki-shunsuke/pinact
+pinact = "4"
+# https://github.com/crate-ci/typos
+typos = "1.48.0"
+betterleaks = "1"
+actionlint = "1"
+"cargo:cargo-edit" = "latest"
+
+[vars]
+app_dir = "apps/desktop"
+nllint_excludes = ""
+# example: exclude file
+# nllint_excludes = "':(top,exclude)file'"
+
+[env]
+_.path = "{{ cwd }}/target/release"
+BIOPASS_DATA_DIR = "{{ cwd }}/dev-data"
+BIOPASS_CONFIG = "{{ cwd }}/dev-data/config.yaml"
+# the minimum release age of github actions in days
+PINACT_MIN_AGE = "3"
+PINACT_GITHUB_TOKEN = { value = "${MISE_GITHUB_TOKEN:-}", redact = true }
+
+[tasks."deps:install:app"]
+description = "Install frontend dependencies from the lockfile"
+run = "bun install --frozen-lockfile"
+dir = "{{config_root}}/{{vars.app_dir}}"
+
+[tasks."deps:check"]
+description = "Check Rust and frontend dependency metadata against their lockfiles"
+depends = ["deps:install:app"]
+run = "cargo metadata --format-version 1 --locked --no-deps >/dev/null"
+
+[tasks."deps:fix"]
+description = "Normalize project dependency lockfiles"
+run = { task = "deps:fix:app" }
+
+[tasks."deps:fix:app"]
+description = "Normalize the frontend dependency lockfile"
+run = "bun install --lockfile-only"
+dir = "{{config_root}}/{{vars.app_dir}}"
+
+[tasks."deps:update"]
+description = "Update Rust and frontend dependencies"
+run = [
+  "cargo update",
+  { task = "deps:update:app" },
+]
+
+[tasks."deps:update:app"]
+description = "Update frontend dependencies"
+run = "bun update"
+dir = "{{config_root}}/{{vars.app_dir}}"
+
+[tasks.test]
+description = "Run project tests"
+run = { task = "test:rust" }
+
+[tasks."test:rust"]
+description = "Run Rust workspace tests"
+run = "cargo test --workspace"
+
+[tasks."test:auth"]
+description = "Run the sudo auth flow through the debug helper"
+run = [
+  { task = "dev:helper", args = ["clean"] },
+  { task = "dev:helper", args = ["auth", "-s", "sudo"] },
+]
+
+[tasks."fmt:check"]
+description = "Check project formatting"
+run = "cargo fmt --all --check"
+
+[tasks."fmt:fix"]
+description = "Fix project formatting"
+run = [
+  "cargo fmt --all",
+  { task = "fmt:fix:app" },
+]
+
+[tasks."fmt:fix:app"]
+description = "Fix frontend formatting and lint issues with Vite+"
+depends = ["deps:install:app"]
+run = "vp check --fix ."
+dir = "{{config_root}}/{{vars.app_dir}}"
+
+[tasks.lint]
+description = "Run Rust and frontend lint checks"
+run = [{ tasks = ["lint:rust", "lint:app"] }]
+
+[tasks."lint:rust"]
+description = "Run Clippy lints"
+run = "cargo clippy --workspace --all-targets --all-features -- -D warnings"
+
+[tasks."lint:rust:fix"]
+description = "Auto-fix Clippy lints"
+run = "cargo clippy --fix --workspace --all-targets --all-features --allow-dirty --allow-staged"
+
+[tasks."lint:app"]
+description = "Check frontend code with Vite+"
+depends = ["deps:install:app"]
+run = "vp check ."
+dir = "{{config_root}}/{{vars.app_dir}}"
+
+[tasks.build]
+description = "Build the Tauri application and Linux release packages"
+run = { task = "build:app" }
+
+[tasks."build:check"]
+description = "Check Rust workspace compilation"
+run = "cargo check --workspace"
+
+[tasks."build:rust"]
+description = "Build the Rust workspace"
+depends = ["build:check"]
+run = "cargo build --workspace"
+
+[tasks."build:auth"]
+description = "Build the Rust auth helper, auth core and PAM module"
+raw_args = true
+run = 'cargo build --package biopass-rs-auth --package biopass-rs-pam "$@"'
+
+[tasks."build:auth:release"]
+description = "Build the Rust auth helper, auth core and PAM module in release mode"
+raw_args = true
+run = 'cargo build --release --package biopass-rs-auth --package biopass-rs-pam "$@"'
+
+[tasks."build:app"]
+description = "Build the Tauri application and Linux release packages"
+raw_args = true
+depends = ["deps:install:app", "build:auth:release"]
+run = 'bun run tauri build "$@"'
+dir = "{{config_root}}/{{vars.app_dir}}"
+
+[tasks.audit]
+description = "Audit Rust dependencies for known vulnerabilities"
+run = { task = "audit:rust" }
+
+[tasks."audit:rust"]
+description = "Run cargo audit on Rust dependencies"
+run = "cargo audit"
+
+[tasks."audit:rust:deny-warnings"]
+description = "Run cargo audit and deny warnings"
+run = "cargo audit --deny warnings"
+
+[tasks."coverage:rust"]
+description = "Print Rust coverage summary for core crates"
+run = "cargo llvm-cov --workspace --exclude-from-report biopass-rs"
+
+[tasks."coverage:rust:all"]
+description = "Print Rust coverage summary for the full workspace"
+run = "cargo llvm-cov --workspace"
+
+[tasks."coverage:rust:html"]
+description = "Generate local HTML Rust coverage report for core crates"
+run = "cargo llvm-cov --workspace --exclude-from-report biopass-rs --html"
+
+[tasks."coverage:rust:codecov"]
+description = "Generate the core Rust LCOV report for Codecov"
+run = "cargo llvm-cov --workspace --exclude-from-report biopass-rs --lcov --output-path lcov.info"
+
+[tasks."dev:helper:build"]
+description = "Build the biopass-rs helper in debug mode"
+run = "cargo build --package biopass-rs-auth --bin biopass-rs-helper"
+
+[tasks."dev:helper"]
+description = "Run the biopass-rs helper CLI in debug mode"
+depends = ["dev:helper:build"]
+raw_args = true
+run = "cargo run --package biopass-rs-auth --bin biopass-rs-helper --"
+
+[tasks."dev:app"]
+description = "Run the Tauri application in development mode"
+depends = ["deps:install:app", "dev:helper:build"]
+run = "bun run tauri dev"
+dir = "{{config_root}}/{{vars.app_dir}}"
+
+[tasks."clean:rust"]
+description = "Remove Rust workspace build artifacts"
+run = "cargo clean --workspace"
+
+[tasks."clean:app"]
+description = "Remove desktop application build artifacts"
+run = """
+cargo clean --manifest-path src-tauri/Cargo.toml
+rm -rf dist node_modules
+echo "cleaned dist and node_modules"
+"""
+dir = "{{config_root}}/{{vars.app_dir}}"
+
+[tasks.clean]
+description = "Remove Rust and desktop application build output"
+run = [
+  { task = "clean:rust" },
+  { task = "clean:app" },
+]
+
+[tasks."leaks:check"]
+description = "Run betterleaks checks"
+run = "betterleaks git --redact --no-banner"
+
+[tasks."typos:check"]
+description = "Run Typos Lint"
+run = "typos"
+
+[tasks."typos:fix"]
+description = "Fix Typos Lint"
+run = "typos --write-changes"
+
+[tasks."newline:check"]
+description = "Check final newlines and surrounding whitespace in tracked text files"
+run = "git grep -Ilz '' -- . {{ vars.nllint_excludes }} | xargs -0 nllint --trim-space"
+
+[tasks."newline:fix"]
+description = "Fix final newlines and surrounding whitespace in tracked text files"
+run = "git grep -Ilz '' -- . {{ vars.nllint_excludes }} | xargs -0 nllint --fix --trim-space"
+
+[tasks.check]
+description = "Run read-only project and repository checks"
+run = [
+  { tasks = [ "deps:check", "newline:check", "typos:check", "fmt:check", "build:check" ] },
+  { task = "leaks:check" },
+  { task = "actions:check" },
+  { task = "lint" },
+  { task = "test" }
+]
+alias = "c"
+
+[tasks.fix]
+description = "Fix project and repository formatting"
+run = [
+  { task = "deps:fix" },
+  { task = "newline:fix" },
+  { task = "typos:fix" },
+  { task = "fmt:fix" },
+  { task = "lint:rust:fix" }
+]
+alias = "f"
+
+[tasks.'hooks:install']
+description = "Install Git hooks managed by hk"
+run = "hk install"
+
+[tasks."actions:check"]
+description = "Run actionlint"
+depends = ["actions:pin-offline:check"]
+run = "actionlint"
+
+[tasks.'actions:update']
+description = "Update GitHub Action versions and pin to commit hashes"
+run = "pinact run --update"
+
+[tasks.'actions:pin-offline:check']
+description = "Check GitHub Action versions and pin to commit hashes"
+run = "unset PINACT_MIN_AGE && pinact run --fix=false --no-api"
