@@ -25,8 +25,9 @@ export function FaceCapture({ unavailable }: FaceCaptureProps) {
       const devices = await cmd.face.listVideoDevices();
       setVideoDeviceCount(devices.length);
     } catch (err) {
+      // Leave the count null: an enumeration failure is not a confirmed
+      // absence of cameras, and must not hard-block capture.
       console.error("Failed to load video devices:", err);
-      setVideoDeviceCount(0);
     }
   }, []);
 

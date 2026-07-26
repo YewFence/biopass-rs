@@ -31,8 +31,9 @@ export function FingerprintSetting({ enrollmentUnavailable }: FingerprintSetting
     let canceled = false;
 
     const fetchUsername = async () => {
+      let user: string;
       try {
-        const user = await cmd.system.getCurrentUsername();
+        user = await cmd.system.getCurrentUsername();
         if (canceled) return;
 
         setUsername(user);
@@ -42,8 +43,14 @@ export function FingerprintSetting({ enrollmentUnavailable }: FingerprintSetting
 
         setIsAvailable(available);
         if (!available) return;
+      } catch (err) {
+        // Leave isAvailable null: a probe failure is not proof the reader is absent.
+        console.error("Failed to check fingerprint availability:", err);
+        return;
+      }
 
-        // Sync enrolled fingers from backend
+      // Enrolled-list sync is best effort and must not affect availability.
+      try {
         const enrolledFingers = await cmd.fingerprint.listEnrolled(user);
         if (canceled) return;
 
@@ -65,9 +72,6 @@ export function FingerprintSetting({ enrollmentUnavailable }: FingerprintSetting
         }
       } catch (err) {
         console.error("Failed to sync fingerprints:", err);
-        if (!canceled) {
-          setIsAvailable(false);
-        }
       }
     };
 

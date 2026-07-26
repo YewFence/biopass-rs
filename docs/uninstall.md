@@ -21,7 +21,7 @@ Inside the data directory:
 | :--- | :--- | :--- |
 | `faces/` | Your enrolled face images | You must re-enroll faces before auth works again |
 | `models/` | ONNX inference models | `install` re-downloads them automatically |
-| `debugs/` | Diagnostic frames saved from failed auths under debug mode | No impact; clear with `biopass-rs-helper clean` |
+| `debugs/` | Diagnostic frames saved from failed auths under debug mode | No impact; fully clear with `biopass-rs-helper clean --target debugs --all` (a bare `clean` keeps frames newer than the retention window) |
 
 ## Uninstalling
 

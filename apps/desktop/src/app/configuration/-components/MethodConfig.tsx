@@ -14,8 +14,10 @@ export function MethodConfig() {
   const setFaceConfig = useConfigurationStore((state) => state.setFaceConfig);
   const setFingerprintConfig = useConfigurationStore((state) => state.setFingerprintConfig);
   const [expandedMethod, setExpandedMethod] = useState<string | null>("face");
-  const [faceAvailable, setFaceAvailable] = useState(false);
-  const [fingerprintAvailable, setFingerprintAvailable] = useState(false);
+  // null = not probed yet, or the probe itself failed. A failed probe must not
+  // be reported as "hardware absent".
+  const [faceAvailable, setFaceAvailable] = useState<boolean | null>(null);
+  const [fingerprintAvailable, setFingerprintAvailable] = useState<boolean | null>(null);
 
   useEffect(() => {
     let canceled = false;
@@ -28,9 +30,6 @@ export function MethodConfig() {
         }
       } catch (err) {
         console.error("Failed to check camera availability:", err);
-        if (!canceled) {
-          setFaceAvailable(false);
-        }
       }
 
       try {
@@ -40,9 +39,6 @@ export function MethodConfig() {
         }
       } catch (err) {
         console.error("Failed to check fingerprint availability:", err);
-        if (!canceled) {
-          setFingerprintAvailable(false);
-        }
       }
     };
 
@@ -64,8 +60,8 @@ export function MethodConfig() {
     face: "from-violet-500 to-purple-500",
     fingerprint: "from-emerald-500 to-teal-500",
   };
-  const faceUnavailable = !faceAvailable;
-  const fingerprintUnavailable = !fingerprintAvailable;
+  const faceUnavailable = faceAvailable === false;
+  const fingerprintUnavailable = fingerprintAvailable === false;
 
   return (
     <div className="rounded-xl border border-border/50 bg-card/50 backdrop-blur-sm p-6 shadow-lg">

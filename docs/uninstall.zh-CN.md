@@ -21,7 +21,7 @@ biopass-rs 的所有用户级数据都在 home 目录下，它们**不属于包�
 | :--- | :--- | :--- |
 | `faces/` | 你注册的人脸图片 | 需要重新注册人脸才能继续认证 |
 | `models/` | ONNX 推理模型 | 重装或运行 `install` 时会自动重新下载 |
-| `debugs/` | 调试模式下失败认证保存的诊断帧 | 无影响，可用 `biopass-rs-helper clean` 清理 |
+| `debugs/` | 调试模式下失败认证保存的诊断帧 | 无影响，用 `biopass-rs-helper clean --target debugs --all` 彻底清理（不带 `--all` 时会保留仍在保留期内的帧） |
 
 ## 卸载
 

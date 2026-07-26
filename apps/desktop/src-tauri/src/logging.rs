@@ -65,11 +65,15 @@ pub fn ensure_logging(app: &AppHandle) {
 /// real config once it loads. Returns the resolved data dir so the caller can
 /// reuse it for asset-protocol scoping.
 ///
+/// Fails closed when the data dir cannot be resolved: the returned path is fed
+/// to `allow_directory`, so a CWD fallback would widen the webview's asset
+/// scope to whatever directory the app was launched from.
+///
 /// Seeding with [`LoggingConfig::default`] (file logging on at `info`) pins
 /// the data dir before the config is parsed, so any panic later in startup —
 /// including a config parse failure — still lands on disk.
-pub fn init_startup_logging(app: &AppHandle) -> PathBuf {
-    let data_dir = get_data_dir(app).unwrap_or_else(|_| PathBuf::from("."));
+pub fn init_startup_logging(app: &AppHandle) -> Result<PathBuf, String> {
+    let data_dir = get_data_dir(app)?;
     set_runtime_logging(RuntimeLoggingConfig::from_config(
         data_dir.clone(),
         &LoggingConfig::default(),
@@ -114,7 +118,7 @@ pub fn init_startup_logging(app: &AppHandle) -> PathBuf {
             );
         }
     }
-    data_dir
+    Ok(data_dir)
 }
 
 /// Install a panic hook that records the panic to the Desktop log before

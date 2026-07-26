@@ -163,6 +163,19 @@ fn download_file(
     Err("Max retries exceeded".to_string())
 }
 
+/// Reject a body that stopped short of the advertised `content-length`.
+///
+/// Without this, a connection cut mid-body leaves a truncated `.onnx` that the
+/// rename promotes into place, and `dest.exists()` then skips it forever.
+fn verify_download_length(downloaded: u64, expected: Option<u64>) -> Result<(), String> {
+    match expected {
+        Some(expected) if downloaded != expected => Err(format!(
+            "Truncated download: got {downloaded} of {expected} bytes"
+        )),
+        _ => Ok(()),
+    }
+}
+
 fn try_download(
     agent: &ureq::Agent,
     url: &str,
@@ -206,7 +219,11 @@ fn try_download(
         }
     }
 
-    file.flush()
+    verify_download_length(downloaded, total_size)?;
+
+    // sync_all, not flush: the caller renames this file into place immediately,
+    // so the bytes must be durable before the rename is observable.
+    file.sync_all()
         .map_err(|e| format!("Failed to flush file: {}", e))?;
     Ok(())
 }
@@ -362,6 +379,14 @@ fn models_present_in_dir(data_dir: &Path) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn verify_download_length_rejects_truncated_body() {
+        assert!(verify_download_length(1024, Some(4096)).is_err());
+        assert!(verify_download_length(4096, Some(4096)).is_ok());
+        // Servers may omit content-length; nothing to compare against.
+        assert!(verify_download_length(1024, None).is_ok());
+    }
 
     #[test]
     fn models_present_in_dir_requires_every_current_model() {
