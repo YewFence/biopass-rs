@@ -1,5 +1,6 @@
 use super::auth::{EXIT_AUTH_ERR, EXIT_SUCCESS};
 use biopass_rs_auth::{user_data_dir, user_exists};
+use std::path::Path;
 
 pub(crate) fn run(username: &str) -> u8 {
     if !user_exists(username) {
@@ -7,8 +8,11 @@ pub(crate) fn run(username: &str) -> u8 {
         return EXIT_AUTH_ERR;
     }
 
-    let debug_dir = user_data_dir(username).join("debugs");
-    let Ok(entries) = std::fs::read_dir(&debug_dir) else {
+    clean_debug_dir(username, &user_data_dir(username).join("debugs"))
+}
+
+fn clean_debug_dir(username: &str, debug_dir: &Path) -> u8 {
+    let Ok(entries) = std::fs::read_dir(debug_dir) else {
         eprintln!(
             "No debug cache found for user '{username}' at {}",
             debug_dir.display()
@@ -69,6 +73,7 @@ fn format_bytes(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
 
     #[test]
     fn format_bytes_uses_largest_binary_unit() {
@@ -76,5 +81,28 @@ mod tests {
         assert_eq!(format_bytes(1024), "1.00 KiB");
         assert_eq!(format_bytes(3 * 1024 * 1024), "3.00 MiB");
         assert_eq!(format_bytes(5 * 1024 * 1024 * 1024), "5.00 GiB");
+    }
+
+    #[test]
+    fn missing_debug_directory_is_successful_noop() {
+        let directory = tempfile::tempdir().unwrap();
+
+        assert_eq!(
+            clean_debug_dir("alice", &directory.path().join("debugs")),
+            EXIT_SUCCESS
+        );
+    }
+
+    #[test]
+    fn removes_debug_files_and_directories() {
+        let directory = tempfile::tempdir().unwrap();
+        let debug_dir = directory.path().join("debugs");
+        let nested_dir = debug_dir.join("nested");
+        fs::create_dir_all(&nested_dir).unwrap();
+        fs::write(debug_dir.join("frame.jpg"), [1_u8, 2, 3]).unwrap();
+        fs::write(nested_dir.join("trace.txt"), "debug").unwrap();
+
+        assert_eq!(clean_debug_dir("alice", &debug_dir), EXIT_SUCCESS);
+        assert_eq!(fs::read_dir(&debug_dir).unwrap().count(), 0);
     }
 }

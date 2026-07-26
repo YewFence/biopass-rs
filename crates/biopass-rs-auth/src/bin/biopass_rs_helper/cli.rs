@@ -66,7 +66,7 @@ pub enum Commands {
     /// Start interactive preview session
     PreviewSession {
         /// Camera device path
-        #[arg(short, long)]
+        #[arg(long)]
         camera: Option<String>,
         /// Detection model path
         #[arg(short, long)]
@@ -88,7 +88,7 @@ pub enum Commands {
 #[derive(Args)]
 pub struct CaptureArgs {
     /// Camera device path
-    #[arg(short, long)]
+    #[arg(long)]
     pub camera: Option<String>,
     /// Output image path
     #[arg(short, long)]
@@ -268,5 +268,106 @@ mod tests {
 
         assert_eq!(cli.username.as_deref(), Some("yewfence"));
         assert!(matches!(cli.command, Commands::Clean));
+    }
+
+    #[test]
+    fn install_and_model_download_parse() {
+        let cli = Cli::parse_from(["biopass-rs-helper", "install"]);
+        assert!(matches!(cli.command, Commands::Install));
+
+        let cli = Cli::parse_from(["biopass-rs-helper", "model-download"]);
+        assert!(matches!(cli.command, Commands::ModelDownload));
+    }
+
+    #[test]
+    fn crop_face_parses_paths_model_and_quality() {
+        let cli = Cli::parse_from([
+            "biopass-rs-helper",
+            "crop-face",
+            "--input",
+            "/tmp/input.jpg",
+            "--output",
+            "/tmp/output.jpg",
+            "--model",
+            "/tmp/model.onnx",
+            "--quality",
+            "75",
+        ]);
+
+        match cli.command {
+            Commands::CropFace {
+                input,
+                output,
+                model,
+                quality,
+            } => {
+                assert_eq!(input, std::path::Path::new("/tmp/input.jpg"));
+                assert_eq!(output, std::path::Path::new("/tmp/output.jpg"));
+                assert_eq!(model, "/tmp/model.onnx");
+                assert_eq!(quality, 75);
+            }
+            _ => panic!("expected crop-face command"),
+        }
+    }
+
+    #[test]
+    fn capture_face_parses_nested_args_and_default_quality() {
+        let cli = Cli::parse_from([
+            "biopass-rs-helper",
+            "capture-face",
+            "--camera",
+            "/dev/video2",
+            "--output",
+            "/tmp/output.jpg",
+            "--model",
+            "/tmp/model.onnx",
+        ]);
+
+        match cli.command {
+            Commands::CaptureFace { capture } => {
+                assert_eq!(capture.camera.as_deref(), Some("/dev/video2"));
+                assert_eq!(capture.output, std::path::Path::new("/tmp/output.jpg"));
+                assert_eq!(capture.model, "/tmp/model.onnx");
+                assert_eq!(capture.quality, 90);
+            }
+            _ => panic!("expected capture-face command"),
+        }
+    }
+
+    #[test]
+    fn preview_session_parses_optional_camera_model_and_quality() {
+        let cli = Cli::parse_from([
+            "biopass-rs-helper",
+            "preview-session",
+            "--camera",
+            "/dev/video4",
+            "--model",
+            "/tmp/model.onnx",
+            "--quality",
+            "55",
+        ]);
+
+        match cli.command {
+            Commands::PreviewSession {
+                camera,
+                model,
+                quality,
+            } => {
+                assert_eq!(camera.as_deref(), Some("/dev/video4"));
+                assert_eq!(model.as_deref(), Some("/tmp/model.onnx"));
+                assert_eq!(quality, 55);
+            }
+            _ => panic!("expected preview-session command"),
+        }
+    }
+
+    #[test]
+    fn completion_parses_shell() {
+        let cli = Cli::parse_from(["biopass-rs-helper", "completion", "zsh"]);
+
+        match cli.command {
+            Commands::Completion { shell } => assert_eq!(shell, Shell::Zsh),
+            _ => panic!("expected completion command"),
+        }
     }
 }

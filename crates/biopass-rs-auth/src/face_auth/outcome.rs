@@ -89,3 +89,78 @@ pub(super) fn method_summary_result(result: AuthResult) -> AuthMethodSummaryResu
         AuthResult::Unavailable => AuthMethodSummaryResult::Unavailable,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn face_attempt_outcome_builds_method_summary() {
+        let outcome =
+            FaceAuthAttemptOutcome::new(AuthResult::Success, "face_matched", "face matched");
+
+        let method_outcome = outcome.into_method_outcome();
+
+        assert_eq!(method_outcome.result, AuthResult::Success);
+        assert_eq!(method_outcome.summary.method, "face");
+        assert_eq!(
+            method_outcome.summary.result,
+            AuthMethodSummaryResult::Success
+        );
+        assert_eq!(
+            method_outcome.summary.reason.as_deref(),
+            Some("face_matched")
+        );
+        assert_eq!(method_outcome.summary.message, "face matched");
+        assert_eq!(method_outcome.summary.attempts.len(), 1);
+        assert_eq!(method_outcome.summary.attempts[0].attempt, 1);
+        assert_eq!(
+            method_outcome.summary.attempts[0].result,
+            AuthMethodSummaryResult::Success
+        );
+    }
+
+    #[test]
+    fn anti_spoofing_outcome_constructors_record_state() {
+        let passed = AntiSpoofingCheckOutcome::passed();
+
+        assert!(passed.passed);
+        assert!(passed.reason.is_none());
+        assert!(passed.message.is_none());
+        assert!(passed.ir.is_none());
+
+        let ir = IrLivenessSummary {
+            frames: 3,
+            passed_frames: 1,
+            required_passes: 2,
+            last_failure: Some("ir_face_mismatch".to_string()),
+            highest_detection_confidence: Some(0.8),
+        };
+        let failed = AntiSpoofingCheckOutcome::failed("spoof", "spoof detected").with_ir(ir);
+
+        assert!(!failed.passed);
+        assert_eq!(failed.reason.as_deref(), Some("spoof"));
+        assert_eq!(failed.message.as_deref(), Some("spoof detected"));
+        assert_eq!(failed.ir.unwrap().passed_frames, 1);
+    }
+
+    #[test]
+    fn method_summary_result_maps_all_auth_results() {
+        assert_eq!(
+            method_summary_result(AuthResult::Success),
+            AuthMethodSummaryResult::Success
+        );
+        assert_eq!(
+            method_summary_result(AuthResult::Failure),
+            AuthMethodSummaryResult::Failure
+        );
+        assert_eq!(
+            method_summary_result(AuthResult::Retry),
+            AuthMethodSummaryResult::Retry
+        );
+        assert_eq!(
+            method_summary_result(AuthResult::Unavailable),
+            AuthMethodSummaryResult::Unavailable
+        );
+    }
+}

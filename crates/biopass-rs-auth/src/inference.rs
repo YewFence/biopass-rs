@@ -167,4 +167,21 @@ mod tests {
 
         assert!(error.contains("Git LFS pointer"));
     }
+
+    #[test]
+    fn reject_lfs_pointer_reports_missing_file() {
+        let error =
+            reject_lfs_pointer(Path::new("/tmp/biopass-rs-missing-model.onnx")).unwrap_err();
+
+        assert!(error.contains("Failed to read"));
+        assert!(error.contains("biopass-rs-missing-model.onnx"));
+    }
+
+    #[test]
+    fn reject_lfs_pointer_accepts_regular_files() {
+        let temp = tempfile::NamedTempFile::new().unwrap();
+        std::fs::write(temp.path(), b"not an lfs pointer").unwrap();
+
+        reject_lfs_pointer(temp.path()).unwrap();
+    }
 }

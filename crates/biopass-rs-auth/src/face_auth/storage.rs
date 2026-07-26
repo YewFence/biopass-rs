@@ -71,7 +71,7 @@ mod tests {
         path: &std::path::Path,
         f: impl FnOnce() -> T + std::panic::UnwindSafe,
     ) -> T {
-        let _guard = super::super::DATA_DIR_TEST_LOCK.lock().unwrap();
+        let _guard = crate::ENV_TEST_LOCK.lock().unwrap();
         let previous = std::env::var_os(crate::DATA_DIR_ENV);
         std::env::set_var(crate::DATA_DIR_ENV, path);
         let result = std::panic::catch_unwind(f);

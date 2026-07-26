@@ -655,6 +655,21 @@ fn bbox_iou(ax1: f32, ay1: f32, ax2: f32, ay2: f32, bx1: f32, by1: f32, bx2: f32
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{FaceBox, FaceDetection, RgbFrame};
+
+    const FRAME_SIZE: u32 = 100;
+
+    fn face_box(x1: u32, y1: u32, x2: u32, y2: u32) -> FaceBox {
+        FaceBox { x1, y1, x2, y2 }
+    }
+
+    fn detection(confidence: f32, bbox: FaceBox) -> FaceDetection {
+        FaceDetection {
+            confidence,
+            bbox,
+            crop: RgbFrame::new(1, 1, vec![0, 0, 0]).unwrap(),
+        }
+    }
 
     #[test]
     fn ir_summary_records_liveness_vote_details() {
@@ -665,5 +680,92 @@ mod tests {
         assert_eq!(summary.required_passes, 2);
         assert_eq!(summary.last_failure.as_deref(), Some("ir_face_mismatch"));
         assert_eq!(summary.highest_detection_confidence, Some(0.76));
+    }
+
+    #[test]
+    fn bbox_iou_reports_overlap_ratio() {
+        let iou = bbox_iou(0.0, 0.0, 0.5, 0.5, 0.25, 0.25, 0.75, 0.75);
+        let intersection_area = 0.25 * 0.25;
+        let union_area = 0.5 * 0.5 + 0.5 * 0.5 - intersection_area;
+
+        assert!((iou - intersection_area / union_area).abs() < 0.0001);
+        assert_eq!(bbox_iou(0.0, 0.0, 0.0, 0.5, 0.0, 0.0, 0.5, 0.5), 0.0);
+    }
+
+    #[test]
+    fn pick_ir_face_match_rejects_empty_or_invalid_dimensions() {
+        let rgb_box = face_box(10, 10, 20, 20);
+        let detections = [detection(0.9, rgb_box)];
+
+        assert!(
+            pick_ir_face_match(FRAME_SIZE, FRAME_SIZE, rgb_box, FRAME_SIZE, FRAME_SIZE, &[])
+                .is_none()
+        );
+        assert!(
+            pick_ir_face_match(0, FRAME_SIZE, rgb_box, FRAME_SIZE, FRAME_SIZE, &detections)
+                .is_none()
+        );
+        assert!(
+            pick_ir_face_match(FRAME_SIZE, FRAME_SIZE, rgb_box, 0, FRAME_SIZE, &detections)
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn pick_ir_face_match_prefers_highest_overlap() {
+        let rgb_box = face_box(20, 20, 60, 60);
+        let detections = [
+            detection(0.8, face_box(65, 65, 90, 90)),
+            detection(0.7, face_box(22, 22, 58, 58)),
+        ];
+
+        let picked = pick_ir_face_match(
+            FRAME_SIZE,
+            FRAME_SIZE,
+            rgb_box,
+            FRAME_SIZE,
+            FRAME_SIZE,
+            &detections,
+        )
+        .unwrap();
+
+        assert_eq!(picked.bbox, detections[1].bbox);
+    }
+
+    #[test]
+    fn pick_ir_face_match_uses_center_distance_without_overlap() {
+        let rgb_box = face_box(10, 10, 30, 30);
+        let detections = [
+            detection(0.8, face_box(35, 35, 45, 45)),
+            detection(0.7, face_box(31, 31, 41, 41)),
+        ];
+
+        let picked = pick_ir_face_match(
+            FRAME_SIZE,
+            FRAME_SIZE,
+            rgb_box,
+            FRAME_SIZE,
+            FRAME_SIZE,
+            &detections,
+        )
+        .unwrap();
+
+        assert_eq!(picked.bbox, detections[1].bbox);
+    }
+
+    #[test]
+    fn pick_ir_face_match_rejects_far_non_overlapping_face() {
+        let rgb_box = face_box(5, 5, 15, 15);
+        let detections = [detection(0.9, face_box(80, 80, 90, 90))];
+
+        assert!(pick_ir_face_match(
+            FRAME_SIZE,
+            FRAME_SIZE,
+            rgb_box,
+            FRAME_SIZE,
+            FRAME_SIZE,
+            &detections
+        )
+        .is_none());
     }
 }

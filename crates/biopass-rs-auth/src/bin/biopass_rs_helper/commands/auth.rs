@@ -23,3 +23,14 @@ pub(crate) fn authenticate(username: Option<&str>, service: Option<&str>) -> u8 
         PamCode::AuthError => EXIT_AUTH_ERR,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn authenticate_rejects_missing_or_empty_username() {
+        assert_eq!(authenticate(None, Some("sudo")), EXIT_AUTH_ERR);
+        assert_eq!(authenticate(Some(""), Some("sudo")), EXIT_AUTH_ERR);
+    }
+}

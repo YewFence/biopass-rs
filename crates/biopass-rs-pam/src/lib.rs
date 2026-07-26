@@ -117,16 +117,21 @@ unsafe fn c_string_to_string(value: *const c_char) -> Option<String> {
 }
 
 fn run_helper(username: &str, service: Option<&str>) -> c_int {
-    let mut command = Command::new("/usr/bin/biopass-rs-helper");
-    command.args(["--username", username, "auth"]);
-    if let Some(service) = service.filter(|service| !service.is_empty()) {
-        command.args(["--service", service]);
-    }
+    let mut command = helper_command(username, service);
 
     match command.status() {
         Ok(status) => map_helper_exit(status.code()),
         Err(_) => PAM_AUTH_ERR,
     }
+}
+
+fn helper_command(username: &str, service: Option<&str>) -> Command {
+    let mut command = Command::new("/usr/bin/biopass-rs-helper");
+    command.args(["--username", username, "auth"]);
+    if let Some(service) = service.filter(|service| !service.is_empty()) {
+        command.args(["--service", service]);
+    }
+    command
 }
 
 fn map_helper_exit(code: Option<i32>) -> c_int {
@@ -140,6 +145,52 @@ fn map_helper_exit(code: Option<i32>) -> c_int {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::ffi::CString;
+
+    fn command_args(command: &Command) -> Vec<String> {
+        command
+            .get_args()
+            .map(|arg| arg.to_string_lossy().to_string())
+            .collect()
+    }
+
+    #[test]
+    fn pam_non_auth_entry_points_are_ignored() {
+        assert_eq!(
+            pam_sm_open_session(std::ptr::null_mut(), 0, 0, std::ptr::null()),
+            PAM_IGNORE
+        );
+        assert_eq!(
+            pam_sm_acct_mgmt(std::ptr::null_mut(), 0, 0, std::ptr::null()),
+            PAM_IGNORE
+        );
+        assert_eq!(
+            pam_sm_close_session(std::ptr::null_mut(), 0, 0, std::ptr::null()),
+            PAM_IGNORE
+        );
+        assert_eq!(
+            pam_sm_chauthtok(std::ptr::null_mut(), 0, 0, std::ptr::null()),
+            PAM_IGNORE
+        );
+        assert_eq!(
+            pam_sm_setcred(std::ptr::null_mut(), 0, 0, std::ptr::null()),
+            PAM_IGNORE
+        );
+    }
+
+    #[test]
+    fn c_string_to_string_handles_null_utf8_and_invalid_utf8() {
+        assert!(unsafe { c_string_to_string(std::ptr::null()) }.is_none());
+
+        let value = CString::new("sudo").unwrap();
+        assert_eq!(
+            unsafe { c_string_to_string(value.as_ptr()) }.as_deref(),
+            Some("sudo")
+        );
+
+        let invalid = [0xff_u8, 0x00];
+        assert!(unsafe { c_string_to_string(invalid.as_ptr().cast()) }.is_none());
+    }
 
     #[test]
     fn maps_helper_success() {
@@ -155,5 +206,30 @@ mod tests {
     fn maps_helper_failures_to_auth_error() {
         assert_eq!(map_helper_exit(Some(1)), PAM_AUTH_ERR);
         assert_eq!(map_helper_exit(None), PAM_AUTH_ERR);
+    }
+
+    #[test]
+    fn helper_command_includes_username_and_auth_subcommand() {
+        let command = helper_command("alice", None);
+
+        assert_eq!(command.get_program(), "/usr/bin/biopass-rs-helper");
+        assert_eq!(command_args(&command), ["--username", "alice", "auth"]);
+    }
+
+    #[test]
+    fn helper_command_includes_non_empty_service() {
+        let command = helper_command("alice", Some("sudo"));
+
+        assert_eq!(
+            command_args(&command),
+            ["--username", "alice", "auth", "--service", "sudo"]
+        );
+    }
+
+    #[test]
+    fn helper_command_ignores_empty_service() {
+        let command = helper_command("alice", Some(""));
+
+        assert_eq!(command_args(&command), ["--username", "alice", "auth"]);
     }
 }

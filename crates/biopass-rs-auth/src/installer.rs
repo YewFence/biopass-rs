@@ -329,10 +329,84 @@ mod tests {
     }
 
     #[test]
+    fn import_legacy_faces_from_creates_destination_directory() {
+        let src = tempfile::tempdir().unwrap();
+        let dest_parent = tempfile::tempdir().unwrap();
+        let dest = dest_parent.path().join("faces");
+        fs::write(src.path().join("alice.jpg"), b"alice").unwrap();
+
+        let outcome = import_legacy_faces_from(src.path(), &dest).unwrap();
+
+        assert_eq!(
+            outcome,
+            ImportLegacyFacesOutcome {
+                source_found: true,
+                copied: 1,
+            }
+        );
+        assert_eq!(fs::read(dest.join("alice.jpg")).unwrap(), b"alice");
+    }
+
+    #[test]
+    fn import_legacy_faces_from_ignores_unreadable_file_names() {
+        use std::ffi::OsString;
+        use std::os::unix::ffi::OsStringExt;
+
+        let src = tempfile::tempdir().unwrap();
+        let dest = tempfile::tempdir().unwrap();
+        let invalid_name = OsString::from_vec(vec![0xff, b'.', b'j', b'p', b'g']);
+        fs::write(src.path().join(invalid_name), b"invalid").unwrap();
+
+        let outcome = import_legacy_faces_from(src.path(), dest.path()).unwrap();
+
+        assert_eq!(
+            outcome,
+            ImportLegacyFacesOutcome {
+                source_found: true,
+                copied: 0,
+            }
+        );
+        assert_eq!(fs::read_dir(dest.path()).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn import_legacy_faces_from_skips_entries_that_cannot_be_copied() {
+        let src = tempfile::tempdir().unwrap();
+        let dest = tempfile::tempdir().unwrap();
+        fs::create_dir(src.path().join("not-a-file.jpg")).unwrap();
+        fs::write(src.path().join("alice.jpg"), b"alice").unwrap();
+
+        let outcome = import_legacy_faces_from(src.path(), dest.path()).unwrap();
+
+        assert_eq!(
+            outcome,
+            ImportLegacyFacesOutcome {
+                source_found: true,
+                copied: 1,
+            }
+        );
+        assert_eq!(fs::read(dest.path().join("alice.jpg")).unwrap(), b"alice");
+        assert!(!dest.path().join("not-a-file.jpg").exists());
+    }
+
+    #[test]
     fn import_legacy_faces_from_ignores_missing_source() {
         let dest = tempfile::tempdir().unwrap();
 
         let outcome = import_legacy_faces_from(Path::new("/missing/source"), dest.path()).unwrap();
+
+        assert_eq!(
+            outcome,
+            ImportLegacyFacesOutcome {
+                source_found: false,
+                copied: 0,
+            }
+        );
+    }
+
+    #[test]
+    fn import_legacy_faces_for_user_ignores_unknown_user() {
+        let outcome = import_legacy_faces_for_user("__biopass_rs_missing_user__").unwrap();
 
         assert_eq!(
             outcome,
