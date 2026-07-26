@@ -353,3 +353,202 @@ fn parse_log_level(level: &str) -> Option<LogLevel> {
         _ => None,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        AuthHistoryConfig, ConsoleLoggingConfig, DiagnosticsLoggingConfig, FileLoggingConfig,
+        LogRetentionConfig, LogRotationConfig, LoggingConfig,
+    };
+    use std::sync::Mutex;
+
+    static LOGGING_TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn summary(id: &str) -> AuthSessionSummary {
+        AuthSessionSummary {
+            id: id.to_string(),
+            started_at: "2026-06-21T10:00:00Z".to_string(),
+            finished_at: "2026-06-21T10:00:01Z".to_string(),
+            service: Some("sudo".to_string()),
+            result: AuthSummaryResult::Success,
+            execution_mode: "sequential".to_string(),
+            methods: vec![AuthMethodSummary {
+                method: "fingerprint".to_string(),
+                result: AuthMethodSummaryResult::Success,
+                attempts: vec![AuthAttemptSummary {
+                    attempt: 1,
+                    result: AuthMethodSummaryResult::Success,
+                    reason: None,
+                    message: "verified".to_string(),
+                    best_match: None,
+                    ir: None,
+                }],
+                reason: None,
+                message: "verified".to_string(),
+                best_match: None,
+                ir: None,
+            }],
+        }
+    }
+
+    fn runtime_config(data_dir: PathBuf) -> RuntimeLoggingConfig {
+        RuntimeLoggingConfig {
+            data_dir,
+            file_enabled: true,
+            file_level: LogLevel::Info,
+            console_enabled: false,
+            console_level: LogLevel::Warn,
+            max_size_bytes: 1024,
+            max_files_per_day: 3,
+            save_failed_frames: true,
+            auth_history_enabled: true,
+        }
+    }
+
+    #[test]
+    fn runtime_logging_from_config_parses_levels_and_clamps_rotation() {
+        let config = LoggingConfig {
+            file: FileLoggingConfig {
+                enabled: true,
+                level: "debug".to_string(),
+                rotation: LogRotationConfig {
+                    kind: "size".to_string(),
+                    max_size_mb: 0,
+                    max_files_per_day: 0,
+                },
+                retention: LogRetentionConfig::default(),
+            },
+            console: ConsoleLoggingConfig {
+                enabled: true,
+                level: "error".to_string(),
+            },
+            diagnostics: DiagnosticsLoggingConfig {
+                save_failed_frames: true,
+                retention_days: 7,
+            },
+            auth_history: AuthHistoryConfig {
+                enabled: true,
+                retention_days: 30,
+            },
+        };
+
+        let runtime = RuntimeLoggingConfig::from_config(PathBuf::from("/tmp/data"), &config);
+
+        assert_eq!(runtime.data_dir, PathBuf::from("/tmp/data"));
+        assert!(runtime.file_enabled);
+        assert_eq!(runtime.file_level, LogLevel::Debug);
+        assert!(runtime.console_enabled);
+        assert_eq!(runtime.console_level, LogLevel::Error);
+        assert_eq!(runtime.max_size_bytes, 1024 * 1024);
+        assert_eq!(runtime.max_files_per_day, 1);
+        assert!(runtime.save_failed_frames);
+        assert!(runtime.auth_history_enabled);
+    }
+
+    #[test]
+    fn runtime_logging_from_config_falls_back_for_unknown_levels() {
+        let config = LoggingConfig {
+            file: FileLoggingConfig {
+                level: "trace".to_string(),
+                ..FileLoggingConfig::default()
+            },
+            console: ConsoleLoggingConfig {
+                level: "fatal".to_string(),
+                ..ConsoleLoggingConfig::default()
+            },
+            ..LoggingConfig::default()
+        };
+
+        let runtime = RuntimeLoggingConfig::from_config(PathBuf::from("/tmp/data"), &config);
+
+        assert_eq!(runtime.file_level, LogLevel::Info);
+        assert_eq!(runtime.console_level, LogLevel::Warn);
+    }
+
+    #[test]
+    fn emit_log_escapes_newlines_and_rotates_by_size() {
+        let _guard = LOGGING_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let mut config = runtime_config(directory.path().to_path_buf());
+        config.max_size_bytes = 1;
+        config.max_files_per_day = 2;
+        set_runtime_logging(config);
+
+        emit_log(LogComponent::Auth, LogLevel::Info, "scope", "first\nline");
+        emit_log(LogComponent::Auth, LogLevel::Info, "scope", "second");
+
+        let base = log_file_path(LogComponent::Auth);
+        let rotated = base.with_file_name(format!("{}.1.log", Local::now().format("%Y-%m-%d")));
+
+        let base_text = fs::read_to_string(base).unwrap();
+        let rotated_text = fs::read_to_string(rotated).unwrap();
+        assert!(base_text.contains("first\\nline"));
+        assert!(rotated_text.contains("second"));
+    }
+
+    #[test]
+    fn read_log_tail_returns_last_lines_and_missing_file_is_empty() {
+        let _guard = LOGGING_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        set_runtime_logging(runtime_config(directory.path().to_path_buf()));
+
+        assert_eq!(
+            read_log_tail(LogComponent::Helper, 10).unwrap(),
+            Vec::<String>::new()
+        );
+
+        let path = log_file_path(LogComponent::Helper);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, "one\ntwo\nthree\n").unwrap();
+
+        assert_eq!(
+            read_log_tail(LogComponent::Helper, 2).unwrap(),
+            vec!["two", "three"]
+        );
+    }
+
+    #[test]
+    fn auth_history_round_trips_newest_entries_first_and_skips_bad_lines() {
+        let _guard = LOGGING_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        set_runtime_logging(runtime_config(directory.path().to_path_buf()));
+
+        write_auth_summary(&summary("first")).unwrap();
+        let path = auth_history_file_path_for_now(directory.path());
+        let mut file = OpenOptions::new().append(true).open(&path).unwrap();
+        writeln!(file, "not json").unwrap();
+        write_auth_summary(&summary("second")).unwrap();
+
+        let history = read_auth_history(1).unwrap();
+
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].id, "second");
+    }
+
+    #[test]
+    fn auth_history_disabled_does_not_create_directory() {
+        let _guard = LOGGING_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let mut config = runtime_config(directory.path().to_path_buf());
+        config.auth_history_enabled = false;
+        set_runtime_logging(config);
+
+        write_auth_summary(&summary("ignored")).unwrap();
+
+        assert!(!auth_history_dir().exists());
+    }
+
+    #[test]
+    fn directories_and_flags_follow_runtime_config() {
+        let _guard = LOGGING_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        set_runtime_logging(runtime_config(directory.path().to_path_buf()));
+
+        assert_eq!(LogComponent::Desktop.as_dir(), "desktop");
+        assert_eq!(logs_dir(), directory.path().join("logs"));
+        assert_eq!(auth_history_dir(), directory.path().join("auth-history"));
+        assert!(save_failed_frames_enabled());
+        assert!(make_auth_summary_id().contains('-'));
+    }
+}
