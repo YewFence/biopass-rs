@@ -1,3 +1,4 @@
+use serde::Serialize;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -26,7 +27,8 @@ pub enum ExecutionMode {
     Parallel,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
 pub enum PamCode {
     Success,
     AuthError,

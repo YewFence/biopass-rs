@@ -1,5 +1,6 @@
 use crate::user_data_dir;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use serde::Serialize;
 use std::fs;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -7,23 +8,34 @@ use std::process::Command;
 use std::time::Duration;
 use users::os::unix::UserExt;
 
-const MODELS: &[(&str, &str)] = &[
-    (
-        "yolov8n-face.onnx",
-        "https://biopass.ticklab.site/models/yolov8n-face.onnx",
-    ),
-    (
-        "edgeface_s_gamma_05.onnx",
-        "https://biopass.ticklab.site/models/edgeface_s_gamma_05.onnx",
-    ),
-    (
-        "edgeface_xs_gamma_06.onnx",
-        "https://biopass.ticklab.site/models/edgeface_xs_gamma_06.onnx",
-    ),
-    (
-        "mobilenetv3_antispoof.onnx",
-        "https://biopass.ticklab.site/models/mobilenetv3_antispoof.onnx",
-    ),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct ModelSpec {
+    filename: &'static str,
+    url: &'static str,
+    model_type: &'static str,
+}
+
+const MODELS: &[ModelSpec] = &[
+    ModelSpec {
+        filename: "yolov8n-face.onnx",
+        url: "https://biopass.ticklab.site/models/yolov8n-face.onnx",
+        model_type: "detection",
+    },
+    ModelSpec {
+        filename: "edgeface_s_gamma_05.onnx",
+        url: "https://biopass.ticklab.site/models/edgeface_s_gamma_05.onnx",
+        model_type: "recognition",
+    },
+    ModelSpec {
+        filename: "edgeface_xs_gamma_06.onnx",
+        url: "https://biopass.ticklab.site/models/edgeface_xs_gamma_06.onnx",
+        model_type: "recognition",
+    },
+    ModelSpec {
+        filename: "mobilenetv3_antispoof.onnx",
+        url: "https://biopass.ticklab.site/models/mobilenetv3_antispoof.onnx",
+        model_type: "anti-spoofing",
+    },
 ];
 
 const LEGACY_MODELS: &[&str] = &[
@@ -41,6 +53,23 @@ pub struct ImportLegacyFacesOutcome {
     pub copied: usize,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct BuiltinModelInfo {
+    pub filename: String,
+    pub path: String,
+    #[serde(rename = "type")]
+    pub model_type: String,
+    pub url: String,
+    pub present: bool,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ModelDownloadReport {
+    pub models: Vec<BuiltinModelInfo>,
+    pub downloaded: usize,
+    pub skipped: usize,
+}
+
 /// Resolve the directory where ONNX models live. Honours `BIOPASS_DATA_DIR`
 /// and the CLI `--data-dir` override so `download_models` /
 /// `check_models_present` agree with `user_data_dir()` for the rest of the
@@ -51,6 +80,27 @@ fn models_dir() -> Result<PathBuf, String> {
         return Err("Cannot determine data directory".to_string());
     }
     Ok(dir.join("models"))
+}
+
+pub fn builtin_models() -> Result<Vec<BuiltinModelInfo>, String> {
+    let data_dir = models_dir()?;
+    Ok(model_infos_in_dir(&data_dir))
+}
+
+fn model_infos_in_dir(data_dir: &Path) -> Vec<BuiltinModelInfo> {
+    MODELS
+        .iter()
+        .map(|spec| {
+            let path = data_dir.join(spec.filename);
+            BuiltinModelInfo {
+                filename: spec.filename.to_string(),
+                path: path.to_string_lossy().to_string(),
+                model_type: spec.model_type.to_string(),
+                url: spec.url.to_string(),
+                present: path.exists(),
+            }
+        })
+        .collect()
 }
 
 /// HTTP agent that fails fast while establishing the connection or waiting for
@@ -148,6 +198,14 @@ fn try_download(
 }
 
 pub fn download_models() -> Result<(), String> {
+    download_models_inner(true).map(|_| ())
+}
+
+pub fn download_models_report() -> Result<ModelDownloadReport, String> {
+    download_models_inner(false)
+}
+
+fn download_models_inner(show_progress: bool) -> Result<ModelDownloadReport, String> {
     let data_dir = models_dir()?;
 
     remove_legacy_models(&data_dir);
@@ -156,29 +214,49 @@ pub fn download_models() -> Result<(), String> {
 
     let multi = MultiProgress::new();
     let agent = http_agent();
+    let mut downloaded = 0usize;
+    let mut skipped = 0usize;
 
     let style = ProgressStyle::default_bar()
         .template("{msg:30.bold} [{bar:40.cyan/blue}] {bytes}/{total_bytes} ({eta})")
         .unwrap_or_else(|_| ProgressStyle::default_bar())
         .progress_chars("=>-");
 
-    for (filename, url) in MODELS {
-        let dest = data_dir.join(filename);
+    for spec in MODELS {
+        let dest = data_dir.join(spec.filename);
         if dest.exists() {
-            eprintln!("[skip] Model already present: {}", filename);
+            skipped += 1;
+            if show_progress {
+                eprintln!("[skip] Model already present: {}", spec.filename);
+            }
             continue;
         }
 
-        let pb = multi.add(ProgressBar::new(0));
-        pb.set_style(style.clone());
-        pb.set_message(filename.to_string());
+        let pb = if show_progress {
+            let pb = multi.add(ProgressBar::new(0));
+            pb.set_style(style.clone());
+            pb.set_message(spec.filename.to_string());
+            Some(pb)
+        } else {
+            None
+        };
 
-        download_file(&agent, url, &dest, 3, Some(&pb))?;
-        pb.finish_with_message(format!("[done] {}", filename));
+        download_file(&agent, spec.url, &dest, 3, pb.as_ref())?;
+        downloaded += 1;
+        if let Some(pb) = pb {
+            pb.finish_with_message(format!("[done] {}", spec.filename));
+        }
     }
 
-    multi.clear().map_err(|e| e.to_string())?;
-    Ok(())
+    if show_progress {
+        multi.clear().map_err(|e| e.to_string())?;
+    }
+
+    Ok(ModelDownloadReport {
+        models: model_infos_in_dir(&data_dir),
+        downloaded,
+        skipped,
+    })
 }
 
 fn remove_legacy_models(data_dir: &Path) {
@@ -264,7 +342,7 @@ pub fn check_models_present() -> bool {
 fn models_present_in_dir(data_dir: &Path) -> bool {
     MODELS
         .iter()
-        .all(|(filename, _)| data_dir.join(filename).exists())
+        .all(|spec| data_dir.join(spec.filename).exists())
 }
 
 #[cfg(test)]
@@ -275,14 +353,14 @@ mod tests {
     fn models_present_in_dir_requires_every_current_model() {
         let directory = tempfile::tempdir().unwrap();
 
-        for (filename, _) in MODELS.iter().take(MODELS.len() - 1) {
-            fs::write(directory.path().join(filename), b"model").unwrap();
+        for spec in MODELS.iter().take(MODELS.len() - 1) {
+            fs::write(directory.path().join(spec.filename), b"model").unwrap();
         }
 
         assert!(!models_present_in_dir(directory.path()));
 
-        let (filename, _) = MODELS.last().unwrap();
-        fs::write(directory.path().join(filename), b"model").unwrap();
+        let spec = MODELS.last().unwrap();
+        fs::write(directory.path().join(spec.filename), b"model").unwrap();
 
         assert!(models_present_in_dir(directory.path()));
     }
@@ -293,7 +371,7 @@ mod tests {
         for filename in LEGACY_MODELS {
             fs::write(directory.path().join(filename), b"legacy").unwrap();
         }
-        let (current, _) = MODELS[0];
+        let current = MODELS[0].filename;
         fs::write(directory.path().join(current), b"current").unwrap();
 
         remove_legacy_models(directory.path());
@@ -302,6 +380,20 @@ mod tests {
             assert!(!directory.path().join(filename).exists());
         }
         assert!(directory.path().join(current).exists());
+    }
+
+    #[test]
+    fn model_infos_include_paths_and_presence() {
+        let directory = tempfile::tempdir().unwrap();
+        fs::write(directory.path().join(MODELS[0].filename), b"model").unwrap();
+
+        let infos = model_infos_in_dir(directory.path());
+
+        assert_eq!(infos.len(), MODELS.len());
+        assert_eq!(infos[0].filename, MODELS[0].filename);
+        assert!(infos[0].present);
+        assert!(!infos[1].present);
+        assert!(infos[0].path.ends_with(MODELS[0].filename));
     }
 
     #[test]

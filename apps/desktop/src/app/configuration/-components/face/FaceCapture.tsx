@@ -13,6 +13,18 @@ export function FaceCapture() {
   const [capturing, setCapturing] = useState(false);
   const [faceImages, setFaceImages] = useState<string[]>([]);
   const camera = useConfigurationStore((state) => state.config?.methods.face.camera ?? null);
+  const [videoDeviceCount, setVideoDeviceCount] = useState<number | null>(null);
+  const cameraUnavailable = videoDeviceCount === 0;
+
+  const loadVideoDeviceCount = useCallback(async () => {
+    try {
+      const devices = await cmd.face.listVideoDevices();
+      setVideoDeviceCount(devices.length);
+    } catch (err) {
+      console.error("Failed to load video devices:", err);
+      setVideoDeviceCount(0);
+    }
+  }, []);
 
   const loadFaceImages = useCallback(async () => {
     try {
@@ -25,7 +37,8 @@ export function FaceCapture() {
 
   useEffect(() => {
     void loadFaceImages();
-  }, [loadFaceImages]);
+    void loadVideoDeviceCount();
+  }, [loadFaceImages, loadVideoDeviceCount]);
 
   // Subscribe to native preview frames whenever the session is active.
   useEffect(() => {
@@ -81,6 +94,7 @@ export function FaceCapture() {
 
   async function startCamera() {
     try {
+      if (cameraUnavailable) return;
       await cmd.face.startPreview(camera);
       setCapturing(true);
     } catch (err) {
@@ -146,7 +160,7 @@ export function FaceCapture() {
         {/* Controls */}
         <div className="flex gap-2">
           {!capturing ? (
-            <Button onClick={startCamera} className="flex-1">
+            <Button onClick={startCamera} disabled={cameraUnavailable} className="flex-1">
               <Camera className="w-4 h-4 mr-2" />
               Start Camera
             </Button>
@@ -167,6 +181,11 @@ export function FaceCapture() {
         {capturing && (
           <p className="text-[10px] text-muted-foreground">
             Native preview via the Rust V4L2 capture path.
+          </p>
+        )}
+        {cameraUnavailable && (
+          <p className="text-xs text-muted-foreground">
+            No camera is available on this device, so face capture is disabled.
           </p>
         )}
 

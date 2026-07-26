@@ -1,10 +1,12 @@
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 pub mod activity;
+pub mod auth;
 pub mod config;
 pub mod face;
 pub mod face_session;
 pub mod fingerprint;
 pub mod fingerprint_auth;
+pub mod models;
 pub mod paths;
 pub mod system;
 
@@ -12,6 +14,7 @@ use activity::{
     activity_log_file_path, activity_logs_dir, auth_history_dir_path, list_auth_history,
     read_activity_log_tail,
 };
+use auth::test_auth_flow;
 use config::{config_file_path, load_config, reset_config, save_config};
 use face::{capture_face, delete_face, list_faces};
 use face_session::{capture_face_in_session, start_face_preview, stop_face_preview};
@@ -19,6 +22,7 @@ use fingerprint::{
     add_fingerprint, delete_fingerprint, enroll_fingerprint, fingerprint_is_available,
     list_enrolled_fingerprints, list_fingerprint_devices, remove_fingerprint,
 };
+use models::{download_builtin_models, list_builtin_models};
 use system::{get_current_username, list_video_devices, path_exists};
 
 use tauri::Manager;
@@ -59,6 +63,7 @@ pub fn run() {
             save_config,
             reset_config,
             config_file_path,
+            test_auth_flow,
             list_auth_history,
             read_activity_log_tail,
             activity_log_file_path,
@@ -79,6 +84,8 @@ pub fn run() {
             fingerprint_is_available,
             list_enrolled_fingerprints,
             list_fingerprint_devices,
+            list_builtin_models,
+            download_builtin_models,
             path_exists
         ])
         .run(tauri::generate_context!())

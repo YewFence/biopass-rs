@@ -1,11 +1,21 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { FileText, RefreshCcw, ShieldCheck, Terminal } from "lucide-react";
+import { FileText, Loader2, Play, RefreshCcw, ShieldCheck, Terminal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { cmd } from "@/commands";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ActivityLogComponent, AuthSessionSummary, IrLivenessSummary } from "@/types/activity";
+import type { LogLevelName } from "@/types/config";
 
 export const Route = createFileRoute("/activity")({
   component: ActivityPage,
@@ -16,6 +26,10 @@ function ActivityPage() {
   const [logs, setLogs] = useState<string[]>([]);
   const [component, setComponent] = useState<ActivityLogComponent>("auth");
   const [loading, setLoading] = useState(false);
+  const [testingAuth, setTestingAuth] = useState(false);
+  const [testService, setTestService] = useState("sudo");
+  const [testLogLevel, setTestLogLevel] = useState<LogLevelName>("debug");
+  const [activeTab, setActiveTab] = useState("history");
 
   async function loadHistory() {
     setLoading(true);
@@ -47,6 +61,40 @@ function ActivityPage() {
     void loadLogs(component);
   }, [component]);
 
+  useEffect(() => {
+    if (!testingAuth) return;
+    const interval = window.setInterval(() => {
+      void cmd.activity
+        .readLogTail("auth", 500)
+        .then(setLogs)
+        .catch((error) => console.debug("Live auth log refresh skipped:", error));
+    }, 1000);
+    return () => window.clearInterval(interval);
+  }, [testingAuth]);
+
+  async function testAuthFlow() {
+    setTestingAuth(true);
+    setComponent("auth");
+    setActiveTab("logs");
+    try {
+      const service = testService.trim() || "sudo";
+      const result = await cmd.activity.testAuthFlow(service, testLogLevel);
+      if (result.status === "ignored") {
+        toast.info("Authentication was ignored by the current configuration.");
+      } else if (result.pam_code === "success") {
+        toast.success("Authentication succeeded.");
+      } else {
+        toast.error("Authentication failed.");
+      }
+      await loadHistory();
+      await loadLogs("auth");
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setTestingAuth(false);
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -56,21 +104,78 @@ function ActivityPage() {
             Authentication summaries and diagnostic logs
           </p>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            void loadHistory();
-            void loadLogs();
-          }}
-          disabled={loading}
-        >
-          <RefreshCcw className="w-4 h-4" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void loadHistory();
+              void loadLogs();
+            }}
+            disabled={loading}
+          >
+            <RefreshCcw className="w-4 h-4" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
-      <Tabs defaultValue="history" className="space-y-4">
+      <div className="rounded-lg border border-border bg-card p-4">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <h2 className="text-base font-medium">Authentication Test</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Start a real authentication run with temporary logging settings.
+            </p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[minmax(0,12rem)_10rem_auto] sm:items-end">
+            <div className="grid gap-1.5">
+              <Label htmlFor="auth-test-service">Service name</Label>
+              <Input
+                id="auth-test-service"
+                value={testService}
+                onChange={(event) => setTestService(event.target.value)}
+                placeholder="sudo"
+                disabled={testingAuth}
+                className="h-8"
+              />
+            </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="auth-test-log-level">Log level</Label>
+              <Select
+                value={testLogLevel}
+                onValueChange={(value) => setTestLogLevel(value as LogLevelName)}
+                disabled={testingAuth}
+              >
+                <SelectTrigger id="auth-test-log-level" size="sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="debug">Debug</SelectItem>
+                  <SelectItem value="info">Info</SelectItem>
+                  <SelectItem value="warn">Warn</SelectItem>
+                  <SelectItem value="error">Error</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              size="sm"
+              onClick={() => void testAuthFlow()}
+              disabled={testingAuth}
+              className="min-w-32"
+            >
+              {testingAuth ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Play className="w-4 h-4" />
+              )}
+              {testingAuth ? "Working..." : "Start Test"}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList>
           <TabsTrigger value="history">
             <ShieldCheck className="w-4 h-4" />

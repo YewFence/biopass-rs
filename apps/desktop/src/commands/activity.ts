@@ -1,4 +1,5 @@
-import type { ActivityLogComponent, AuthSessionSummary } from "@/types/activity";
+import type { ActivityLogComponent, AuthSessionSummary, AuthTestResult } from "@/types/activity";
+import type { LogLevelName } from "@/types/config";
 import { invokeCommand } from "./core";
 
 function listAuthHistory(limit = 100) {
@@ -24,10 +25,15 @@ function authHistoryDir() {
   return invokeCommand<string>("auth_history_dir_path");
 }
 
+function testAuthFlow(service = "sudo", logLevel: LogLevelName = "debug") {
+  return invokeCommand<AuthTestResult>("test_auth_flow", { service, logLevel });
+}
+
 export const activity = {
   listAuthHistory,
   readLogTail,
   logFilePath,
   logsDir,
   authHistoryDir,
+  testAuthFlow,
 };

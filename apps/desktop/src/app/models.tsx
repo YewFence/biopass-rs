@@ -1,17 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
-import { Cpu, Terminal } from "lucide-react";
+import { Copy, Cpu, Download, FolderOpen } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { cmd } from "@/commands";
+import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatError } from "@/lib/utils";
-import type { ModelConfig } from "@/types/config";
+import type { BuiltinModelInfo } from "@/types/config";
 import { ModelStatus, type ModelStatusType } from "./-components/ModelStatus";
 
 interface ModelCardProps {
-  model: ModelConfig;
+  model: BuiltinModelInfo;
   status: ModelStatusType;
+  onCopy: (path: string) => void;
 }
 
 function ModelFileFolderButton({ path }: { path: string }) {
@@ -30,9 +32,10 @@ function ModelFileFolderButton({ path }: { path: string }) {
           <button
             type="button"
             onClick={() => handleOpenFileFolder(path)}
-            className="text-[10px] font-mono text-muted-foreground opacity-60 truncate max-w-37.5 bg-muted/50 px-1.5 py-0.5 rounded hover:opacity-100 hover:bg-primary/10 hover:text-primary transition-all cursor-pointer"
+            className="inline-flex items-center gap-1 text-[10px] font-mono text-muted-foreground opacity-70 truncate max-w-80 bg-muted/50 px-1.5 py-0.5 rounded hover:opacity-100 hover:bg-primary/10 hover:text-primary transition-all cursor-pointer"
           >
-            {path.split(/[/]/).pop()}
+            <FolderOpen className="size-3" />
+            <span className="truncate">{path}</span>
           </button>
         </TooltipTrigger>
         <TooltipContent side="bottom" align="end" className="max-w-75 break-all">
@@ -43,7 +46,7 @@ function ModelFileFolderButton({ path }: { path: string }) {
   );
 }
 
-function ModelCard({ model, status }: ModelCardProps) {
+function ModelCard({ model, status, onCopy }: ModelCardProps) {
   const filename = model.path.split(/[/]/).pop() || model.path;
 
   return (
@@ -60,7 +63,25 @@ function ModelCard({ model, status }: ModelCardProps) {
               </h3>
               <p className="text-xs text-muted-foreground capitalize mt-1 block">{model.type}</p>
             </div>
-            <ModelFileFolderButton path={model.path} />
+            <div className="mt-1 flex items-center gap-2">
+              <ModelFileFolderButton path={model.path} />
+              <TooltipProvider>
+                <Tooltip delayDuration={300}>
+                  <TooltipTrigger asChild>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      onClick={() => onCopy(model.path)}
+                      aria-label={`Copy path for ${filename}`}
+                    >
+                      <Copy className="size-3" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Copy path</TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
           </div>
         </div>
 
@@ -73,15 +94,16 @@ function ModelCard({ model, status }: ModelCardProps) {
 }
 
 function ModelsRouteComponent() {
-  const [models, setModels] = useState<ModelConfig[]>([]);
+  const [models, setModels] = useState<BuiltinModelInfo[]>([]);
   const [loading, setLoading] = useState(true);
+  const [downloading, setDownloading] = useState(false);
   const [statusMap, setStatusMap] = useState<
     Record<string, "checking" | "available" | "missing" | "inuse">
   >({});
 
   const hasMissing = Object.values(statusMap).some((s) => s === "missing");
 
-  const checkModelsStatus = useCallback(async (modelList: ModelConfig[]) => {
+  const checkModelsStatus = useCallback(async (modelList: BuiltinModelInfo[]) => {
     const newStatuses: Record<string, "checking" | "available" | "missing" | "inuse"> = {};
 
     for (const model of modelList) newStatuses[model.path] = "checking";
@@ -90,18 +112,9 @@ function ModelsRouteComponent() {
     try {
       const result = await cmd.config.load();
       if (result.status !== "loaded") {
-        // Config is broken; the configuration page handles recovery.
-        // For the models page, treat every model as available so users can
-        // still inspect them.
-        const checks = modelList.map(async (model) => {
-          try {
-            const exists = await cmd.file.exists(model.path);
-            newStatuses[model.path] = exists ? "available" : "missing";
-          } catch {
-            newStatuses[model.path] = "missing";
-          }
+        modelList.forEach((model) => {
+          newStatuses[model.path] = model.present ? "available" : "missing";
         });
-        await Promise.all(checks);
         setStatusMap({ ...newStatuses });
         return;
       }
@@ -126,23 +139,16 @@ function ModelsRouteComponent() {
       ) {
         inUsePaths.add(config.methods.face.anti_spoofing.ir.model.path);
       }
-      const checks = modelList.map(async (model) => {
-        try {
-          const exists = await cmd.file.exists(model.path);
-          if (!exists) {
-            newStatuses[model.path] = "missing";
-          } else if (inUsePaths.has(model.path)) {
-            newStatuses[model.path] = "inuse";
-          } else {
-            newStatuses[model.path] = "available";
-          }
-        } catch (err) {
-          console.error(`Status check failed for ${model.path}:`, err);
+      modelList.forEach((model) => {
+        if (!model.present) {
           newStatuses[model.path] = "missing";
+        } else if (inUsePaths.has(model.path)) {
+          newStatuses[model.path] = "inuse";
+        } else {
+          newStatuses[model.path] = "available";
         }
       });
 
-      await Promise.all(checks);
       setStatusMap({ ...newStatuses });
     } catch (err) {
       console.error("Failed to check model usage:", err);
@@ -152,15 +158,7 @@ function ModelsRouteComponent() {
   const loadModels = useCallback(async () => {
     try {
       setLoading(true);
-      const result = await cmd.config.load();
-      if (result.status !== "loaded") {
-        // Config is broken; surface a hint and stop. The configuration page
-        // will let the user fix or reset it.
-        toast.error("Configuration file is unreadable. Fix or reset it on the Configuration page.");
-        setModels([]);
-        return;
-      }
-      const loadedModels = result.config.models || [];
+      const loadedModels = await cmd.models.listBuiltin();
       setModels(loadedModels);
       await checkModelsStatus(loadedModels);
     } catch (err) {
@@ -170,6 +168,35 @@ function ModelsRouteComponent() {
       setLoading(false);
     }
   }, [checkModelsStatus]);
+
+  const downloadModels = useCallback(async () => {
+    setDownloading(true);
+    try {
+      const report = await cmd.models.downloadBuiltin();
+      setModels(report.models);
+      await checkModelsStatus(report.models);
+      if (report.downloaded > 0) {
+        toast.success(`Downloaded ${report.downloaded} model file(s).`);
+      } else {
+        toast.info("All model files are already present.");
+      }
+    } catch (err) {
+      console.error("Failed to download models:", err);
+      toast.error(`Failed to download models: ${formatError(err)}`);
+    } finally {
+      setDownloading(false);
+    }
+  }, [checkModelsStatus]);
+
+  const copyPath = useCallback(async (path: string) => {
+    try {
+      await navigator.clipboard.writeText(path);
+      toast.success("Model path copied.");
+    } catch (err) {
+      console.error("Failed to copy path:", err);
+      toast.error(`Failed to copy path: ${formatError(err)}`);
+    }
+  }, []);
 
   useEffect(() => {
     void loadModels();
@@ -191,27 +218,25 @@ function ModelsRouteComponent() {
             AI Model Management
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            View AI models used for authentication.
+            Download built-in authentication models and copy their paths into configuration.
           </p>
         </div>
+        <Button onClick={() => void downloadModels()} disabled={downloading}>
+          <Download className="w-4 h-4" />
+          {downloading ? "Downloading..." : "Download Models"}
+        </Button>
       </div>
 
       {hasMissing && (
         <div className="flex gap-3 p-4 rounded-lg border border-amber-500/30 bg-amber-500/5">
-          <Terminal className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+          <Download className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
               Some models are missing
             </p>
             <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-1">
-              Run the following command in a terminal to download missing models:
-            </p>
-            <code className="block mt-2 px-3 py-2 text-xs font-mono bg-background/50 rounded border border-amber-500/20 select-all">
-              sudo /usr/bin/biopass-rs-helper install
-            </code>
-            <p className="text-[11px] text-amber-800/60 dark:text-amber-300/60 mt-2">
-              The installer will download models with a progress bar, migrate legacy configurations,
-              and refresh the dynamic linker cache.
+              Use the download button to fetch every built-in model into the shared biopass-rs data
+              directory.
             </p>
           </div>
         </div>
@@ -227,7 +252,12 @@ function ModelsRouteComponent() {
           </div>
         ) : (
           models.map((model) => (
-            <ModelCard key={model.path} model={model} status={statusMap[model.path]} />
+            <ModelCard
+              key={model.path}
+              model={model}
+              status={statusMap[model.path]}
+              onCopy={copyPath}
+            />
           ))
         )}
       </div>

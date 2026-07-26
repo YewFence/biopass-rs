@@ -3,16 +3,19 @@ use crate::{
     write_auth_summary, AuthManager, AuthOutcome, BiopassConfig, FaceAuth, FingerprintAuth,
     LogComponent, LogLevel, PamCode, RuntimeLoggingConfig,
 };
+use serde::Serialize;
 use std::path::PathBuf;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(tag = "status", content = "pam_code", rename_all = "snake_case")]
 pub enum AuthSessionStatus {
     Completed(PamCode),
     Ignored,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct AuthSessionResult {
+    #[serde(flatten)]
     pub status: AuthSessionStatus,
 }
 
@@ -20,6 +23,11 @@ pub struct AuthSessionResult {
 pub struct AuthSessionPaths {
     pub config_path: PathBuf,
     pub data_dir: PathBuf,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AuthSessionOptions {
+    pub log_level_override: Option<LogLevel>,
 }
 
 impl AuthSessionResult {
@@ -35,7 +43,7 @@ pub fn authenticate_user(
     username: &str,
     service: Option<&str>,
 ) -> Result<AuthSessionResult, String> {
-    authenticate_user_with(
+    authenticate_user_with_options(
         username,
         service,
         AuthSessionPaths {
@@ -43,6 +51,7 @@ pub fn authenticate_user(
             data_dir: user_data_dir(username),
         },
         user_exists(username),
+        AuthSessionOptions::default(),
     )
 }
 
@@ -51,6 +60,22 @@ pub fn authenticate_user_with(
     service: Option<&str>,
     paths: AuthSessionPaths,
     user_exists: bool,
+) -> Result<AuthSessionResult, String> {
+    authenticate_user_with_options(
+        username,
+        service,
+        paths,
+        user_exists,
+        AuthSessionOptions::default(),
+    )
+}
+
+pub fn authenticate_user_with_options(
+    username: &str,
+    service: Option<&str>,
+    paths: AuthSessionPaths,
+    user_exists: bool,
+    options: AuthSessionOptions,
 ) -> Result<AuthSessionResult, String> {
     if !user_exists {
         return Ok(AuthSessionResult {
@@ -71,10 +96,12 @@ pub fn authenticate_user_with(
         });
     }
 
-    set_runtime_logging(RuntimeLoggingConfig::from_config(
-        paths.data_dir,
-        &config.logging,
-    ));
+    let mut runtime_logging = RuntimeLoggingConfig::from_config(paths.data_dir, &config.logging);
+    if let Some(level) = options.log_level_override {
+        runtime_logging.file_enabled = true;
+        runtime_logging.file_level = level;
+    }
+    set_runtime_logging(runtime_logging);
 
     if config.auth_methods().is_empty() {
         return Ok(AuthSessionResult {
@@ -185,5 +212,38 @@ mod tests {
 
         assert_eq!(outcome.code, PamCode::Ignore);
         assert!(!outcome.attempted);
+    }
+
+    #[test]
+    fn authenticate_user_with_options_can_override_file_log_level() {
+        let _guard = crate::ENV_TEST_LOCK.lock().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let config_path = directory.path().join("config.yaml");
+        let data_dir = directory.path().join("data");
+        let mut config = BiopassConfig::default_for_data_dir(&data_dir);
+        config.methods.face.enable = false;
+        config.methods.fingerprint.enable = false;
+        config.logging.file.enabled = false;
+        config.logging.file.level = "error".to_string();
+        write_config_to_path(&config_path, &config).unwrap();
+
+        let _ = authenticate_user_with_options(
+            "alice",
+            Some("sudo"),
+            AuthSessionPaths {
+                config_path,
+                data_dir: data_dir.clone(),
+            },
+            true,
+            AuthSessionOptions {
+                log_level_override: Some(LogLevel::Debug),
+            },
+        )
+        .unwrap();
+
+        let runtime = crate::runtime_logging();
+        assert!(runtime.file_enabled);
+        assert_eq!(runtime.file_level, LogLevel::Debug);
+        assert_eq!(runtime.data_dir, data_dir);
     }
 }
