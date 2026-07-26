@@ -1,9 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { FileText, Loader2, Play, RefreshCcw, ShieldCheck, Terminal } from "lucide-react";
+import { FileText, Loader2, Play, RefreshCcw, ShieldCheck, Sparkles, Terminal } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { cmd } from "@/commands";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -14,7 +24,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { ActivityLogComponent, AuthSessionSummary, IrLivenessSummary } from "@/types/activity";
+import type {
+  ActivityCleanupMode,
+  ActivityCleanupTarget,
+  ActivityLogComponent,
+  AuthSessionSummary,
+  CleanupReport,
+  IrLivenessSummary,
+} from "@/types/activity";
 import type { LogLevelName } from "@/types/config";
 
 export const Route = createFileRoute("/activity")({
@@ -30,6 +47,11 @@ function ActivityPage() {
   const [testService, setTestService] = useState("sudo");
   const [testLogLevel, setTestLogLevel] = useState<LogLevelName>("debug");
   const [activeTab, setActiveTab] = useState("history");
+  const [cleanDialogOpen, setCleanDialogOpen] = useState(false);
+  const [cleanTarget, setCleanTarget] = useState<ActivityCleanupTarget>("all");
+  const [cleanMode, setCleanMode] = useState<ActivityCleanupMode>("retention");
+  const [cleaning, setCleaning] = useState(false);
+  const [lastCleanupReport, setLastCleanupReport] = useState<CleanupReport | null>(null);
 
   async function loadHistory() {
     setLoading(true);
@@ -95,6 +117,30 @@ function ActivityPage() {
     }
   }
 
+  async function cleanActivityData() {
+    setCleaning(true);
+    try {
+      const report = await cmd.activity.cleanActivityData(cleanTarget, cleanMode, false);
+      setLastCleanupReport(report);
+      const failures = cleanupFailedEntries(report);
+      const removed = cleanupRemovedEntries(report);
+      if (failures > 0) {
+        toast.error(`Cleanup finished with ${failures} failed entr(y/ies).`);
+      } else {
+        toast.success(
+          `Removed ${removed} entr(y/ies), freed ${formatBytes(cleanupFreedBytes(report))}.`,
+        );
+        setCleanDialogOpen(false);
+      }
+      await loadHistory();
+      await loadLogs();
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setCleaning(false);
+    }
+  }
+
   return (
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -105,6 +151,92 @@ function ActivityPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Dialog open={cleanDialogOpen} onOpenChange={setCleanDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline" size="sm" disabled={cleaning || loading}>
+                <Sparkles className="w-4 h-4" />
+                Clean
+              </Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Clean Activity Data</DialogTitle>
+                <DialogDescription>
+                  Remove diagnostic files, logs, or authentication history using the shared cleanup
+                  rules.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="grid gap-4">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="cleanup-target">Target</Label>
+                  <Select
+                    value={cleanTarget}
+                    onValueChange={(value) => {
+                      setCleanTarget(value as ActivityCleanupTarget);
+                      setLastCleanupReport(null);
+                    }}
+                    disabled={cleaning}
+                  >
+                    <SelectTrigger id="cleanup-target">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All activity data</SelectItem>
+                      <SelectItem value="debugs">Debug frames</SelectItem>
+                      <SelectItem value="logs">Logs</SelectItem>
+                      <SelectItem value="auth_history">Authentication history</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label htmlFor="cleanup-mode">Mode</Label>
+                  <Select
+                    value={cleanMode}
+                    onValueChange={(value) => {
+                      setCleanMode(value as ActivityCleanupMode);
+                      setLastCleanupReport(null);
+                    }}
+                    disabled={cleaning}
+                  >
+                    <SelectTrigger id="cleanup-mode">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="retention">Configured retention</SelectItem>
+                      <SelectItem value="all">Everything in target</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {lastCleanupReport && (
+                  <div className="rounded-md border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                    Removed {cleanupRemovedEntries(lastCleanupReport)} entr(y/ies), freed{" "}
+                    {formatBytes(cleanupFreedBytes(lastCleanupReport))}
+                    {cleanupFailedEntries(lastCleanupReport) > 0 &&
+                      `, ${cleanupFailedEntries(lastCleanupReport)} failed`}
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter>
+                <DialogClose asChild>
+                  <Button variant="outline" disabled={cleaning}>
+                    Cancel
+                  </Button>
+                </DialogClose>
+                <Button onClick={() => void cleanActivityData()} disabled={cleaning}>
+                  {cleaning ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4" />
+                  )}
+                  {cleaning ? "Cleaning..." : "Confirm Clean"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
           <Button
             variant="outline"
             size="sm"
@@ -293,6 +425,29 @@ function labelForLogComponent(component: ActivityLogComponent) {
     case "desktop":
       return "Desktop";
   }
+}
+
+function cleanupRemovedEntries(report: CleanupReport) {
+  return report.sections.reduce((total, section) => total + section.removed_entries, 0);
+}
+
+function cleanupFailedEntries(report: CleanupReport) {
+  return report.sections.reduce((total, section) => total + section.failed_entries, 0);
+}
+
+function cleanupFreedBytes(report: CleanupReport) {
+  return report.sections.reduce((total, section) => total + section.freed_bytes, 0);
+}
+
+function formatBytes(bytes: number) {
+  const units = [
+    ["GiB", 1024 * 1024 * 1024],
+    ["MiB", 1024 * 1024],
+    ["KiB", 1024],
+  ] as const;
+  const unit = units.find(([, factor]) => bytes >= factor);
+  if (!unit) return `${bytes} B`;
+  return `${(bytes / unit[1]).toFixed(2)} ${unit[0]}`;
 }
 
 function resultClass(result: AuthSessionSummary["result"]) {

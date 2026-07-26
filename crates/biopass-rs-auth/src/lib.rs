@@ -1,5 +1,6 @@
 pub mod auth_session;
 pub mod camera;
+pub mod cleanup;
 pub mod config;
 pub mod face_antispoofing;
 pub mod face_auth;
@@ -53,6 +54,10 @@ pub use auth_session::{
 pub use camera::{
     camera_available, capture_rgb_frame, list_video_devices, CameraRequest, CameraSession,
     FrameFormat, RgbFrame, VideoDevice,
+};
+pub use cleanup::{
+    cleanup_data_dir, CleanupFailure, CleanupMode, CleanupOptions, CleanupReport,
+    CleanupSectionReport, CleanupTarget,
 };
 pub use config::{
     bootstrap_config_at, config_parse_error_message, config_path, current_username, list_faces,

@@ -1,6 +1,7 @@
 use biopass_rs_auth::{
-    auth_history_dir, log_file_path, logs_dir, read_auth_history, read_log_tail,
-    set_runtime_logging, AuthSessionSummary, LogComponent, RuntimeLoggingConfig,
+    auth_history_dir, cleanup_data_dir, log_file_path, logs_dir, read_auth_history, read_log_tail,
+    set_runtime_logging, AuthSessionSummary, CleanupMode, CleanupOptions, CleanupReport,
+    CleanupTarget, LogComponent, RuntimeLoggingConfig,
 };
 use serde::Deserialize;
 use tauri::AppHandle;
@@ -22,6 +23,42 @@ impl From<ActivityLogComponent> for LogComponent {
             ActivityLogComponent::Auth => LogComponent::Auth,
             ActivityLogComponent::Helper => LogComponent::Helper,
             ActivityLogComponent::Desktop => LogComponent::Desktop,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ActivityCleanupTarget {
+    All,
+    Debugs,
+    Logs,
+    AuthHistory,
+}
+
+impl From<ActivityCleanupTarget> for CleanupTarget {
+    fn from(target: ActivityCleanupTarget) -> Self {
+        match target {
+            ActivityCleanupTarget::All => CleanupTarget::All,
+            ActivityCleanupTarget::Debugs => CleanupTarget::Debugs,
+            ActivityCleanupTarget::Logs => CleanupTarget::Logs,
+            ActivityCleanupTarget::AuthHistory => CleanupTarget::AuthHistory,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ActivityCleanupMode {
+    Retention,
+    All,
+}
+
+impl From<ActivityCleanupMode> for CleanupMode {
+    fn from(mode: ActivityCleanupMode) -> Self {
+        match mode {
+            ActivityCleanupMode::Retention => CleanupMode::Retention,
+            ActivityCleanupMode::All => CleanupMode::All,
         }
     }
 }
@@ -73,4 +110,24 @@ pub fn activity_logs_dir(app: AppHandle) -> Result<String, String> {
 pub fn auth_history_dir_path(app: AppHandle) -> Result<String, String> {
     configure_logging(&app)?;
     Ok(auth_history_dir().to_string_lossy().to_string())
+}
+
+#[tauri::command]
+pub fn clean_activity_data(
+    app: AppHandle,
+    target: ActivityCleanupTarget,
+    mode: ActivityCleanupMode,
+    dry_run: Option<bool>,
+) -> Result<CleanupReport, String> {
+    let config = require_loaded_config(&app)?;
+    let data_dir = get_data_dir(&app)?;
+    Ok(cleanup_data_dir(
+        &data_dir,
+        &config,
+        CleanupOptions {
+            target: target.into(),
+            mode: mode.into(),
+            dry_run: dry_run.unwrap_or(false),
+        },
+    ))
 }

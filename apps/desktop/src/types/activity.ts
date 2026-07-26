@@ -48,6 +48,30 @@ export interface IrLivenessSummary {
 
 export type ActivityLogComponent = "auth" | "helper" | "desktop";
 
+export type ActivityCleanupTarget = "all" | "debugs" | "logs" | "auth_history";
+
+export type ActivityCleanupMode = "retention" | "all";
+
+export interface CleanupFailure {
+  path: string;
+  error: string;
+}
+
+export interface CleanupSectionReport {
+  name: string;
+  path: string;
+  scanned_entries: number;
+  removed_entries: number;
+  failed_entries: number;
+  freed_bytes: number;
+  missing: boolean;
+  failures: CleanupFailure[];
+}
+
+export interface CleanupReport {
+  sections: CleanupSectionReport[];
+}
+
 export type PamCode = "success" | "auth_error" | "ignore";
 
 export type AuthTestResult =

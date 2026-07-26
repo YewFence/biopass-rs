@@ -1,4 +1,4 @@
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use clap_complete::Shell;
 use std::path::PathBuf;
 
@@ -84,8 +84,26 @@ pub enum Commands {
         #[arg(value_enum)]
         shell: Shell,
     },
-    /// Remove cached debug frames written by failed face-auth attempts
-    Clean,
+    /// Clean diagnostic files, logs, and auth history
+    Clean {
+        /// Limit cleanup to a specific data category
+        #[arg(long, value_enum, default_value_t = CleanTargetArg::All)]
+        target: CleanTargetArg,
+        /// Remove all selected entries instead of only entries past configured retention
+        #[arg(long)]
+        all: bool,
+        /// Show what would be removed without deleting files
+        #[arg(long)]
+        dry_run: bool,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum CleanTargetArg {
+    All,
+    Debugs,
+    Logs,
+    AuthHistory,
 }
 
 #[derive(Args)]
@@ -290,7 +308,43 @@ mod tests {
         let cli = Cli::parse_from(["biopass-rs-helper", "--username", "yewfence", "clean"]);
 
         assert_eq!(cli.username.as_deref(), Some("yewfence"));
-        assert!(matches!(cli.command, Commands::Clean));
+        match cli.command {
+            Commands::Clean {
+                target,
+                all,
+                dry_run,
+            } => {
+                assert_eq!(target, CleanTargetArg::All);
+                assert!(!all);
+                assert!(!dry_run);
+            }
+            _ => panic!("expected clean command"),
+        }
+    }
+
+    #[test]
+    fn clean_accepts_target_all_and_dry_run() {
+        let cli = Cli::parse_from([
+            "biopass-rs-helper",
+            "clean",
+            "--target",
+            "auth-history",
+            "--all",
+            "--dry-run",
+        ]);
+
+        match cli.command {
+            Commands::Clean {
+                target,
+                all,
+                dry_run,
+            } => {
+                assert_eq!(target, CleanTargetArg::AuthHistory);
+                assert!(all);
+                assert!(dry_run);
+            }
+            _ => panic!("expected clean command"),
+        }
     }
 
     #[test]
