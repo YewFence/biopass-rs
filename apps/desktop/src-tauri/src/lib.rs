@@ -6,6 +6,7 @@ pub mod face;
 pub mod face_session;
 pub mod fingerprint;
 pub mod fingerprint_auth;
+pub mod logging;
 pub mod models;
 pub mod paths;
 pub mod system;
@@ -33,8 +34,8 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let data_dir = crate::paths::get_data_dir(app.handle())
-                .map_err(|error| format!("failed to resolve data dir: {error}"))?;
+            let data_dir = crate::logging::init_startup_logging(app.handle());
+            crate::logging::install_panic_hook();
             app.asset_protocol_scope()
                 .allow_directory(&data_dir, true)
                 .map_err(|error| {

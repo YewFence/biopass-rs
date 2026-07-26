@@ -109,28 +109,57 @@ export function StrategyConfig() {
         </div>
 
         {/* Logging */}
-        <div className="flex items-center justify-between p-3 rounded-lg border border-border transition-all">
-          <div className="grid gap-0.5">
-            <Label
-              htmlFor="file-logging-enabled"
-              className="text-sm font-medium flex items-center gap-2"
-            >
-              File logging
-            </Label>
-            <p className="text-xs text-muted-foreground max-w-100">
-              Keep authentication diagnostics on disk while PAM output stays quiet.
-            </p>
+        <div className="grid gap-3 p-3 rounded-lg border border-border transition-all">
+          <div className="flex items-center justify-between gap-4">
+            <div className="grid gap-0.5">
+              <Label
+                htmlFor="file-logging-enabled"
+                className="text-sm font-medium flex items-center gap-2"
+              >
+                File logging
+              </Label>
+              <p className="text-xs text-muted-foreground max-w-100">
+                Keep authentication diagnostics on disk while PAM output stays quiet.
+              </p>
+            </div>
+            <Switch
+              id="file-logging-enabled"
+              checked={loggingConfig.file.enabled}
+              onCheckedChange={(checked) =>
+                setLogging({
+                  ...loggingConfig,
+                  file: { ...loggingConfig.file, enabled: checked },
+                })
+              }
+            />
           </div>
-          <Switch
-            id="file-logging-enabled"
-            checked={loggingConfig.file.enabled}
-            onCheckedChange={(checked) =>
-              setLogging({
-                ...loggingConfig,
-                file: { ...loggingConfig.file, enabled: checked },
-              })
-            }
-          />
+
+          <div className="grid gap-2">
+            <Label htmlFor="file-log-level" className="text-sm font-medium text-muted-foreground">
+              File log level
+            </Label>
+            <Select
+              value={loggingConfig.file.level}
+              disabled={!loggingConfig.file.enabled}
+              onValueChange={(value) =>
+                setLogging({
+                  ...loggingConfig,
+                  file: { ...loggingConfig.file, level: value as LogLevelName },
+                })
+              }
+            >
+              <SelectTrigger id="file-log-level" className="w-full h-10 transition-all">
+                <SelectValue placeholder="Select file log level" />
+              </SelectTrigger>
+              <SelectContent position="popper">
+                {LOG_LEVEL_OPTIONS.map((level) => (
+                  <SelectItem key={level.value} value={level.value} className="cursor-pointer">
+                    {level.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
         <div className="grid gap-3 p-3 rounded-lg border border-border transition-all">
