@@ -1,14 +1,14 @@
 use super::auth::{EXIT_AUTH_ERR, EXIT_IGNORE, EXIT_SUCCESS};
 use crate::utils::helper_auto_optimize_camera;
 use biopass_rs_auth::{
-    capture_rgb_frame, decode_jpeg_rgb, encode_jpeg, CameraRequest, CameraSession, FaceDetector,
-    RgbFrame,
+    capture_face_jpeg as capture_face_jpeg_data, crop_face_jpeg as crop_face_jpeg_data,
+    crop_largest_face_jpeg, encode_jpeg, CameraRequest, CameraSession, FaceDetector,
 };
 use std::io::{self, BufRead, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-pub(crate) fn crop_face(input: &PathBuf, output: &PathBuf, model: &str, quality: u8) -> u8 {
-    match crop_face_jpeg(input, model, quality) {
+pub(crate) fn crop_face(input: &Path, output: &Path, model: &str, quality: u8) -> u8 {
+    match crop_face_jpeg_data(input, model, quality) {
         Ok(jpeg) => match std::fs::write(output, jpeg) {
             Ok(()) => EXIT_SUCCESS,
             Err(error) => {
@@ -29,12 +29,13 @@ pub(crate) fn crop_face(input: &PathBuf, output: &PathBuf, model: &str, quality:
 
 pub(crate) fn capture_face(
     camera: Option<&str>,
-    output: &PathBuf,
+    output: &Path,
     model: &str,
     quality: u8,
     username: Option<&str>,
 ) -> u8 {
-    match capture_face_jpeg(camera, model, quality, username) {
+    let auto_optimize_camera = helper_auto_optimize_camera(username);
+    match capture_face_jpeg_data(camera, model, quality, auto_optimize_camera) {
         Ok(jpeg) => match std::fs::write(output, jpeg) {
             Ok(()) => EXIT_SUCCESS,
             Err(error) => {
@@ -132,15 +133,11 @@ pub(crate) fn preview_session(
             };
 
             match session.next_frame() {
-                Ok(frame) => match detector.crop_largest_face(&frame) {
-                    Ok(Some(face)) => match encode_jpeg(&face, quality) {
-                        Ok(jpeg) => match std::fs::write(path, jpeg) {
-                            Ok(()) => println!("OK"),
-                            Err(error) => println!("ERR save failed: {error}"),
-                        },
-                        Err(error) => println!("ERR {error}"),
+                Ok(frame) => match crop_largest_face_jpeg(detector, &frame, quality) {
+                    Ok(jpeg) => match std::fs::write(path, jpeg) {
+                        Ok(()) => println!("OK"),
+                        Err(error) => println!("ERR save failed: {error}"),
                     },
-                    Ok(None) => println!("NO_FACE"),
                     Err(error) if error == "No face detected" => println!("NO_FACE"),
                     Err(error) => println!("ERR {error}"),
                 },
@@ -156,49 +153,4 @@ pub(crate) fn preview_session(
     }
 
     EXIT_SUCCESS
-}
-
-fn crop_face_jpeg(input: &PathBuf, model: &str, quality: u8) -> Result<Vec<u8>, String> {
-    let bytes = std::fs::read(input)
-        .map_err(|error| format!("Failed to read input image {}: {error}", input.display()))?;
-    let frame = decode_jpeg_rgb(&bytes)?;
-    let mut detector = FaceDetector::load(model)?;
-    let face = detector
-        .crop_largest_face(&frame)?
-        .ok_or_else(|| "No face detected".to_string())?;
-    encode_jpeg(&face, quality)
-}
-
-fn capture_face_jpeg(
-    camera: Option<&str>,
-    model: &str,
-    quality: u8,
-    username: Option<&str>,
-) -> Result<Vec<u8>, String> {
-    let mut detector = FaceDetector::load(model)?;
-    capture_face_jpeg_with_detector(camera, &mut detector, quality, username)
-}
-
-fn capture_face_jpeg_with_detector(
-    camera: Option<&str>,
-    detector: &mut FaceDetector,
-    quality: u8,
-    username: Option<&str>,
-) -> Result<Vec<u8>, String> {
-    let frame = capture_camera_frame(camera, username)?;
-    let face = detector
-        .crop_largest_face(&frame)?
-        .ok_or_else(|| "No face detected".to_string())?;
-    encode_jpeg(&face, quality)
-}
-
-fn capture_camera_frame(camera: Option<&str>, username: Option<&str>) -> Result<RgbFrame, String> {
-    let request = CameraRequest {
-        device_path: camera
-            .filter(|camera| !camera.is_empty())
-            .map(PathBuf::from),
-        auto_optimize_camera: helper_auto_optimize_camera(username),
-        ..CameraRequest::default()
-    };
-    capture_rgb_frame(&request)
 }

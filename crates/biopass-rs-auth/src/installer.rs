@@ -5,6 +5,7 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
+use users::os::unix::UserExt;
 
 const MODELS: &[(&str, &str)] = &[
     (
@@ -30,6 +31,15 @@ const LEGACY_MODELS: &[&str] = &[
     "edgeface_s_gamma_05_ts.pt",
     "mobilenetv3_antispoof_ts.pt",
 ];
+
+/// Upstream TickLabVN `biopass` data directory, relative to a user's home.
+const UPSTREAM_DATA_DIR: &str = ".local/share/com.ticklab.biopass";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportLegacyFacesOutcome {
+    pub source_found: bool,
+    pub copied: usize,
+}
 
 /// Resolve the directory where ONNX models live. Honours `BIOPASS_DATA_DIR`
 /// and the CLI `--data-dir` override so `download_models` /
@@ -188,6 +198,61 @@ pub fn run_ldconfig() -> Result<(), String> {
     Ok(())
 }
 
+/// Copy enrolled face images from an upstream `biopass` install for `username`.
+///
+/// The upstream config is intentionally ignored because its schema drifts
+/// independently. Face images are plain files, so importing them is stable
+/// across upstream versions.
+pub fn import_legacy_faces_for_user(username: &str) -> Result<ImportLegacyFacesOutcome, String> {
+    let Some(home) = users::get_user_by_name(username).map(|user| user.home_dir().to_path_buf())
+    else {
+        return Ok(ImportLegacyFacesOutcome {
+            source_found: false,
+            copied: 0,
+        });
+    };
+    let src_faces = home.join(UPSTREAM_DATA_DIR).join("faces");
+    let dest_faces = user_data_dir(username).join("faces");
+    import_legacy_faces_from(&src_faces, &dest_faces)
+}
+
+/// Copy enrolled face images from `src_faces` into `dest_faces` without
+/// overwriting existing destination files.
+pub fn import_legacy_faces_from(
+    src_faces: &Path,
+    dest_faces: &Path,
+) -> Result<ImportLegacyFacesOutcome, String> {
+    let Ok(entries) = fs::read_dir(src_faces) else {
+        return Ok(ImportLegacyFacesOutcome {
+            source_found: false,
+            copied: 0,
+        });
+    };
+
+    fs::create_dir_all(dest_faces)
+        .map_err(|error| format!("Failed to create {}: {error}", dest_faces.display()))?;
+
+    let mut copied = 0usize;
+    for entry in entries.flatten() {
+        let file_name = entry.file_name();
+        let Some(name) = file_name.to_str() else {
+            continue;
+        };
+        let dest = dest_faces.join(name);
+        if dest.exists() {
+            continue;
+        }
+        if fs::copy(entry.path(), &dest).is_ok() {
+            copied += 1;
+        }
+    }
+
+    Ok(ImportLegacyFacesOutcome {
+        source_found: true,
+        copied,
+    })
+}
+
 /// Check if all required models are present on disk
 pub fn check_models_present() -> bool {
     let Ok(data_dir) = models_dir() else {
@@ -237,5 +302,44 @@ mod tests {
             assert!(!directory.path().join(filename).exists());
         }
         assert!(directory.path().join(current).exists());
+    }
+
+    #[test]
+    fn import_legacy_faces_from_copies_without_overwriting() {
+        let src = tempfile::tempdir().unwrap();
+        let dest = tempfile::tempdir().unwrap();
+        fs::write(src.path().join("alice.jpg"), b"new").unwrap();
+        fs::write(src.path().join("bob.jpg"), b"bob").unwrap();
+        fs::write(dest.path().join("alice.jpg"), b"existing").unwrap();
+
+        let outcome = import_legacy_faces_from(src.path(), dest.path()).unwrap();
+
+        assert_eq!(
+            outcome,
+            ImportLegacyFacesOutcome {
+                source_found: true,
+                copied: 1,
+            }
+        );
+        assert_eq!(
+            fs::read(dest.path().join("alice.jpg")).unwrap(),
+            b"existing"
+        );
+        assert_eq!(fs::read(dest.path().join("bob.jpg")).unwrap(), b"bob");
+    }
+
+    #[test]
+    fn import_legacy_faces_from_ignores_missing_source() {
+        let dest = tempfile::tempdir().unwrap();
+
+        let outcome = import_legacy_faces_from(Path::new("/missing/source"), dest.path()).unwrap();
+
+        assert_eq!(
+            outcome,
+            ImportLegacyFacesOutcome {
+                source_found: false,
+                copied: 0,
+            }
+        );
     }
 }

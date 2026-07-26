@@ -1,11 +1,9 @@
 use super::auth::{EXIT_AUTH_ERR, EXIT_SUCCESS};
 use super::config;
 use crate::cli::ConfigAction;
-use biopass_rs_auth::{current_username, download_models, run_ldconfig, user_data_dir};
-use users::os::unix::UserExt;
-
-/// Upstream TickLabVN `biopass` data directory, relative to a user's home.
-const UPSTREAM_DATA_DIR: &str = ".local/share/com.ticklab.biopass";
+use biopass_rs_auth::{
+    current_username, download_models, import_legacy_faces_for_user, run_ldconfig,
+};
 
 pub(crate) fn install() -> u8 {
     eprintln!("Running ldconfig...");
@@ -30,7 +28,16 @@ pub(crate) fn install() -> u8 {
         return init_code;
     }
 
-    import_legacy_faces(&username);
+    match import_legacy_faces_for_user(&username) {
+        Ok(outcome) if outcome.copied > 0 => {
+            eprintln!(
+                "Imported {} face image(s) from upstream biopass for user '{username}'",
+                outcome.copied
+            );
+        }
+        Ok(_) => {}
+        Err(error) => eprintln!("Warning: {error}"),
+    }
 
     eprintln!("Downloading models...");
     match download_models() {
@@ -56,54 +63,5 @@ pub(crate) fn model_download() -> u8 {
             eprintln!("Failed to download models: {error}");
             EXIT_AUTH_ERR
         }
-    }
-}
-
-/// Copy enrolled face images from an upstream `biopass` install.
-///
-/// Only the `faces/` directory is copied. The upstream **config** is ignored
-/// because its schema drifts independently and chasing every version is
-/// unsustainable; faces are plain image files with no schema, so copying them
-/// is always safe.
-///
-/// Existing destination files are never overwritten, so the upstream directory
-/// is left untouched and re-runs are idempotent. The destination resolves
-/// through [`user_data_dir`], honouring `BIOPASS_DATA_DIR` and the `--data-dir`
-/// override the same way model downloads do — so `mise run dev-helper install`
-/// lands them under `dev-data/faces/` rather than the user's real home.
-fn import_legacy_faces(username: &str) {
-    let Some(home) = users::get_user_by_name(username).map(|user| user.home_dir().to_path_buf())
-    else {
-        return;
-    };
-    let src_faces = home.join(UPSTREAM_DATA_DIR).join("faces");
-    let dest_faces = user_data_dir(username).join("faces");
-
-    let Ok(entries) = std::fs::read_dir(&src_faces) else {
-        // No upstream faces directory — nothing to import.
-        return;
-    };
-    if let Err(error) = std::fs::create_dir_all(&dest_faces) {
-        eprintln!("Warning: Failed to create faces dir for '{username}': {error}");
-        return;
-    }
-
-    let mut copied = 0usize;
-    for entry in entries.flatten() {
-        let file_name = entry.file_name();
-        let Some(name) = file_name.to_str() else {
-            continue;
-        };
-        let dest = dest_faces.join(name);
-        if dest.exists() {
-            continue;
-        }
-        if std::fs::copy(entry.path(), &dest).is_ok() {
-            copied += 1;
-        }
-    }
-
-    if copied > 0 {
-        eprintln!("Imported {copied} face image(s) from upstream biopass for user '{username}'");
     }
 }

@@ -6,10 +6,11 @@ use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
 use base64::{engine::general_purpose, Engine as _};
+use biopass_rs_auth::faces_dir;
 use tauri::{AppHandle, Emitter};
 
 use crate::config::{require_loaded_config, BiopassConfig};
-use crate::paths::get_faces_dir;
+use crate::paths::get_data_dir;
 
 const PREVIEW_EVENT: &str = "face-preview-frame";
 const FRAME_INTERVAL_MS: u64 = 33; // ~30fps ceiling
@@ -170,7 +171,7 @@ pub fn capture_face_in_session(app: AppHandle) -> Result<String, String> {
     let guard = SESSION.lock().map_err(|e| e.to_string())?;
     let sess = guard.as_ref().ok_or("No active preview session")?;
 
-    let faces_dir = get_faces_dir(&app)?;
+    let faces_dir = faces_dir(&get_data_dir(&app)?);
     if !faces_dir.exists() {
         std::fs::create_dir_all(&faces_dir)
             .map_err(|e| format!("Failed to create faces directory: {e}"))?;
