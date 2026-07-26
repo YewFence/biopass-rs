@@ -86,8 +86,9 @@ pub enum Commands {
     },
     /// Clean diagnostic files, logs, and auth history
     Clean {
-        /// Limit cleanup to a specific data category
-        #[arg(long, value_enum, default_value_t = CleanTargetArg::All)]
+        /// Limit cleanup to a specific data category. Defaults to debug frames
+        /// only; pass `--target all` to also prune logs and auth history.
+        #[arg(long, value_enum, default_value_t = CleanTargetArg::Debugs)]
         target: CleanTargetArg,
         /// Remove all selected entries instead of only entries past configured retention
         #[arg(long)]
@@ -314,7 +315,7 @@ mod tests {
                 all,
                 dry_run,
             } => {
-                assert_eq!(target, CleanTargetArg::All);
+                assert_eq!(target, CleanTargetArg::Debugs);
                 assert!(!all);
                 assert!(!dry_run);
             }

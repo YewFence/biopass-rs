@@ -11,10 +11,13 @@ pub fn list_builtin_models(app: AppHandle) -> Result<Vec<BuiltinModelInfo>, Stri
 }
 
 #[tauri::command]
-pub fn download_builtin_models(app: AppHandle) -> Result<ModelDownloadReport, String> {
+pub async fn download_builtin_models(app: AppHandle) -> Result<ModelDownloadReport, String> {
     crate::logging::ensure_logging(&app);
     crate::logging::desktop_log(LogLevel::Info, "models", "starting builtin model download");
-    match download_models_report() {
+    let outcome = tauri::async_runtime::spawn_blocking(download_models_report)
+        .await
+        .map_err(|error| format!("Model download task failed: {error}"))?;
+    match outcome {
         Ok(report) => {
             crate::logging::desktop_log(
                 LogLevel::Info,

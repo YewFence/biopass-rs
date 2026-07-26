@@ -32,7 +32,7 @@ Subcommands:
   capture-face     Capture face from camera
   preview-session  Start interactive preview session
   completion       Generate shell completion script
-  clean            Remove cached debug frames written by failed face-auth attempts
+  clean            Remove cached debug frames, rotated logs, and auth history
 ```
 
 `--username`, `--config`, and `--data-dir` are **global** flags: they may appear before *or* after the subcommand. The PAM module, for example, invokes `biopass-rs-helper --username <user> auth --service <service>`.
@@ -225,11 +225,37 @@ biopass-rs-helper completion powershell | Out-String | Invoke-Expression
 
 ## `clean`
 
-Remove the cached debug frames written by failed face-auth attempts. When debug mode is enabled, biopass-rs saves raw frames and diagnostic crops under the user's `debugs` directory; this subcommand clears them out and reports how many files were removed and how much space was freed.
+Remove cached diagnostic frames, rotated logs, and auth-history records, reporting how many files were removed and how much space was freed.
 
 ```bash
-biopass-rs-helper [--username <USERNAME>] clean
+biopass-rs-helper [--username <USERNAME>] clean [--target <TARGET>] [--all] [--dry-run]
 ```
+
+By default only entries **past their configured retention window** are removed. Pass `--all` to remove every entry in the selected target regardless of age.
+
+| Flag | Purpose |
+| :--- | :------ |
+| `--target` | Which category to clean: `debugs` (default), `logs`, `auth-history`, or `all`. |
+| `--all` | Ignore retention windows and remove everything in the selected target. |
+| `--dry-run` | Report what would be removed without deleting anything. |
+
+To fully purge the diagnostic frames saved from failed face-auth attempts, retention must be bypassed explicitly:
+
+```bash
+biopass-rs-helper clean --target debugs --all
+```
+
+Retention windows come from the config, per section:
+
+| Section | Config key | Default |
+| :------ | :--------- | :------ |
+| `debugs/` | `logging.diagnostics.retention_days` | 7 days |
+| `logs/auth` | `logging.file.retention.auth_days` | 30 days |
+| `logs/helper` | `logging.file.retention.helper_days` | 14 days |
+| `logs/desktop` | `logging.file.retention.desktop_days` | 14 days |
+| `auth-history/` | `logging.auth_history.retention_days` | 180 days |
+
+When the config file is missing or unreadable, `clean` warns and falls back to these defaults rather than refusing to run.
 
 Operates on the target user's data directory (respecting `--data-dir` / `BIOPASS_DATA_DIR`).
 

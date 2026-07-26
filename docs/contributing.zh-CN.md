@@ -58,7 +58,7 @@ mise install        # 简写：mise i
 **1. 初始化开发数据目录** —— 写入默认配置、下载 ONNX 模型，并从上游 `biopass` 安装导入已注册的人脸：
 
 ```bash
-mise run dev-helper install
+mise run dev:helper install
 ```
 
 这会在 `dev-data/` 下生成 `config.yaml`、`models/` 和 `faces/`。
@@ -66,19 +66,19 @@ mise run dev-helper install
 **2. 运行桌面应用** —— 以开发模式启动 Tauri 应用（带 HMR），并指向 `dev-data/` 下的配置：
 
 ```bash
-mise run dev-app
+mise run dev:app
 ```
 
 **3. 跑一次端到端认证流程** —— 模拟 `sudo` 触发的场景，执行一次完整的认证尝试：
 
 ```bash
-mise run dev-helper auth -s sudo
+mise run dev:helper auth -s sudo
 ```
 
 想要更干净地反复测试，可以用封装好的任务，它会先清空已捕获的帧，再执行认证：
 
 ```bash
-mise run auth-test
+mise run test:auth
 ```
 
 两者都会把认证失败时捕获的 RGB/IR 帧写入 `dev-data/debugs/`，方便你查看模型实际看到的原始画面。
@@ -96,7 +96,7 @@ mise run check
 构建 Rust 认证模块：
 
 ```bash
-mise run build-auth
+mise run build:auth
 ```
 
 同时构建 Rust 认证模块和 Tauri 前端并打包成 Linux 发布产物（`.deb` 和 `.rpm`）：

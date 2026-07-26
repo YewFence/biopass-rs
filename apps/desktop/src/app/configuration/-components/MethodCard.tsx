@@ -9,8 +9,8 @@ interface Props {
   icon: React.ReactNode;
   color: string;
   enabled: boolean;
-  frozen?: boolean;
-  frozenMessage?: string;
+  unavailable?: boolean;
+  unavailableMessage?: string;
   onToggle: (enabled: boolean) => void;
   expanded: boolean;
   onExpand: () => void;
@@ -22,14 +22,14 @@ export function MethodCard({
   icon,
   color,
   enabled,
-  frozen = false,
-  frozenMessage,
+  unavailable = false,
+  unavailableMessage,
   onToggle,
   expanded,
   onExpand,
   children,
 }: Props) {
-  const status = frozen ? "Unavailable" : enabled ? "Enabled" : "Disabled";
+  const status = unavailable ? "Unavailable" : enabled ? "Enabled" : "Disabled";
   return (
     <div
       className={cn(
@@ -59,10 +59,10 @@ export function MethodCard({
             <h3 className="font-medium text-sm sm:text-base">{title}</h3>
             {!expanded && (
               <Badge
-                variant={frozen ? "outline" : enabled ? "default" : "secondary"}
+                variant={unavailable ? "outline" : enabled ? "default" : "secondary"}
                 className={cn(
                   "mt-1 text-[10px] h-4 px-1.5 transition-colors",
-                  frozen
+                  unavailable
                     ? "bg-amber-500/10 text-amber-600 border-amber-500/20"
                     : enabled
                       ? "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
@@ -72,8 +72,10 @@ export function MethodCard({
                 {status}
               </Badge>
             )}
-            {expanded && frozenMessage && (
-              <p className="mt-1 text-xs text-muted-foreground">{frozenMessage}</p>
+            {expanded && unavailableMessage && (
+              <p className="mt-1 text-xs text-amber-700 dark:text-amber-400">
+                {unavailableMessage}
+              </p>
             )}
           </div>
         </div>
@@ -86,12 +88,7 @@ export function MethodCard({
           onKeyDown={(e) => e.stopPropagation()}
         >
           <div className="flex items-center gap-2 pr-2 border-r border-border/50">
-            <Switch
-              checked={frozen ? false : enabled}
-              disabled={frozen}
-              onCheckedChange={onToggle}
-              className="cursor-pointer"
-            />
+            <Switch checked={enabled} onCheckedChange={onToggle} className="cursor-pointer" />
           </div>
           <button
             type="button"

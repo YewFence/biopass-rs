@@ -1,8 +1,8 @@
 use super::auth::{EXIT_AUTH_ERR, EXIT_SUCCESS};
 use crate::cli::CleanTargetArg;
 use biopass_rs_auth::{
-    cleanup_data_dir, config_path, read_config_from_path, user_data_dir, user_exists, CleanupMode,
-    CleanupOptions, CleanupReport, CleanupSectionReport, CleanupTarget,
+    cleanup_data_dir, config_path, read_config_from_path, user_data_dir, user_exists,
+    BiopassConfig, CleanupMode, CleanupOptions, CleanupReport, CleanupSectionReport, CleanupTarget,
 };
 
 pub(crate) fn run(username: &str, target: CleanTargetArg, all: bool, dry_run: bool) -> u8 {
@@ -11,15 +11,17 @@ pub(crate) fn run(username: &str, target: CleanTargetArg, all: bool, dry_run: bo
         return EXIT_AUTH_ERR;
     }
 
+    let data_dir = user_data_dir(username);
     let config_path = config_path(username);
+    // Cleanup must stay reachable on a machine whose config is missing or
+    // corrupt — wiping cached camera frames is part of recovering from that.
     let config = match read_config_from_path(&config_path) {
         Ok(config) => config,
         Err(error) => {
-            eprintln!("clean: {error}");
-            return EXIT_AUTH_ERR;
+            eprintln!("clean: {error}; falling back to default retention settings");
+            BiopassConfig::default_for_data_dir(&data_dir)
         }
     };
-    let data_dir = user_data_dir(username);
     let options = CleanupOptions {
         target: target.into(),
         mode: if all {

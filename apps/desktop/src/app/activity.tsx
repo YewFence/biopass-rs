@@ -42,7 +42,8 @@ function ActivityPage() {
   const [history, setHistory] = useState<AuthSessionSummary[]>([]);
   const [logs, setLogs] = useState<string[]>([]);
   const [component, setComponent] = useState<ActivityLogComponent>("auth");
-  const [loading, setLoading] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [logsLoading, setLogsLoading] = useState(false);
   const [testingAuth, setTestingAuth] = useState(false);
   const [testService, setTestService] = useState("sudo");
   const [testLogLevel, setTestLogLevel] = useState<LogLevelName>("debug");
@@ -54,26 +55,28 @@ function ActivityPage() {
   const [lastCleanupReport, setLastCleanupReport] = useState<CleanupReport | null>(null);
 
   async function loadHistory() {
-    setLoading(true);
+    setHistoryLoading(true);
     try {
       setHistory(await cmd.activity.listAuthHistory(100));
     } catch (error) {
       toast.error(String(error));
     } finally {
-      setLoading(false);
+      setHistoryLoading(false);
     }
   }
 
   async function loadLogs(nextComponent = component) {
-    setLoading(true);
+    setLogsLoading(true);
     try {
       setLogs(await cmd.activity.readLogTail(nextComponent, 500));
     } catch (error) {
       toast.error(String(error));
     } finally {
-      setLoading(false);
+      setLogsLoading(false);
     }
   }
+
+  const loading = historyLoading || logsLoading;
 
   useEffect(() => {
     void loadHistory();

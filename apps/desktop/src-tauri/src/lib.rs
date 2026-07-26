@@ -34,7 +34,7 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            let data_dir = crate::logging::init_startup_logging(app.handle());
+            let data_dir = crate::logging::init_startup_logging(app.handle())?;
             crate::logging::install_panic_hook();
             app.asset_protocol_scope()
                 .allow_directory(&data_dir, true)

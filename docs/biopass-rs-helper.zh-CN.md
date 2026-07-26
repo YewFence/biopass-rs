@@ -30,7 +30,7 @@ BioPass 认证 helper
   capture-face     从相机捕获面部
   preview-session  启动交互式预览会话
   completion       生成 shell 补全脚本
-  clean            移除失败的人脸认证尝试产生的调试帧缓存
+  clean            移除调试帧缓存、轮转日志和认证历史
 ```
 
 `--username`、`--config` 和 `--data-dir` 是**全局**标志：它们可以出现在子命令**之前或之后**。例如，PAM 模块以 `biopass-rs-helper --username <user> auth --service <service>` 的方式调用。
@@ -223,11 +223,37 @@ biopass-rs-helper completion powershell | Out-String | Invoke-Expression
 
 ## `clean`
 
-移除失败的人脸认证尝试产生的调试帧缓存。启用调试模式时，biopass-rs 会将原始帧和诊断裁切保存到用户的 `debugs` 目录下；此子命令清空它们，并报告删除的文件数量和释放的空间。
+移除缓存的诊断帧、轮转日志和认证历史记录，并报告删除的文件数量和释放的空间。
 
 ```bash
-biopass-rs-helper [--username <USERNAME>] clean
+biopass-rs-helper [--username <USERNAME>] clean [--target <TARGET>] [--all] [--dry-run]
 ```
+
+默认只删除**超出配置保留期**的条目。传入 `--all` 可无视保留期，删除所选目标下的全部条目。
+
+| 选项 | 用途 |
+| :--- | :--- |
+| `--target` | 清理哪个类别：`debugs`（默认）、`logs`、`auth-history` 或 `all`。 |
+| `--all` | 忽略保留期，删除所选目标下的全部条目。 |
+| `--dry-run` | 只报告将要删除的内容，不实际删除。 |
+
+要彻底清除失败人脸认证保存的诊断帧，必须显式绕过保留期：
+
+```bash
+biopass-rs-helper clean --target debugs --all
+```
+
+各部分的保留期来自配置：
+
+| 部分 | 配置项 | 默认值 |
+| :--- | :----- | :----- |
+| `debugs/` | `logging.diagnostics.retention_days` | 7 天 |
+| `logs/auth` | `logging.file.retention.auth_days` | 30 天 |
+| `logs/helper` | `logging.file.retention.helper_days` | 14 天 |
+| `logs/desktop` | `logging.file.retention.desktop_days` | 14 天 |
+| `auth-history/` | `logging.auth_history.retention_days` | 180 天 |
+
+配置文件缺失或无法读取时，`clean` 会给出警告并回退到上述默认值，而不是拒绝执行。
 
 对目标用户的数据目录（遵循 `--data-dir` / `BIOPASS_DATA_DIR`）操作。
 
