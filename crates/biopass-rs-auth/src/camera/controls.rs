@@ -1,4 +1,4 @@
-use crate::{emit_log, LogLevel};
+use crate::{emit_log, LogComponent, LogLevel};
 use v4l::control::{Control, Value as ControlValue};
 use v4l::prelude::Device;
 
@@ -17,7 +17,7 @@ use v4l::prelude::Device;
 /// control (typical for IR cameras which lack white-balance / exposure
 /// controls) the EINVAL from the kernel is treated as a no-op so we don't
 /// spam warnings for a perfectly normal configuration.
-pub(super) fn apply_camera_optimizations(device: &mut Device, debug: bool) -> Result<(), String> {
+pub(super) fn apply_camera_optimizations(device: &mut Device, _debug: bool) -> Result<(), String> {
     // V4L2 control constants
     const WHITE_BALANCE_AUTOMATIC: u32 = 0x0098_090c;
     const POWER_LINE_FREQUENCY: u32 = 0x0098_0918;
@@ -38,8 +38,8 @@ pub(super) fn apply_camera_optimizations(device: &mut Device, debug: bool) -> Re
             }
             Err(error) => {
                 emit_log(
+                    LogComponent::Auth,
                     LogLevel::Warn,
-                    debug,
                     "camera:controls",
                     &format!("failed to set {label}: {error}"),
                 );

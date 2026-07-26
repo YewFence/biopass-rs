@@ -52,6 +52,46 @@ pub(super) fn default_appearance() -> String {
     "system".to_string()
 }
 
+pub(super) fn default_log_level() -> String {
+    "info".to_string()
+}
+
+pub(super) fn default_console_log_level() -> String {
+    "warn".to_string()
+}
+
+pub(super) fn default_log_rotation_kind() -> String {
+    "daily".to_string()
+}
+
+pub(super) fn default_log_max_size_mb() -> u32 {
+    10
+}
+
+pub(super) fn default_log_max_files_per_day() -> u32 {
+    5
+}
+
+pub(super) fn default_auth_log_retention_days() -> u32 {
+    30
+}
+
+pub(super) fn default_helper_log_retention_days() -> u32 {
+    14
+}
+
+pub(super) fn default_desktop_log_retention_days() -> u32 {
+    14
+}
+
+pub(super) fn default_failed_frame_retention_days() -> u32 {
+    7
+}
+
+pub(super) fn default_auth_history_retention_days() -> u32 {
+    180
+}
+
 pub(super) const DETECTION_MODEL_FILENAME: &str = "yolov8n-face.onnx";
 pub(super) const RECOGNITION_MODEL_FILENAME: &str = "edgeface_s_gamma_05.onnx";
 pub(super) const ANTISPOOFING_MODEL_FILENAME: &str = "mobilenetv3_antispoof.onnx";

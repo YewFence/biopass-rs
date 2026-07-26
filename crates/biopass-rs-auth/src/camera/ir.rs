@@ -1,7 +1,7 @@
 use super::decode::decode_grey;
 use super::stream::next_frame_before;
 use super::RgbFrame;
-use crate::{emit_log, LogLevel};
+use crate::{emit_log, LogComponent, LogLevel};
 use std::time::Instant;
 use v4l::io::mmap::Stream as MmapStream;
 
@@ -41,7 +41,7 @@ pub(super) fn capture_grey_ir_frame(
     layout: GreyFrameLayout,
     deadline: &Instant,
     max_dark_frames: u32,
-    debug: bool,
+    _debug: bool,
 ) -> Result<RgbFrame, String> {
     let GreyFrameLayout {
         width,
@@ -59,8 +59,8 @@ pub(super) fn capture_grey_ir_frame(
     skipped_dark_frames += 1;
     last_dark = Some((stats, decode_grey(width, height, stride, warmup)?));
     emit_log(
+        LogComponent::Auth,
         LogLevel::Debug,
-        debug,
         "camera:ir",
         &format!(
             "skipping dark IR frame from V4L2 GREY mean={:.2}, min={}, max={}, skipped={}",
@@ -72,8 +72,8 @@ pub(super) fn capture_grey_ir_frame(
         if skipped_dark_frames >= max_dark_frames {
             if let Some((stats, frame)) = last_dark.take() {
                 emit_log(
+                    LogComponent::Auth,
                     LogLevel::Warn,
-                    debug,
                     "camera:ir",
                     &format!(
                         "reached max dark frames limit ({}) for V4L2 GREY, \
@@ -88,8 +88,8 @@ pub(super) fn capture_grey_ir_frame(
         if Instant::now() >= *deadline {
             if let Some((stats, frame)) = last_dark.take() {
                 emit_log(
+                    LogComponent::Auth,
                     LogLevel::Warn,
-                    debug,
                     "camera:ir",
                     &format!(
                         "timed out waiting for non-dark V4L2 GREY frame after skipping \
@@ -110,8 +110,8 @@ pub(super) fn capture_grey_ir_frame(
             skipped_dark_frames += 1;
             last_dark = Some((stats, decode_grey(width, height, stride, &buffer)?));
             emit_log(
+                LogComponent::Auth,
                 LogLevel::Debug,
-                debug,
                 "camera:ir",
                 &format!(
                     "skipping dark IR frame from V4L2 GREY mean={:.2}, min={}, max={}, skipped={}",
@@ -122,8 +122,8 @@ pub(super) fn capture_grey_ir_frame(
         }
 
         emit_log(
+            LogComponent::Auth,
             LogLevel::Debug,
-            debug,
             "camera:ir",
             &format!(
                 "returning V4L2 GREY IR frame mean={:.2}, min={}, max={}, skipped_dark={}",

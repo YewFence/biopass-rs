@@ -24,6 +24,7 @@ tauri-build = { workspace = true, features = [] }
 base64.workspace = true
 biopass-rs-auth.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 serde_yaml.workspace = true
 tauri = { workspace = true, features = ["protocol-asset", "devtools"] }
 tauri-plugin-fs.workspace = true

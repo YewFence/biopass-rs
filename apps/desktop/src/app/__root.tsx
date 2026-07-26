@@ -1,7 +1,7 @@
 import { createRootRoute, Link, Outlet, useRouterState } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Cpu, Laptop, Moon, Settings, Sun, User } from "lucide-react";
+import { Activity, Cpu, Laptop, Moon, Settings, Sun, User } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
@@ -143,6 +143,17 @@ function App() {
                 >
                   <Cpu className="w-4 h-4" />
                   <span className="text-sm font-medium">AI Models</span>
+                </Link>
+                <Link
+                  to="/activity"
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-md transition-colors cursor-pointer ${
+                    pathname === "/activity"
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  }`}
+                >
+                  <Activity className="w-4 h-4" />
+                  <span className="text-sm font-medium">Activity</span>
                 </Link>
               </div>
             </div>

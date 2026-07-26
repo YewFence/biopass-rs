@@ -1,0 +1,33 @@
+import type { ActivityLogComponent, AuthSessionSummary } from "@/types/activity";
+import { invokeCommand } from "./core";
+
+function listAuthHistory(limit = 100) {
+  return invokeCommand<AuthSessionSummary[]>("list_auth_history", { limit });
+}
+
+function readLogTail(component: ActivityLogComponent, maxLines = 500) {
+  return invokeCommand<string[]>("read_activity_log_tail", {
+    component,
+    maxLines,
+  });
+}
+
+function logFilePath(component: ActivityLogComponent) {
+  return invokeCommand<string>("activity_log_file_path", { component });
+}
+
+function logsDir() {
+  return invokeCommand<string>("activity_logs_dir");
+}
+
+function authHistoryDir() {
+  return invokeCommand<string>("auth_history_dir_path");
+}
+
+export const activity = {
+  listAuthHistory,
+  readLogTail,
+  logFilePath,
+  logsDir,
+  authHistoryDir,
+};

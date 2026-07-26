@@ -1,6 +1,6 @@
 use biopass_rs_auth::{
-    config_path, read_config_from_path, user_exists, AuthManager, FaceAuth, FingerprintAuth,
-    PamCode,
+    config_path, read_config_from_path, set_runtime_logging, user_data_dir, user_exists,
+    write_auth_summary, AuthManager, FaceAuth, FingerprintAuth, PamCode, RuntimeLoggingConfig,
 };
 
 pub(crate) const EXIT_SUCCESS: u8 = 0;
@@ -33,6 +33,11 @@ pub(crate) fn authenticate(_username: Option<&str>, service: Option<&str>) -> u8
         return EXIT_IGNORE;
     }
 
+    set_runtime_logging(RuntimeLoggingConfig::from_config(
+        user_data_dir(&username),
+        &config.logging,
+    ));
+
     let methods = config.auth_methods();
     if methods.is_empty() {
         return EXIT_IGNORE;
@@ -51,13 +56,19 @@ pub(crate) fn authenticate(_username: Option<&str>, service: Option<&str>) -> u8
         }
     }
 
-    let outcome = manager.authenticate(&username);
+    let mut outcome = manager.authenticate(&username);
+    outcome.summary.service = service.map(str::to_string);
+    if let Err(error) = write_auth_summary(&outcome.summary) {
+        biopass_rs_auth::emit_log(
+            biopass_rs_auth::LogComponent::Auth,
+            biopass_rs_auth::LogLevel::Warn,
+            "helper:auth",
+            &format!("failed to write auth summary: {error}"),
+        );
+    }
     match outcome.code {
         PamCode::Success => EXIT_SUCCESS,
         PamCode::Ignore => EXIT_IGNORE,
-        PamCode::AuthError => {
-            eprintln!("Authentication failed");
-            EXIT_AUTH_ERR
-        }
+        PamCode::AuthError => EXIT_AUTH_ERR,
     }
 }

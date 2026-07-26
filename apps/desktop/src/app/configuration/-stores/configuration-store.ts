@@ -7,6 +7,7 @@ import type {
   BiopassConfig,
   FaceMethodConfig,
   FingerprintMethodConfig,
+  LoggingConfig,
   MethodsConfig,
   StrategyConfig,
 } from "@/types/config";
@@ -32,6 +33,7 @@ interface ConfigurationStore {
    *  "Reset to defaults" recovery button when the file is broken. */
   resetToDefaults: () => Promise<void>;
   setStrategy: (strategy: StrategyConfig) => void;
+  setLogging: (logging: LoggingConfig) => void;
   setMethods: (methods: MethodsConfig) => void;
   setFaceConfig: (face: FaceMethodConfig) => void;
   setFingerprintConfig: (fingerprint: FingerprintMethodConfig) => void;
@@ -134,6 +136,13 @@ export const useConfigurationStore = create<ConfigurationStore>((set, get) => ({
     set((state) => {
       if (!state.config) return state;
       return { config: { ...state.config, strategy } };
+    });
+  },
+
+  setLogging: (logging) => {
+    set((state) => {
+      if (!state.config) return state;
+      return { config: { ...state.config, logging } };
     });
   },
 
